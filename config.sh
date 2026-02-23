@@ -12,7 +12,7 @@ export HOME_LAT="REDACTED_LAT"
 export HOME_LON="REDACTED_LON"
 
 # --- Radius in meters ---
-export RADIUS=500
+export RADIUS=250
 
 # --- Hysteresis buffer in meters (prevents rapid toggling at boundary) ---
 export HYSTERESIS=50
