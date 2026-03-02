@@ -2,14 +2,14 @@
 # ============================================================
 # Focus Mode Configuration
 # ============================================================
-# IMPORTANT: You MUST set HOME_LAT and HOME_LON to your
-# apartment's coordinates before deploying.
+# IMPORTANT: You MUST set HOME_LAT and HOME_LON in config_secrets.sh
+# before deploying.
 # Get them from Google Maps: right-click your apartment → coords
 # ============================================================
 
-# --- Home location (Warsaw, auto-detected via GPS on 2026-02-22) ---
-export HOME_LAT="REDACTED_LAT"
-export HOME_LON="REDACTED_LON"
+# --- Home location (loaded from config_secrets.sh, not tracked by git) ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/config_secrets.sh"
 
 # --- Radius in meters ---
 export RADIUS=250
