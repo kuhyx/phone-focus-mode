@@ -66,8 +66,8 @@ init() {
         CURRENT_MODE="normal"
     fi
 
-    LOCATION_FAIL_COUNT=0
     log "Focus mode daemon started (PID=$$, mode=$CURRENT_MODE, home=$HOME_LAT,$HOME_LON, radius=${RADIUS}m)"
+    log "Intervals: focus=${CHECK_INTERVAL_FOCUS}s normal=${CHECK_INTERVAL_NORMAL}s"
 }
 
 # ---- Location ----
@@ -194,19 +194,18 @@ main() {
                 disable_focus_mode
             fi
 
-            LOCATION_FAIL_COUNT=0
             log "Location: $lat,$lon | Distance: ${distance}m | Threshold: ${threshold}m | Mode: $CURRENT_MODE"
         else
-            LOCATION_FAIL_COUNT=$((LOCATION_FAIL_COUNT + 1))
-            log "Location unavailable (attempt $LOCATION_FAIL_COUNT/$MAX_LOCATION_FAILS)"
-
-            if [ "$LOCATION_FAIL_COUNT" -ge "$MAX_LOCATION_FAILS" ]; then
-                log "FAIL-SAFE: Location unavailable too long, switching to normal mode"
-                disable_focus_mode
-            fi
+            log "Location unavailable - defaulting to focus mode (restrictions ON)"
+            enable_focus_mode
         fi
 
-        sleep "$CHECK_INTERVAL"
+        # Dynamic interval: shorter at home (can charge), longer away (save battery)
+        if [ "$CURRENT_MODE" = "focus" ]; then
+            sleep "$CHECK_INTERVAL_FOCUS"
+        else
+            sleep "$CHECK_INTERVAL_NORMAL"
+        fi
     done
 }
 

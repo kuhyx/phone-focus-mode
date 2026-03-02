@@ -54,18 +54,18 @@ check_adb() {
 
 check_coords() {
     local lat lon
-    lat="$(grep '^HOME_LAT=' "$SCRIPT_DIR/config.sh" | cut -d'"' -f2)"
-    lon="$(grep '^HOME_LON=' "$SCRIPT_DIR/config.sh" | cut -d'"' -f2)"
+    lat="$(grep '^.*HOME_LAT=' "$SCRIPT_DIR/config.sh" "$SCRIPT_DIR/config_secrets.sh" 2>/dev/null | tail -1 | cut -d'"' -f2)"
+    lon="$(grep '^.*HOME_LON=' "$SCRIPT_DIR/config.sh" "$SCRIPT_DIR/config_secrets.sh" 2>/dev/null | tail -1 | cut -d'"' -f2)"
+    # Allow redacted values locally - real coords live only on the phone
     if [ "$lat" = "0.000000" ] && [ "$lon" = "0.000000" ]; then
-        echo "ERROR: You must set your home coordinates in config.sh before deploying!"
-        echo ""
-        echo "  1. Find your coords on Google Maps (right-click your apartment)"
-        echo "  2. Edit phone_focus_mode/config_secrets.sh:"
-        echo "       HOME_LAT=\"-48.876667\""
-        echo "       HOME_LON=\"-123.393333\""
+        echo "ERROR: Home coordinates not set (all zeros). Set them in config_secrets.sh."
         exit 1
     fi
-    echo "  Home location: $lat, $lon"
+    if [ -z "$lat" ] || [ -z "$lon" ]; then
+        echo "  Home location: (not set locally - will use values on phone)"
+    else
+        echo "  Home location: $lat, $lon"
+    fi
 }
 
 check_ip() {
@@ -119,40 +119,40 @@ do_deploy() {
     adb_root "chmod 777 /data/local/tmp/focus_stage"
 
     echo "[4/6] Uploading scripts..."
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/config.sh"         "/data/local/tmp/focus_stage/config.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_daemon.sh"   "/data/local/tmp/focus_stage/focus_daemon.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_ctl.sh"      "/data/local/tmp/focus_stage/focus_ctl.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/magisk_service.sh" "/data/local/tmp/focus_stage/99-focus-mode.sh"
+    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/config.sh"          "/data/local/tmp/focus_stage/config.sh"
+    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_daemon.sh"    "/data/local/tmp/focus_stage/focus_daemon.sh"
+    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_ctl.sh"       "/data/local/tmp/focus_stage/focus_ctl.sh"
+    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/magisk_service.sh"  "/data/local/tmp/focus_stage/99-focus-mode.sh"
+
+    # Only push config_secrets.sh if phone doesn't already have one
+    if adb_root "test -f $REMOTE_DIR/config_secrets.sh" 2>/dev/null; then
+        echo "  config_secrets.sh already exists on phone - skipping (preserving real coords)"
+    else
+        echo "  Pushing config_secrets.sh (first install)..."
+        adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/config_secrets.sh" "/data/local/tmp/focus_stage/config_secrets.sh"
+        adb_root "cp /data/local/tmp/focus_stage/config_secrets.sh $REMOTE_DIR/config_secrets.sh"
+    fi
 
     # Move staged files into place with root
-    adb_root "cp /data/local/tmp/focus_stage/config.sh         $REMOTE_DIR/config.sh"
-    adb_root "cp /data/local/tmp/focus_stage/focus_daemon.sh   $REMOTE_DIR/focus_daemon.sh"
-    adb_root "cp /data/local/tmp/focus_stage/focus_ctl.sh      $REMOTE_DIR/focus_ctl.sh"
-    adb_root "cp /data/local/tmp/focus_stage/99-focus-mode.sh  /data/adb/service.d/99-focus-mode.sh"
+    adb_root "cp /data/local/tmp/focus_stage/config.sh          $REMOTE_DIR/config.sh"
+    adb_root "cp /data/local/tmp/focus_stage/focus_daemon.sh    $REMOTE_DIR/focus_daemon.sh"
+    adb_root "cp /data/local/tmp/focus_stage/focus_ctl.sh       $REMOTE_DIR/focus_ctl.sh"
+    adb_root "cp /data/local/tmp/focus_stage/99-focus-mode.sh   /data/adb/service.d/99-focus-mode.sh"
     adb_root "rm -rf /data/local/tmp/focus_stage"
 
     echo "[5/6] Setting permissions..."
-    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh"
+    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh" || true
     adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
     adb_root "touch $REMOTE_DIR/disabled_by_focus.txt"
     adb_root "touch $REMOTE_DIR/focus_mode.log"
 
     echo "[6/6] Starting daemon..."
-    # Kill existing daemon via pidfile to avoid hitting the ADB shell process
-    adb_root "
-        PIDFILE=$REMOTE_DIR/daemon.pid
-        if [ -f \"\$PIDFILE\" ]; then
-            OLD_PID=\$(cat \"\$PIDFILE\")
-            kill -9 \"\$OLD_PID\" 2>/dev/null
-            rm -f \"\$PIDFILE\"
-        fi
-        # Also kill any stray instances
-        for p in \$(pgrep -f focus_daemon.sh 2>/dev/null); do kill -9 \$p 2>/dev/null; done
-        sleep 1
-        setsid sh $REMOTE_DIR/focus_daemon.sh </dev/null >/dev/null 2>&1 &
-        echo \$!
-    "
-    sleep 3
+    # Stop existing daemon, then start fresh
+    adb_root "kill \$(cat $REMOTE_DIR/daemon.pid 2>/dev/null) 2>/dev/null; true"
+    sleep 1
+    adb_root "rm -f $REMOTE_DIR/daemon.pid"
+    adb -s "$PHONE_IP:5555" shell su -c 'sh /data/local/tmp/focus_mode/focus_daemon.sh </dev/null >/dev/null 2>/dev/null &'
+    sleep 4
 
     echo ""
     echo "=== Deploy complete! ==="

@@ -18,11 +18,10 @@ export RADIUS=250
 export HYSTERESIS=50
 
 # --- Location check interval in seconds ---
-export CHECK_INTERVAL=60
-
-# --- Fail-safe: if location unavailable for this many consecutive checks,
-#     switch to unrestricted mode to avoid locking user out ---
-export MAX_LOCATION_FAILS=5
+# When focus mode is ON (at home): check frequently (phone can charge).
+# When focus mode is OFF (away): check less often to save battery.
+export CHECK_INTERVAL_FOCUS=30
+export CHECK_INTERVAL_NORMAL=120
 
 # --- Log file ---
 export LOG_FILE="/data/local/tmp/focus_mode/focus_mode.log"
