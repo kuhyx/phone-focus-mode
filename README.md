@@ -18,12 +18,11 @@ When outside that radius: all apps work normally.
 
 Open Google Maps, right-click your apartment → copy the coordinates shown.
 
-### 2. Edit `config.sh`
+### 2. Edit `config_secrets.sh`
 
 ```sh
-HOME_LAT="52.123456"   # your latitude
-HOME_LON="21.098765"   # your longitude
-RADIUS=500             # meters
+HOME_LAT="-48.876667"   # your latitude
+HOME_LON="-123.393333"  # your longitude
 ```
 
 ### 3. (Optional) Adjust the whitelist in `config.sh`

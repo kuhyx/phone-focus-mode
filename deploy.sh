@@ -60,9 +60,9 @@ check_coords() {
         echo "ERROR: You must set your home coordinates in config.sh before deploying!"
         echo ""
         echo "  1. Find your coords on Google Maps (right-click your apartment)"
-        echo "  2. Edit phone_focus_mode/config.sh:"
-        echo "       HOME_LAT=\"52.123456\""
-        echo "       HOME_LON=\"21.098765\""
+        echo "  2. Edit phone_focus_mode/config_secrets.sh:"
+        echo "       HOME_LAT=\"-48.876667\""
+        echo "       HOME_LON=\"-123.393333\""
         exit 1
     fi
     echo "  Home location: $lat, $lon"
