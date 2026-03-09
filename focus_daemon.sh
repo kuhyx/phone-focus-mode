@@ -132,6 +132,22 @@ enable_focus_mode() {
     done < "$tmp_pkgs"
     rm -f "$tmp_pkgs"
 
+    # Also remove explicitly blocked system apps (e.g. browsers)
+    # Uses pm uninstall --user 0 so they vanish from Settings entirely
+    local blocked_sys="$STATE_DIR/blocked_sys.txt"
+    local uninstalled_sys="$STATE_DIR/uninstalled_sys.txt"
+    echo "$BLOCKED_SYSTEM_APPS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
+        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$blocked_sys"
+    : > "$uninstalled_sys"
+    while IFS= read -r pkg; do
+        [ -z "$pkg" ] && continue
+        # Try uninstall; even if already uninstalled, record it for re-install later
+        pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1
+        echo "$pkg" >> "$uninstalled_sys"
+        echo "$pkg" >> "$DISABLED_APPS_FILE"
+    done < "$blocked_sys"
+    rm -f "$blocked_sys"
+
     local count
     count=$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null || echo 0)
     CURRENT_MODE="focus"
@@ -145,6 +161,15 @@ disable_focus_mode() {
 
     local count=0
     if [ -f "$DISABLED_APPS_FILE" ] && [ -s "$DISABLED_APPS_FILE" ]; then
+        # Re-install system apps that were uninstalled for user
+        if [ -f "$STATE_DIR/uninstalled_sys.txt" ] && [ -s "$STATE_DIR/uninstalled_sys.txt" ]; then
+            while IFS= read -r pkg; do
+                [ -z "$pkg" ] && continue
+                pm install-existing --user 0 "$pkg" >/dev/null 2>&1
+            done < "$STATE_DIR/uninstalled_sys.txt"
+            : > "$STATE_DIR/uninstalled_sys.txt"
+        fi
+        # Re-enable all disabled apps
         while IFS= read -r pkg; do
             [ -z "$pkg" ] && continue
             pm enable "$pkg" >/dev/null 2>&1 && count=$((count + 1))

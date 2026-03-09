@@ -12,15 +12,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/config_secrets.sh"
 
 # --- Radius in meters ---
-export RADIUS=250
+export RADIUS=150
 
 # --- Hysteresis buffer in meters (prevents rapid toggling at boundary) ---
-export HYSTERESIS=50
+export HYSTERESIS=30
 
 # --- Location check interval in seconds ---
-# When focus mode is ON (at home): check frequently (phone can charge).
+# When focus mode is ON (at home): check very frequently for near-instant
+# detection of leaving home (phone is charging anyway).
 # When focus mode is OFF (away): check less often to save battery.
-export CHECK_INTERVAL_FOCUS=30
+export CHECK_INTERVAL_FOCUS=10
 export CHECK_INTERVAL_NORMAL=120
 
 # --- Log file ---
@@ -75,6 +76,31 @@ com.microsoft.office.outlook
 com.google.android.gm
 ch.protonmail.android
 com.microsoft.teams
+
+# --- Manga reader ---
+eu.kanade.tachiyomi.sy
+"
+
+# ============================================================
+# BLOCKED SYSTEM APPS
+# System apps that should be disabled in focus mode.
+# These are NOT covered by third-party package blocking.
+# ============================================================
+
+export BLOCKED_SYSTEM_APPS="
+# --- Browsers ---
+com.android.chrome
+com.chrome.beta
+com.chrome.dev
+com.chrome.canary
+com.sec.android.app.sbrowser
+com.opera.browser
+com.opera.mini.native
+com.brave.browser
+com.vivaldi.browser
+com.microsoft.emmx
+com.kiwibrowser.browser
+com.duckduckgo.mobile.android
 "
 
 # --- System / essential packages that must NEVER be disabled ---
