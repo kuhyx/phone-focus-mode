@@ -46,6 +46,28 @@ build_sysprotect_file() {
         | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/sysprotect.txt"
 }
 
+reconcile_disabled_apps() {
+    [ -f "$DISABLED_APPS_FILE" ] || return
+
+    local tmp_disabled="$STATE_DIR/disabled_by_focus.tmp"
+    : > "$tmp_disabled"
+
+    while IFS= read -r pkg; do
+        [ -z "$pkg" ] && continue
+
+        if is_allowed "$pkg"; then
+            pm install-existing --user 0 "$pkg" >/dev/null 2>&1 || true
+            pm enable "$pkg" >/dev/null 2>&1 || true
+            log "Re-enabled allowed app during state reconciliation: $pkg"
+            continue
+        fi
+
+        echo "$pkg" >> "$tmp_disabled"
+    done < "$DISABLED_APPS_FILE"
+
+    mv "$tmp_disabled" "$DISABLED_APPS_FILE"
+}
+
 # ---- Initialization ----
 init() {
     mkdir -p "$STATE_DIR"
@@ -64,6 +86,10 @@ init() {
         CURRENT_MODE="$(cat "$MODE_FILE")"
     else
         CURRENT_MODE="normal"
+    fi
+
+    if [ "$CURRENT_MODE" = "focus" ]; then
+        reconcile_disabled_apps
     fi
 
     log "Focus mode daemon started (PID=$$, mode=$CURRENT_MODE, home=$HOME_LAT,$HOME_LON, radius=${RADIUS}m)"
@@ -116,13 +142,15 @@ is_allowed() {
 # ---- Focus Mode Control ----
 
 enable_focus_mode() {
-    [ "$CURRENT_MODE" = "focus" ] && return
+    if [ "$CURRENT_MODE" = "focus" ]; then
+        reconcile_disabled_apps
+        return
+    fi
     log "ENABLING focus mode - restricting non-whitelisted apps"
 
     : > "$DISABLED_APPS_FILE"
     local tmp_pkgs="$STATE_DIR/pkg_list.txt"
     pm list packages -3 2>/dev/null | sed 's/^package://' > "$tmp_pkgs"
-
     while IFS= read -r pkg; do
         [ -z "$pkg" ] && continue
         is_allowed "$pkg" && continue
@@ -153,6 +181,8 @@ enable_focus_mode() {
     CURRENT_MODE="focus"
     echo "focus" > "$MODE_FILE"
     log "Focus mode enabled - disabled $count apps"
+
+    reconcile_disabled_apps
 }
 
 disable_focus_mode() {

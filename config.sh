@@ -79,6 +79,9 @@ com.microsoft.teams
 
 # --- Manga reader ---
 eu.kanade.tachiyomi.sy
+
+# --- Development ---
+com.github.android
 "
 
 # ============================================================
