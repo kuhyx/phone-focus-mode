@@ -18,10 +18,15 @@ acquire_lock() {
         local old_pid
         old_pid="$(cat "$PIDFILE")"
         if kill -0 "$old_pid" 2>/dev/null; then
-            echo "Daemon already running (PID $old_pid), exiting."
-            exit 0
+            # Verify the PID is actually a focus_daemon, not a reused PID
+            local cmdline
+            cmdline="$(cat /proc/$old_pid/cmdline 2>/dev/null | tr '\0' ' ')"
+            if echo "$cmdline" | grep -q "focus_daemon"; then
+                echo "Daemon already running (PID $old_pid), exiting."
+                exit 0
+            fi
         fi
-        # Stale pidfile
+        # Stale or reused pidfile
         rm -f "$PIDFILE"
     fi
     echo $$ > "$PIDFILE"
@@ -32,6 +37,16 @@ log() {
     local ts
     ts="$(date '+%Y-%m-%d %H:%M:%S')"
     echo "[$ts] $1" >> "$LOG_FILE"
+}
+
+rotate_log() {
+    local lines
+    lines="$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)"
+    if [ "$lines" -gt "$LOG_MAX_LINES" ]; then
+        local tmp="$LOG_FILE.tmp"
+        tail -n "$LOG_MAX_LINES" "$LOG_FILE" > "$tmp"
+        mv "$tmp" "$LOG_FILE"
+    fi
 }
 
 # ---- Build helper files for fast package checks ----
@@ -73,6 +88,8 @@ init() {
     mkdir -p "$STATE_DIR"
     touch "$LOG_FILE"
     touch "$DISABLED_APPS_FILE"
+    # Ensure state files are writable (survives reboot / permission drift)
+    chmod 666 "$LOG_FILE" "$DISABLED_APPS_FILE" "$PIDFILE" 2>/dev/null
 
     if [ "$HOME_LAT" = "0.000000" ] && [ "$HOME_LON" = "0.000000" ]; then
         log "ERROR: Home coordinates not set! Edit config.sh first."
@@ -81,6 +98,7 @@ init() {
 
     build_whitelist_file
     build_sysprotect_file
+    rotate_log
 
     if [ -f "$MODE_FILE" ]; then
         CURRENT_MODE="$(cat "$MODE_FILE")"
@@ -261,6 +279,8 @@ main() {
         else
             sleep "$CHECK_INTERVAL_NORMAL"
         fi
+
+        rotate_log
     done
 }
 

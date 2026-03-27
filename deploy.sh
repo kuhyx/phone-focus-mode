@@ -143,8 +143,9 @@ do_deploy() {
     echo "[5/6] Setting permissions..."
     adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh" || true
     adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
-    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt"
-    adb_root "touch $REMOTE_DIR/focus_mode.log"
+    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log"
+    # State files need 666 so the daemon can write regardless of SELinux context drift
+    adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log" || true
 
     echo "[6/6] Starting daemon..."
     # Stop existing daemon, then start fresh
