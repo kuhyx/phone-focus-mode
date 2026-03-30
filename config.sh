@@ -45,6 +45,7 @@ com.stronglifts.app
 com.ichi2.anki
 com.metrolist.music
 com.kuhy.pomodoro_app
+com.kuhy.horatio
 
 # --- Google system apps (add by name even though they show as system) ---
 com.google.android.apps.maps
