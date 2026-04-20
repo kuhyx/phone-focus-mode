@@ -90,6 +90,10 @@ init() {
     touch "$DISABLED_APPS_FILE"
     # Ensure state files are writable (survives reboot / permission drift)
     chmod 666 "$LOG_FILE" "$DISABLED_APPS_FILE" "$PIDFILE" 2>/dev/null
+    # Status file must be world-readable (companion app reads it).
+    # State dir must be world-writable+executable so the companion app can
+    # drop the recheck trigger file (it runs as a normal app UID).
+    chmod 777 "$STATE_DIR" 2>/dev/null
 
     if [ "$HOME_LAT" = "0.000000" ] && [ "$HOME_LON" = "0.000000" ]; then
         log "ERROR: Home coordinates not set! Edit config.sh first."
@@ -160,45 +164,67 @@ is_allowed() {
 # ---- Focus Mode Control ----
 
 enable_focus_mode() {
-    if [ "$CURRENT_MODE" = "focus" ]; then
-        reconcile_disabled_apps
-        return
+    local first_entry=0
+    if [ "$CURRENT_MODE" != "focus" ]; then
+        first_entry=1
+        log "ENABLING focus mode - restricting non-whitelisted apps"
+        : > "$DISABLED_APPS_FILE"
     fi
-    log "ENABLING focus mode - restricting non-whitelisted apps"
 
-    : > "$DISABLED_APPS_FILE"
+    # Build blocked system app list (used both at entry and for periodic sweep)
+    local blocked_sys="$STATE_DIR/blocked_sys.txt"
+    echo "$BLOCKED_SYSTEM_APPS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
+        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$blocked_sys"
+
+    # Periodic rescan catches third-party apps the user re-enabled (e.g. via
+    # Play Store or `pm enable` in a terminal) since the last tick.
+    # -e = enabled only, so we skip apps that are already disabled.
     local tmp_pkgs="$STATE_DIR/pkg_list.txt"
-    pm list packages -3 2>/dev/null | sed 's/^package://' > "$tmp_pkgs"
+    pm list packages -3 -e 2>/dev/null | sed 's/^package://' > "$tmp_pkgs"
+    local newly_disabled=0
     while IFS= read -r pkg; do
         [ -z "$pkg" ] && continue
         is_allowed "$pkg" && continue
         if pm disable-user --user 0 "$pkg" >/dev/null 2>&1; then
-            echo "$pkg" >> "$DISABLED_APPS_FILE"
+            grep -qxF "$pkg" "$DISABLED_APPS_FILE" 2>/dev/null \
+                || echo "$pkg" >> "$DISABLED_APPS_FILE"
+            newly_disabled=$((newly_disabled + 1))
         fi
     done < "$tmp_pkgs"
     rm -f "$tmp_pkgs"
 
-    # Also remove explicitly blocked system apps (e.g. browsers)
-    # Uses pm uninstall --user 0 so they vanish from Settings entirely
-    local blocked_sys="$STATE_DIR/blocked_sys.txt"
+    # Uninstall-for-user-0 any blocked system apps (Play Store, browsers,
+    # package installer UI, terminal apps). pm uninstall is idempotent:
+    # re-running it on already-uninstalled-for-user-0 packages is a no-op.
     local uninstalled_sys="$STATE_DIR/uninstalled_sys.txt"
-    echo "$BLOCKED_SYSTEM_APPS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
-        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$blocked_sys"
-    : > "$uninstalled_sys"
+    [ "$first_entry" -eq 1 ] && : > "$uninstalled_sys"
+    # List of packages installed for user 0 (one per line, "package:" prefix).
+    local user0_pkgs="$STATE_DIR/user0_pkgs.txt"
+    pm list packages --user 0 2>/dev/null | sed 's/^package://' > "$user0_pkgs"
     while IFS= read -r pkg; do
         [ -z "$pkg" ] && continue
-        # Try uninstall; even if already uninstalled, record it for re-install later
-        pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1
-        echo "$pkg" >> "$uninstalled_sys"
-        echo "$pkg" >> "$DISABLED_APPS_FILE"
+        if grep -qxF "$pkg" "$user0_pkgs" 2>/dev/null; then
+            if pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1; then
+                grep -qxF "$pkg" "$uninstalled_sys" 2>/dev/null \
+                    || echo "$pkg" >> "$uninstalled_sys"
+                grep -qxF "$pkg" "$DISABLED_APPS_FILE" 2>/dev/null \
+                    || echo "$pkg" >> "$DISABLED_APPS_FILE"
+                newly_disabled=$((newly_disabled + 1))
+            fi
+        fi
     done < "$blocked_sys"
-    rm -f "$blocked_sys"
+    rm -f "$user0_pkgs"
 
-    local count
-    count=$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null || echo 0)
     CURRENT_MODE="focus"
     echo "focus" > "$MODE_FILE"
-    log "Focus mode enabled - disabled $count apps"
+
+    if [ "$first_entry" -eq 1 ]; then
+        local count
+        count=$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null || echo 0)
+        log "Focus mode enabled - disabled $count apps"
+    elif [ "$newly_disabled" -gt 0 ]; then
+        log "Focus mode re-sweep: re-disabled $newly_disabled apps (re-enabled by user?)"
+    fi
 
     reconcile_disabled_apps
 }
@@ -228,6 +254,54 @@ disable_focus_mode() {
     CURRENT_MODE="normal"
     echo "normal" > "$MODE_FILE"
     log "Focus mode disabled - re-enabled $count apps"
+}
+
+# ---- Status snapshot for companion notification app ----
+# Writes a tiny JSON file that focus_status_app reads every few seconds.
+# Fields: mode, lat, lon, distance_m, threshold_m, radius_m, disabled_count,
+# last_check_ts (unix), last_check_iso (human).
+write_status_snapshot() {
+    local mode="$1" lat="$2" lon="$3" dist="$4" thr="$5"
+    local count iso ts
+    count="$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
+    [ -z "$count" ] && count=0
+    ts="$(date +%s)"
+    iso="$(date '+%Y-%m-%d %H:%M:%S')"
+    local tmp="$STATUS_FILE.tmp"
+    # Shell-emitted JSON — keep values numeric where possible, strings quoted.
+    {
+        printf '{'
+        printf '"mode":"%s",' "$mode"
+        printf '"lat":"%s",' "${lat:-}"
+        printf '"lon":"%s",' "${lon:-}"
+        printf '"distance_m":%s,' "${dist:-null}"
+        printf '"threshold_m":%s,' "${thr:-null}"
+        printf '"radius_m":%s,' "$RADIUS"
+        printf '"disabled_count":%s,' "$count"
+        printf '"last_check_ts":%s,' "$ts"
+        printf '"last_check_iso":"%s"' "$iso"
+        printf '}\n'
+    } > "$tmp" 2>/dev/null || return 0
+    mv "$tmp" "$STATUS_FILE" 2>/dev/null || true
+    chmod 644 "$STATUS_FILE" 2>/dev/null || true
+}
+
+# ---- Sleep with early-wake on recheck trigger ----
+# Polls for $RECHECK_TRIGGER every second; if found, consumes it and returns
+# early. The file can be touched by the companion app (via "Re-check now"
+# button) or by `focus_ctl.sh recheck` from a shell.
+sleep_with_recheck() {
+    local total="$1"
+    local elapsed=0
+    while [ "$elapsed" -lt "$total" ]; do
+        if [ -e "$RECHECK_TRIGGER" ]; then
+            rm -f "$RECHECK_TRIGGER" 2>/dev/null
+            log "Manual re-check triggered"
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
 }
 
 # ---- Signal handlers ----
@@ -268,16 +342,19 @@ main() {
             fi
 
             log "Location: $lat,$lon | Distance: ${distance}m | Threshold: ${threshold}m | Mode: $CURRENT_MODE"
+            write_status_snapshot "$CURRENT_MODE" "$lat" "$lon" "$distance" "$threshold"
         else
             log "Location unavailable - defaulting to focus mode (restrictions ON)"
             enable_focus_mode
+            write_status_snapshot "$CURRENT_MODE" "" "" "null" "null"
         fi
 
-        # Dynamic interval: shorter at home (can charge), longer away (save battery)
+        # Dynamic interval: shorter at home (can charge), longer away (save battery).
+        # sleep_with_recheck returns early if the companion app requests a recheck.
         if [ "$CURRENT_MODE" = "focus" ]; then
-            sleep "$CHECK_INTERVAL_FOCUS"
+            sleep_with_recheck "$CHECK_INTERVAL_FOCUS"
         else
-            sleep "$CHECK_INTERVAL_NORMAL"
+            sleep_with_recheck "$CHECK_INTERVAL_NORMAL"
         fi
 
         rotate_log

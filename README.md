@@ -96,19 +96,59 @@ re-enables apps that were already disabled by the user before focus mode ran.
 From a root terminal app (e.g. Termux + tsu):
 
 ```sh
-su -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh status'
-su -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh disable'
+su --mount-master -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh status'
+su --mount-master -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh disable'
 ```
+
+**Why `--mount-master`:** MagiskSU puts each `su -c` session in an isolated
+mount namespace by default, so bind mounts made by the hosts enforcer would be
+invisible (and `/data/adb/focus_mode/*` checks would fail due to SELinux
+interactions). `--mount-master` joins the global namespace where the daemons
+(started from Magisk `service.d` at boot) actually live. The boot autostart
+script doesn't need this flag because `post-fs-data` already runs there.
 
 ## File layout
 
-| File                | Purpose                                       |
-| ------------------- | --------------------------------------------- |
-| `config.sh`         | Coordinates, radius, whitelist, constants     |
-| `focus_daemon.sh`   | Main daemon — runs on device, loops every 60s |
-| `focus_ctl.sh`      | Control utility — runs on device              |
-| `magisk_service.sh` | Magisk boot hook → auto-starts daemon         |
-| `deploy.sh`         | PC-side ADB deployment and control script     |
+| File                | Purpose                                                |
+| ------------------- | ------------------------------------------------------ |
+| `config.sh`         | Coordinates, radius, whitelist, constants              |
+| `focus_daemon.sh`   | Main daemon — runs on device, loops every 60s          |
+| `focus_ctl.sh`      | Control utility — runs on device                       |
+| `hosts_enforcer.sh` | Bind-mounts `hosts.canonical` over `/system/etc/hosts` |
+| `magisk_service.sh` | Magisk boot hook → auto-starts both daemons            |
+| `deploy.sh`         | PC-side ADB deployment and control script              |
+
+## Hosts hardening
+
+A second daemon, `hosts_enforcer.sh`, locks the phone's `/system/etc/hosts`
+to the same blocklist installed by `linux_configuration/hosts/install.sh`
+on the PC. Three layers:
+
+1. Canonical copy at `/data/adb/focus_mode/hosts.canonical` is `chattr +i`.
+2. It is bind-mounted read-only over `/system/etc/hosts` at boot.
+3. A watchdog verifies a sha256 every 15 seconds and restores on mismatch.
+
+This blocks the common `echo > /etc/hosts` one-liner from a terminal app.
+It is NOT a guarantee against a determined root user on the device itself —
+a real "impossible without USB" gate would require removing `su` access,
+which would break the rest of this system. The watchdog at least ensures
+tampering is logged and reverted within ~15s.
+
+Status and logs:
+
+```bash
+./deploy.sh <ip> --hosts-status
+./deploy.sh <ip> --hosts-log
+```
+
+## Periodic rescan / Play Store
+
+The focus daemon now **re-scans every tick** (not just on first entry). If
+you re-enable an app via Play Store or `pm enable`, it gets re-disabled
+within `CHECK_INTERVAL_FOCUS` seconds. `com.android.vending` (Play Store),
+`com.*.packageinstaller`, and popular terminal apps are also uninstalled
+`--user 0` in focus mode to close the usual bypass paths. Google Play
+Services (`com.google.android.gms`) is left alone so banking apps work.
 
 ## Updating
 
