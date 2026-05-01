@@ -19,7 +19,7 @@ import android.os.Looper;
  */
 public final class StatusService extends Service {
 
-    private static final String CHANNEL_ID = "focus_status";
+    private static final String CHANNEL_ID = "focus_status_persistent";
     private static final int NOTIF_ID = 1042;
     private static final long REFRESH_MS = 5_000L;
 
@@ -87,8 +87,8 @@ public final class StatusService extends Service {
             return;
         }
         NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "Focus Mode Status",
-                NotificationManager.IMPORTANCE_LOW);
+            CHANNEL_ID, "Focus Mode Status",
+            NotificationManager.IMPORTANCE_DEFAULT);
         ch.setDescription("Persistent status of the focus-mode daemon");
         ch.setShowBadge(false);
         ch.setSound(null, null);

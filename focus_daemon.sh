@@ -96,7 +96,17 @@ init() {
     chmod 777 "$STATE_DIR" 2>/dev/null
 
     if [ "$HOME_LAT" = "0.000000" ] && [ "$HOME_LON" = "0.000000" ]; then
-        log "ERROR: Home coordinates not set! Edit config.sh first."
+        log "ERROR: Home coordinates not set! Edit config_secrets.sh first."
+        exit 1
+    fi
+
+    if ! echo "$HOME_LAT" | grep -Eq '^[-]?[0-9]+(\.[0-9]+)?$'; then
+        log "ERROR: HOME_LAT is invalid ('$HOME_LAT'). Expected decimal degrees in config_secrets.sh"
+        exit 1
+    fi
+
+    if ! echo "$HOME_LON" | grep -Eq '^[-]?[0-9]+(\.[0-9]+)?$'; then
+        log "ERROR: HOME_LON is invalid ('$HOME_LON'). Expected decimal degrees in config_secrets.sh"
         exit 1
     fi
 
@@ -193,27 +203,24 @@ enable_focus_mode() {
     done < "$tmp_pkgs"
     rm -f "$tmp_pkgs"
 
-    # Uninstall-for-user-0 any blocked system apps (Play Store, browsers,
-    # package installer UI, terminal apps). pm uninstall is idempotent:
-    # re-running it on already-uninstalled-for-user-0 packages is a no-op.
-    local uninstalled_sys="$STATE_DIR/uninstalled_sys.txt"
-    [ "$first_entry" -eq 1 ] && : > "$uninstalled_sys"
-    # List of packages installed for user 0 (one per line, "package:" prefix).
-    local user0_pkgs="$STATE_DIR/user0_pkgs.txt"
-    pm list packages --user 0 2>/dev/null | sed 's/^package://' > "$user0_pkgs"
+    # Disable-for-user-0 any blocked system apps (Play Store, browsers,
+    # package installer UI, terminal apps).
+    # IMPORTANT: We intentionally use pm disable-user (NOT pm uninstall) here.
+    # pm uninstall -k --user 0 removes the package from Android's user-0
+    # package registry. If the daemon is killed with SIGKILL during a reboot
+    # (bypassing the cleanup trap), those packages stay uninstalled across the
+    # reboot. Android's bootloop-protection (MTK and others) then detects
+    # missing critical system packages and triggers recovery / factory wipe.
+    # pm disable-user leaves the package registered but inactive, so the
+    # PackageManager scan at next boot succeeds and no wipe occurs.
     while IFS= read -r pkg; do
         [ -z "$pkg" ] && continue
-        if grep -qxF "$pkg" "$user0_pkgs" 2>/dev/null; then
-            if pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1; then
-                grep -qxF "$pkg" "$uninstalled_sys" 2>/dev/null \
-                    || echo "$pkg" >> "$uninstalled_sys"
-                grep -qxF "$pkg" "$DISABLED_APPS_FILE" 2>/dev/null \
-                    || echo "$pkg" >> "$DISABLED_APPS_FILE"
-                newly_disabled=$((newly_disabled + 1))
-            fi
+        if pm disable-user --user 0 "$pkg" >/dev/null 2>&1; then
+            grep -qxF "$pkg" "$DISABLED_APPS_FILE" 2>/dev/null \
+                || echo "$pkg" >> "$DISABLED_APPS_FILE"
+            newly_disabled=$((newly_disabled + 1))
         fi
     done < "$blocked_sys"
-    rm -f "$user0_pkgs"
 
     CURRENT_MODE="focus"
     echo "focus" > "$MODE_FILE"
@@ -235,15 +242,9 @@ disable_focus_mode() {
 
     local count=0
     if [ -f "$DISABLED_APPS_FILE" ] && [ -s "$DISABLED_APPS_FILE" ]; then
-        # Re-install system apps that were uninstalled for user
-        if [ -f "$STATE_DIR/uninstalled_sys.txt" ] && [ -s "$STATE_DIR/uninstalled_sys.txt" ]; then
-            while IFS= read -r pkg; do
-                [ -z "$pkg" ] && continue
-                pm install-existing --user 0 "$pkg" >/dev/null 2>&1
-            done < "$STATE_DIR/uninstalled_sys.txt"
-            : > "$STATE_DIR/uninstalled_sys.txt"
-        fi
-        # Re-enable all disabled apps
+        # Re-enable all disabled apps (both 3rd-party and system apps).
+        # Both paths now use pm disable-user, so pm enable is the only
+        # restore command needed.
         while IFS= read -r pkg; do
             [ -z "$pkg" ] && continue
             pm enable "$pkg" >/dev/null 2>&1 && count=$((count + 1))

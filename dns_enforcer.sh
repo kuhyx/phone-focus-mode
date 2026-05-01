@@ -25,15 +25,118 @@
 #     leaves tamper logs.
 # ============================================================
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 # shellcheck source=config.sh
 . "$SCRIPT_DIR/config.sh"
 
 PIDFILE="$STATE_DIR/dns_enforcer.pid"
+DNS_BLOCK_IPV4_FILE="$STATE_DIR/dns_block_ipv4.txt"
+DNS_BLOCK_IPV6_FILE="$STATE_DIR/dns_block_ipv6.txt"
+DNS_BLOCK_UID_FILE="$STATE_DIR/dns_block_uids.txt"
 
 mkdir -p "$STATE_DIR"
 touch "$DNS_LOG"
 chmod 666 "$DNS_LOG" 2>/dev/null || true
+
+append_unique_line() {
+    local file="$1"
+    local value="$2"
+
+    [ -z "$value" ] && return 0
+    [ -f "$file" ] || : > "$file"
+
+    if ! grep -qxF "$value" "$file" 2>/dev/null; then
+        echo "$value" >> "$file"
+    fi
+}
+
+extract_ping_ip() {
+    # Extract the host IP from the first line of ping output:
+    #   Ping example.com (1.2.3.4): ...
+    #   Ping example.com (2a00:...): ...
+    printf '%s\n' "$1" | sed -n 's/^[^(]*(\([^)]*\)).*/\1/p' | head -1
+}
+
+extract_package_uid() {
+    # Parse one line from `cmd package list packages -U`, e.g.:
+    #   package:com.android.chrome uid:10153
+    printf '%s\n' "$1" | sed -n 's/.* uid:\([0-9][0-9]*\).*/\1/p' | head -1
+}
+
+resolve_package_uid() {
+    local pkg="$1"
+    local line uid
+
+    line="$(cmd package list packages -U 2>/dev/null | grep -E "^package:${pkg}( |$)" | head -1 || true)"
+    uid="$(extract_package_uid "$line")"
+    if echo "$uid" | grep -Eq '^[0-9]+$'; then
+        echo "$uid"
+    fi
+}
+
+resolve_ipv4() {
+    local host="$1"
+    local line ip
+
+    line="$(toybox ping -4 -c 1 -W 1 "$host" 2>/dev/null | head -1 || true)"
+    ip="$(extract_ping_ip "$line")"
+    if echo "$ip" | grep -Eq '^[0-9]+(\.[0-9]+){3}$'; then
+        echo "$ip"
+    fi
+}
+
+resolve_ipv6() {
+    local host="$1"
+    local line ip
+
+    line="$(toybox ping -6 -c 1 -W 1 "$host" 2>/dev/null | head -1 || true)"
+    ip="$(extract_ping_ip "$line")"
+    if echo "$ip" | grep -Eq '^[0-9A-Fa-f:]+$'; then
+        echo "$ip"
+    fi
+}
+
+refresh_blocked_content_ips() {
+    : > "$DNS_BLOCK_IPV4_FILE"
+    : > "$DNS_BLOCK_IPV6_FILE"
+
+    local host ip4 ip6
+    for host in $DNS_BLOCK_HOSTS; do
+        [ -z "$host" ] && continue
+        [ "${host#\#}" != "$host" ] && continue
+
+        ip4="$(resolve_ipv4 "$host")"
+        ip6="$(resolve_ipv6 "$host")"
+
+        append_unique_line "$DNS_BLOCK_IPV4_FILE" "$ip4"
+        append_unique_line "$DNS_BLOCK_IPV6_FILE" "$ip6"
+    done
+}
+
+refresh_blocked_app_uids() {
+    : > "$DNS_BLOCK_UID_FILE"
+
+    local pkg uid
+    # Always-blocked packages (hard distractions: YouTube, Chrome, ...).
+    for pkg in $DNS_BLOCK_PACKAGES_ALWAYS; do
+        [ -z "$pkg" ] && continue
+        [ "${pkg#\#}" != "$pkg" ] && continue
+
+        uid="$(resolve_package_uid "$pkg")"
+        append_unique_line "$DNS_BLOCK_UID_FILE" "$uid"
+    done
+
+    # Focus-mode-only packages (Play Store etc. - usable outside focus mode).
+    if [ "$(cat "$MODE_FILE" 2>/dev/null)" = "focus" ]; then
+        for pkg in $DNS_BLOCK_PACKAGES_FOCUS_ONLY; do
+            [ -z "$pkg" ] && continue
+            [ "${pkg#\#}" != "$pkg" ] && continue
+
+            uid="$(resolve_package_uid "$pkg")"
+            append_unique_line "$DNS_BLOCK_UID_FILE" "$uid"
+        done
+    fi
+}
 
 log() {
     local ts
@@ -136,6 +239,36 @@ fill_chain_v4() {
         iptables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 53  -j REJECT \
             --reject-with tcp-reset 2>/dev/null || true
     done
+
+    # Content-block fallback: reject HTTP/HTTPS to resolved endpoints of
+    # DNS_BLOCK_HOSTS. This is used on ROMs where hosts-file enforcement is
+    # impossible (no writable hosts inode on read-only partitions).
+    if [ -f "$DNS_BLOCK_IPV4_FILE" ]; then
+        while IFS= read -r ip; do
+            [ -z "$ip" ] && continue
+            iptables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 80  -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            iptables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 443 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            iptables -A "$DNS_IPT_CHAIN" -d "$ip" -p udp --dport 443 -j REJECT \
+                --reject-with icmp-port-unreachable 2>/dev/null || true
+        done < "$DNS_BLOCK_IPV4_FILE"
+    fi
+
+    # App-level web block: block HTTP/HTTPS for selected package UIDs.
+    # Only ports 80 and 443 are blocked so DNS (port 53) and system services
+    # still work — the apps just can't load web content or stream video.
+    if [ -f "$DNS_BLOCK_UID_FILE" ]; then
+        while IFS= read -r uid; do
+            [ -z "$uid" ] && continue
+            iptables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p tcp --dport 80 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            iptables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p tcp --dport 443 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            iptables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p udp --dport 443 -j REJECT \
+                --reject-with icmp-port-unreachable 2>/dev/null || true
+        done < "$DNS_BLOCK_UID_FILE"
+    fi
 }
 
 fill_chain_v6() {
@@ -158,9 +291,36 @@ fill_chain_v6() {
         ip6tables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 53  -j REJECT \
             --reject-with tcp-reset 2>/dev/null || true
     done
+
+    if [ -f "$DNS_BLOCK_IPV6_FILE" ]; then
+        while IFS= read -r ip; do
+            [ -z "$ip" ] && continue
+            ip6tables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 80  -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            ip6tables -A "$DNS_IPT_CHAIN" -d "$ip" -p tcp --dport 443 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            ip6tables -A "$DNS_IPT_CHAIN" -d "$ip" -p udp --dport 443 -j REJECT \
+                --reject-with icmp6-port-unreachable 2>/dev/null || true
+        done < "$DNS_BLOCK_IPV6_FILE"
+    fi
+
+    if [ -f "$DNS_BLOCK_UID_FILE" ]; then
+        while IFS= read -r uid; do
+            [ -z "$uid" ] && continue
+            ip6tables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p tcp --dport 80 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            ip6tables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p tcp --dport 443 -j REJECT \
+                --reject-with tcp-reset 2>/dev/null || true
+            ip6tables -A "$DNS_IPT_CHAIN" -m owner --uid-owner "$uid" -p udp --dport 443 -j REJECT \
+                --reject-with icmp6-port-unreachable 2>/dev/null || true
+        done < "$DNS_BLOCK_UID_FILE"
+    fi
 }
 
 enforce_iptables() {
+    refresh_blocked_content_ips
+    refresh_blocked_app_uids
+
     if command -v iptables >/dev/null 2>&1; then
         ensure_chain iptables && fill_chain_v4
     fi
@@ -196,4 +356,6 @@ main() {
     done
 }
 
-main "$@"
+if [ "${FOCUS_MODE_DNS_ENFORCER_TESTING:-0}" != "1" ]; then
+    main "$@"
+fi

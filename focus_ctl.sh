@@ -14,6 +14,30 @@ SCRIPT_DIR="/data/local/tmp/focus_mode"
 
 PIDFILE="$STATE_DIR/daemon.pid"
 
+recover_pidfile() {
+    local pidfile="$1"
+    local script_name="$2"
+    local pid
+
+    if [ -f "$pidfile" ]; then
+        pid="$(cat "$pidfile" 2>/dev/null)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+            return 0
+        fi
+    fi
+
+    pid="$(pgrep -f "$script_name" 2>/dev/null | head -1)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "$pid" > "$pidfile" 2>/dev/null || true
+        chmod 666 "$pidfile" 2>/dev/null || true
+        echo "$pid"
+        return 0
+    fi
+
+    return 1
+}
+
 # ---- Logging ----
 log() {
     local ts
@@ -54,13 +78,7 @@ usage() {
 
 # Helper to check if daemon is running
 daemon_pid() {
-    if [ -f "$PIDFILE" ]; then
-        local pid
-        pid="$(cat "$PIDFILE")"
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-        fi
-    fi
+    recover_pidfile "$PIDFILE" "focus_daemon.sh"
 }
 
 cmd_start() {
@@ -275,13 +293,7 @@ cmd_whitelist() {
 HOSTS_PIDFILE="$STATE_DIR/hosts_enforcer.pid"
 
 hosts_enforcer_pid() {
-    if [ -f "$HOSTS_PIDFILE" ]; then
-        local pid
-        pid="$(cat "$HOSTS_PIDFILE")"
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-        fi
-    fi
+    recover_pidfile "$HOSTS_PIDFILE" "hosts_enforcer.sh"
 }
 
 cmd_hosts_status() {
@@ -368,13 +380,7 @@ cmd_hosts_log() {
 DNS_PIDFILE="$STATE_DIR/dns_enforcer.pid"
 
 dns_enforcer_pid() {
-    if [ -f "$DNS_PIDFILE" ]; then
-        local pid
-        pid="$(cat "$DNS_PIDFILE")"
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-        fi
-    fi
+    recover_pidfile "$DNS_PIDFILE" "dns_enforcer.sh"
 }
 
 cmd_dns_status() {
@@ -461,13 +467,7 @@ LAUNCHER_PIDFILE="$STATE_DIR/launcher_enforcer.pid"
 DISABLED_COMPETITORS_FILE="$STATE_DIR/disabled_competitors.txt"
 
 launcher_enforcer_pid() {
-    if [ -f "$LAUNCHER_PIDFILE" ]; then
-        local pid
-        pid="$(cat "$LAUNCHER_PIDFILE")"
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-        fi
-    fi
+    recover_pidfile "$LAUNCHER_PIDFILE" "launcher_enforcer.sh"
 }
 
 cmd_launcher_snapshot() {

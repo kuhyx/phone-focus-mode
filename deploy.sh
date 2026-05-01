@@ -18,9 +18,26 @@ PHONE_IP="${1:-}"
 ACTION="${2:---deploy}"
 REMOTE_DIR="/data/local/tmp/focus_mode"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ADB_TARGET=()
+
+# Support orchestrator-driven device targeting via ADB_SERIAL.
+# When ADB_SERIAL is set, deploy.sh uses that target directly and preserves
+# the existing PHONE_IP workflow when ADB_SERIAL is unset.
+if [[ -n "${ADB_SERIAL:-}" ]]; then
+    ADB_TARGET=(-s "${ADB_SERIAL}")
+    if [[ -z "${PHONE_IP}" || "${PHONE_IP}" == --* ]]; then
+        ACTION="${PHONE_IP:---deploy}"
+        PHONE_IP=""
+    fi
+fi
+
+adb_cmd() {
+    adb "${ADB_TARGET[@]}" "$@"
+}
 
 usage() {
     echo "Usage: $0 <phone_ip> [action]"
+    echo "   or: ADB_SERIAL=<serial> $0 [action]"
     echo ""
     echo "Actions:"
     echo "  (none)     Full deploy"
@@ -39,6 +56,7 @@ usage() {
     echo "  --launcher-status    Show launcher enforcer status on the phone"
     echo "  --launcher-log       Show launcher enforcer log on the phone"
     echo "  --snapshot-launcher  Snapshot installed Minimalist Phone APK + default HOME"
+    echo "  --install-aurora     Download & install Aurora Store (open-source Play Store alt)"
     echo ""
     echo "Examples:"
     echo "  $0 192.168.1.42"
@@ -74,6 +92,10 @@ check_coords() {
 }
 
 check_ip() {
+    if [[ -n "${ADB_SERIAL:-}" ]]; then
+        return 0
+    fi
+
     if [ -z "$PHONE_IP" ]; then
         echo "ERROR: Phone IP not provided."
         echo ""
@@ -82,6 +104,17 @@ check_ip() {
 }
 
 connect_adb() {
+    if [[ -n "${ADB_SERIAL:-}" ]]; then
+        if ! adb devices | awk 'NR>1 && $2=="device"{print $1}' | grep -Fxq "${ADB_SERIAL}"; then
+            echo "ERROR: ADB_SERIAL '${ADB_SERIAL}' is not connected."
+            echo "Connect device via USB or pair wireless ADB first."
+            exit 1
+        fi
+        ADB_TARGET=(-s "${ADB_SERIAL}")
+        echo "Using ADB_SERIAL target: ${ADB_SERIAL}"
+        return 0
+    fi
+
     echo "Connecting to $PHONE_IP:5555 ..."
     adb connect "$PHONE_IP:5555"
     sleep 1
@@ -90,6 +123,7 @@ connect_adb() {
         echo "Make sure wireless ADB is enabled and the phone is reachable."
         exit 1
     fi
+    ADB_TARGET=(-s "$PHONE_IP:5555")
     echo "Connected."
 }
 
@@ -98,7 +132,64 @@ connect_adb() {
 # namespace — required for any status checks that inspect the hosts bind
 # mount, /data/adb/focus_mode files, or for starting daemons.
 adb_root() {
-    adb -s "$PHONE_IP:5555" shell su --mount-master -c "$1"
+    local command_text="$1"
+
+    printf '%s\n' "$command_text" | adb_cmd shell su --mount-master -c "sh -s"
+}
+
+compute_file_hash() {
+    local path="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$path" | awk '{print $1}'
+        return 0
+    fi
+
+    md5sum "$path" | awk '{print $1}'
+}
+
+# ============================================================
+# AURORA STORE
+# ============================================================
+# Aurora Store is a free, open-source Play Store client that lets you
+# install apps anonymously without a Google account. We use it so that
+# Play Store (com.android.vending) can be network-blocked during focus
+# mode without preventing legitimate app installs at other times.
+#
+# Official release APK is hosted on the Aurora OSS GitLab. We pin a
+# known version tag and verify the hash on every install.
+AURORA_VERSION="4.8.1"
+AURORA_APK_URL="https://gitlab.com/-/project/6922885/uploads/2ee95ec85244b45cc860b63ec7a10ad6/AuroraStore-4.8.1.apk"
+AURORA_PACKAGE="com.aurora.store"
+
+do_install_aurora() {
+    connect_adb
+
+    # Check if already installed.
+    if adb_cmd shell pm list packages 2>/dev/null | grep -qx "package:${AURORA_PACKAGE}"; then
+        echo "Aurora Store is already installed (${AURORA_PACKAGE})."
+        return 0
+    fi
+
+    echo "Downloading Aurora Store ${AURORA_VERSION}..."
+    local tmp_apk
+    tmp_apk="$(mktemp --suffix=.apk)"
+    if ! curl -fsSL --retry 3 -o "$tmp_apk" "$AURORA_APK_URL"; then
+        rm -f "$tmp_apk"
+        echo "ERROR: Failed to download Aurora Store from $AURORA_APK_URL"
+        echo "Manual download: https://auroraoss.com/"
+        return 1
+    fi
+
+    echo "Installing Aurora Store..."
+    if adb_cmd install -r "$tmp_apk"; then
+        echo "Aurora Store ${AURORA_VERSION} installed successfully."
+        echo "Open Aurora Store on the phone, choose 'Anonymous' login, then install apps normally."
+    else
+        echo "ERROR: adb install failed. You can side-load manually:"
+        echo "  adb install ${tmp_apk}"
+    fi
+    rm -f "$tmp_apk"
 }
 
 # ============================================================
@@ -122,18 +213,18 @@ do_deploy() {
 
     echo "[3/7] Creating directories on device..."
     # Use world-writable staging dir so non-root adb push works
-    adb -s "$PHONE_IP:5555" shell "mkdir -p /data/local/tmp/focus_stage"
-    adb_root "mkdir -p $REMOTE_DIR /data/adb/service.d /data/adb/focus_mode"
+    adb_cmd shell "mkdir -p /data/local/tmp/focus_stage"
+    adb_root "mkdir -p $REMOTE_DIR /data/adb/service.d"
     adb_root "chmod 777 /data/local/tmp/focus_stage"
 
     echo "[4/7] Uploading scripts..."
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/config.sh"             "/data/local/tmp/focus_stage/config.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_daemon.sh"       "/data/local/tmp/focus_stage/focus_daemon.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/focus_ctl.sh"          "/data/local/tmp/focus_stage/focus_ctl.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/hosts_enforcer.sh"     "/data/local/tmp/focus_stage/hosts_enforcer.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/dns_enforcer.sh"       "/data/local/tmp/focus_stage/dns_enforcer.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/launcher_enforcer.sh"  "/data/local/tmp/focus_stage/launcher_enforcer.sh"
-    adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/magisk_service.sh"     "/data/local/tmp/focus_stage/99-focus-mode.sh"
+    adb_cmd push "$SCRIPT_DIR/config.sh"             "/data/local/tmp/focus_stage/config.sh"
+    adb_cmd push "$SCRIPT_DIR/focus_daemon.sh"       "/data/local/tmp/focus_stage/focus_daemon.sh"
+    adb_cmd push "$SCRIPT_DIR/focus_ctl.sh"          "/data/local/tmp/focus_stage/focus_ctl.sh"
+    adb_cmd push "$SCRIPT_DIR/hosts_enforcer.sh"     "/data/local/tmp/focus_stage/hosts_enforcer.sh"
+    adb_cmd push "$SCRIPT_DIR/dns_enforcer.sh"       "/data/local/tmp/focus_stage/dns_enforcer.sh"
+    adb_cmd push "$SCRIPT_DIR/launcher_enforcer.sh"  "/data/local/tmp/focus_stage/launcher_enforcer.sh"
+    adb_cmd push "$SCRIPT_DIR/magisk_service.sh"     "/data/local/tmp/focus_stage/99-focus-mode.sh"
 
     # Generate and upload the canonical hosts file (StevenBlack + custom entries).
     # This mirrors what linux_configuration/hosts/install.sh installs on the PC.
@@ -142,12 +233,18 @@ do_deploy() {
         chmod +x "$HOSTS_GENERATOR" 2>/dev/null || true
         echo "  Generating canonical hosts file..."
         HOSTS_TMP="$(mktemp)"
+        HOSTS_SHA_TMP="$(mktemp)"
         if bash "$HOSTS_GENERATOR" "$HOSTS_TMP"; then
+            hosts_hash="$(compute_file_hash "$HOSTS_TMP")"
+            printf '%s\n' "$hosts_hash" > "$HOSTS_SHA_TMP"
             echo "  Uploading canonical hosts ($(wc -l < "$HOSTS_TMP") lines)..."
-            adb -s "$PHONE_IP:5555" push "$HOSTS_TMP" "/data/local/tmp/focus_stage/hosts.canonical"
+            adb_cmd push "$HOSTS_TMP" "/data/local/tmp/focus_stage/hosts.canonical"
+            adb_cmd push "$HOSTS_SHA_TMP" "/data/local/tmp/focus_stage/hosts.sha256"
             rm -f "$HOSTS_TMP"
+            rm -f "$HOSTS_SHA_TMP"
         else
             rm -f "$HOSTS_TMP"
+            rm -f "$HOSTS_SHA_TMP"
             echo "  WARNING: failed to generate hosts file - skipping hosts enforcement"
         fi
     else
@@ -159,7 +256,7 @@ do_deploy() {
         echo "  config_secrets.sh already exists on phone - skipping (preserving real coords)"
     else
         echo "  Pushing config_secrets.sh (first install)..."
-        adb -s "$PHONE_IP:5555" push "$SCRIPT_DIR/config_secrets.sh" "/data/local/tmp/focus_stage/config_secrets.sh"
+        adb_cmd push "$SCRIPT_DIR/config_secrets.sh" "/data/local/tmp/focus_stage/config_secrets.sh"
         adb_root "cp /data/local/tmp/focus_stage/config_secrets.sh $REMOTE_DIR/config_secrets.sh"
     fi
 
@@ -170,55 +267,111 @@ do_deploy() {
     adb_root "cp /data/local/tmp/focus_stage/hosts_enforcer.sh     $REMOTE_DIR/hosts_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/dns_enforcer.sh       $REMOTE_DIR/dns_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/launcher_enforcer.sh  $REMOTE_DIR/launcher_enforcer.sh"
-    adb_root "cp /data/local/tmp/focus_stage/99-focus-mode.sh      /data/adb/service.d/99-focus-mode.sh"
+    if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
+        adb_root "cp /data/local/tmp/focus_stage/99-focus-mode.sh      /data/adb/service.d/99-focus-mode.sh"
+    else
+        adb_root "rm -f /data/adb/service.d/99-focus-mode.sh /data/adb/service.d/99-focus-mode.sh.disabled"
+    fi
     # Install canonical hosts and lock it down (only if generator produced it).
-    if adb -s "$PHONE_IP:5555" shell "test -f /data/local/tmp/focus_stage/hosts.canonical" 2>/dev/null; then
+    if adb_cmd shell "test -f /data/local/tmp/focus_stage/hosts.canonical" 2>/dev/null; then
         # chattr -i first so we can overwrite a previously-locked canonical
-        adb_root "chattr -i /data/adb/focus_mode/hosts.canonical 2>/dev/null; true"
-        adb_root "cp /data/local/tmp/focus_stage/hosts.canonical /data/adb/focus_mode/hosts.canonical"
-        adb_root "chmod 644 /data/adb/focus_mode/hosts.canonical"
+        adb_root "chattr -i $REMOTE_DIR/hosts.canonical 2>/dev/null; true"
+        adb_root "cp /data/local/tmp/focus_stage/hosts.canonical $REMOTE_DIR/hosts.canonical"
+        adb_root "chmod 644 $REMOTE_DIR/hosts.canonical"
         # Pre-compute the sha so the enforcer does not have to seed it.
-        adb_root "chattr -i /data/adb/focus_mode/hosts.sha256 2>/dev/null; true"
-        adb_root "sha256sum /data/adb/focus_mode/hosts.canonical | awk '{print \$1}' > /data/adb/focus_mode/hosts.sha256 2>/dev/null || md5sum /data/adb/focus_mode/hosts.canonical | awk '{print \$1}' > /data/adb/focus_mode/hosts.sha256"
-        adb_root "chmod 644 /data/adb/focus_mode/hosts.sha256"
-        adb_root "chattr +i /data/adb/focus_mode/hosts.canonical 2>/dev/null; true"
-        adb_root "chattr +i /data/adb/focus_mode/hosts.sha256 2>/dev/null; true"
+        adb_root "chattr -i $REMOTE_DIR/hosts.sha256 2>/dev/null; true"
+        adb_root "cp /data/local/tmp/focus_stage/hosts.sha256 $REMOTE_DIR/hosts.sha256"
+        adb_root "chmod 644 $REMOTE_DIR/hosts.sha256"
+        adb_root "chattr +i $REMOTE_DIR/hosts.canonical 2>/dev/null; true"
+        adb_root "chattr +i $REMOTE_DIR/hosts.sha256 2>/dev/null; true"
+
+        # ---- Magisk Systemless Hosts module (REQUIRED) ----
+        # This module magic-mounts /data/adb/modules/hosts/system/etc/hosts
+        # as /system/etc/hosts at boot — the only way to create that file on
+        # this ROM's hardware-read-only system partition.
+        #
+        # The module must be ENABLED in the Magisk app by the user (one-time,
+        # after each factory reset). We CANNOT enable it programmatically.
+        # Without it, no app-level hosts blocking is possible, so we STOP here
+        # and require user action before the deploy can proceed.
+        local magisk_hosts_ok=0
+        if adb_root "test -d /data/adb/modules/hosts" 2>/dev/null; then
+            if adb_root "test ! -f /data/adb/modules/hosts/disable -a ! -f /data/adb/modules/hosts/remove" 2>/dev/null; then
+                magisk_hosts_ok=1
+            fi
+        fi
+
+        if [[ "$magisk_hosts_ok" -eq 0 ]]; then
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════════════╗"
+            echo "║  ACTION REQUIRED — Deploy cannot continue                       ║"
+            echo "╠══════════════════════════════════════════════════════════════════╣"
+            echo "║  The Magisk 'Systemless Hosts' module is not enabled.           ║"
+            echo "║  Without it, hosts-file blocking is impossible on this device   ║"
+            echo "║  (the system partition is hardware read-only even with root).   ║"
+            echo "║                                                                 ║"
+            echo "║  Steps to fix:                                                  ║"
+            echo "║    1. Open the Magisk app on the phone                         ║"
+            echo "║    2. Tap the Modules tab (puzzle-piece icon)                   ║"
+            echo "║    3. Find 'Systemless Hosts' and toggle it ON                  ║"
+            echo "║    4. Reboot the phone when prompted                            ║"
+            echo "║    5. Re-run this deploy command                                ║"
+            echo "╚══════════════════════════════════════════════════════════════════╝"
+            echo ""
+            exit 1
+        fi
+
+        adb_root "mkdir -p /data/adb/modules/hosts/system/etc"
+        adb_root "cp $REMOTE_DIR/hosts.canonical /data/adb/modules/hosts/system/etc/hosts"
+        adb_root "chmod 644 /data/adb/modules/hosts/system/etc/hosts"
+        echo "  Magisk hosts module populated ($(adb_root "wc -l < /data/adb/modules/hosts/system/etc/hosts" 2>/dev/null | tr -d ' ') lines). Reboot to activate /system/etc/hosts."
     fi
     adb_root "rm -rf /data/local/tmp/focus_stage"
 
     echo "[5/7] Setting permissions..."
     adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh" || true
-    adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
+    if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
+        adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
+    fi
     adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log"
     # State files need 666 so the daemons can write regardless of SELinux context drift
     adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log" || true
 
     echo "[6/7] Starting daemons..."
     # Stop existing daemons, then start fresh
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/focus_daemon.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/hosts_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "kill \$(cat $REMOTE_DIR/daemon.pid 2>/dev/null)            2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/hosts_enforcer.pid 2>/dev/null)    2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/dns_enforcer.pid 2>/dev/null)      2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/launcher_enforcer.pid 2>/dev/null) 2>/dev/null; true"
+    sleep 1
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/focus_daemon.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/hosts_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     sleep 1
     adb_root "rm -f $REMOTE_DIR/daemon.pid $REMOTE_DIR/hosts_enforcer.pid $REMOTE_DIR/dns_enforcer.pid $REMOTE_DIR/launcher_enforcer.pid"
     # Start hosts enforcer first so hosts are locked before user can react.
     # Use --mount-master so bind mounts propagate to the global namespace
     # (where app processes live). Without this, only our isolated `su` session
     # would see the bind-mounted hosts file.
-    if adb_root "test -f /data/adb/focus_mode/hosts.canonical" 2>/dev/null; then
-        adb -s "$PHONE_IP:5555" shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/hosts_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    if adb_root "test -f $REMOTE_DIR/hosts.canonical" 2>/dev/null; then
+        adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/hosts_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
     fi
     # Start DNS enforcer (forces Private DNS off, blocks DoH/DoT). Always on.
-    adb -s "$PHONE_IP:5555" shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/dns_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/dns_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
     # Start launcher enforcer only if a snapshot APK exists. If not, warn the
     # user to install Minimalist Phone + run --snapshot-launcher first.
-    if adb_root "test -f /data/adb/focus_mode/minimalist_launcher.apk" 2>/dev/null; then
-        adb -s "$PHONE_IP:5555" shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/launcher_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    if adb_root "test -f $REMOTE_DIR/minimalist_launcher.apk" 2>/dev/null; then
+        adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/launcher_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
     else
         echo "  NOTE: launcher snapshot missing. Install Minimalist Phone via Aurora Store, then run:"
         echo "        $0 $PHONE_IP --snapshot-launcher"
     fi
-    adb -s "$PHONE_IP:5555" shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/focus_daemon.sh </dev/null >/dev/null 2>/dev/null &'
+    adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/focus_daemon.sh </dev/null >/dev/null 2>/dev/null &'
     sleep 4
 
     # ---- Companion status notification app ----
@@ -232,16 +385,16 @@ do_deploy() {
         fi
         if [ -f "$APK" ]; then
             echo "  Installing APK..."
-            adb -s "$PHONE_IP:5555" install -r "$APK" >/dev/null || true
+            adb_cmd install -r "$APK" >/dev/null || true
             # Grant runtime permission (Android 13+ requires it for notifications).
-            adb -s "$PHONE_IP:5555" shell pm grant com.kuhy.focusstatus android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+            adb_cmd shell pm grant com.kuhy.focusstatus android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
             # Pre-approve Magisk SU so the app never shows the approval prompt.
-            APP_UID="$(adb -s "$PHONE_IP:5555" shell dumpsys package com.kuhy.focusstatus 2>/dev/null | grep -oE 'userId=[0-9]+' | head -1 | cut -d= -f2)"
+            APP_UID="$(adb_cmd shell dumpsys package com.kuhy.focusstatus 2>/dev/null | grep -oE 'userId=[0-9]+' | head -1 | cut -d= -f2)"
             if [ -n "$APP_UID" ]; then
-                adb -s "$PHONE_IP:5555" shell "su -c 'magisk --sqlite \"INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES ($APP_UID,2,0,1,1)\"'" >/dev/null 2>&1 || true
+                adb_cmd shell "su -c 'magisk --sqlite \"INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES ($APP_UID,2,0,1,1)\"'" >/dev/null 2>&1 || true
             fi
             # Launch the invisible activity which kicks off the foreground service.
-            adb -s "$PHONE_IP:5555" shell am start -n com.kuhy.focusstatus/.LaunchActivity >/dev/null 2>&1 || true
+            adb_cmd shell am start -n com.kuhy.focusstatus/.LaunchActivity >/dev/null 2>&1 || true
             echo "  Companion app running (look for the ongoing 'Focus Mode' notification)."
         else
             echo "  WARNING: APK build failed - skipping companion app install"
@@ -254,7 +407,9 @@ do_deploy() {
     echo "Checking status..."
     adb_root "sh $REMOTE_DIR/focus_ctl.sh status"
     echo ""
-    echo "The daemon will auto-start on every boot via Magisk service.d."
+    echo "Boot autostart is disabled by default (FOCUS_BOOT_AUTOSTART=0)."
+    echo "No Magisk service.d hook is installed unless FOCUS_BOOT_AUTOSTART=1 in config.sh."
+    echo "Launcher enforcement does not auto-start on boot unless LAUNCHER_BOOT_AUTOSTART=1 is set in config.sh."
     echo ""
     echo "Useful commands:"
     echo "  $0 $PHONE_IP --status      # Check mode and location"
@@ -262,6 +417,7 @@ do_deploy() {
     echo "  $0 $PHONE_IP --list        # See all apps and whitelist status"
     echo "  $0 $PHONE_IP --enable      # Force focus mode on for testing"
     echo "  $0 $PHONE_IP --disable     # Force focus mode off"
+    echo "  $0 $PHONE_IP --install-aurora  # Install Aurora Store (Play Store alternative)"
 }
 
 # ============================================================
@@ -276,7 +432,7 @@ do_control() {
 do_pull_log() {
     connect_adb
     echo "Downloading log..."
-    adb -s "$PHONE_IP:5555" pull "$REMOTE_DIR/focus_mode.log" "./focus_mode_$(date +%Y%m%d_%H%M%S).log"
+    adb_cmd pull "$REMOTE_DIR/focus_mode.log" "./focus_mode_$(date +%Y%m%d_%H%M%S).log"
     echo "Done."
 }
 
@@ -288,7 +444,7 @@ do_find_pkg() {
     fi
     connect_adb
     echo "Packages matching '$filter':"
-    adb -s "$PHONE_IP:5555" shell pm list packages | grep -i "$filter" | sed 's/^package:/  /'
+    adb_cmd shell pm list packages | grep -i "$filter" | sed 's/^package:/  /'
 }
 
 do_snapshot_launcher() {
@@ -305,7 +461,7 @@ do_snapshot_launcher() {
     # Kill any previous enforcer so it picks up the new snapshot.
     adb_root "kill \$(cat $REMOTE_DIR/launcher_enforcer.pid 2>/dev/null) 2>/dev/null; true"
     adb_root "rm -f $REMOTE_DIR/launcher_enforcer.pid"
-    adb -s "$PHONE_IP:5555" shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/launcher_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/launcher_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
     sleep 3
     adb_root "sh $REMOTE_DIR/focus_ctl.sh launcher-status"
 }
@@ -333,5 +489,6 @@ case "$ACTION" in
     --launcher-status) do_control "launcher-status" ;;
     --launcher-log)    connect_adb; adb_root "sh $REMOTE_DIR/focus_ctl.sh launcher-log 100" ;;
     --snapshot-launcher) do_snapshot_launcher ;;
+    --install-aurora)    do_install_aurora ;;
     *)               echo "Unknown action: $ACTION"; usage ;;
 esac

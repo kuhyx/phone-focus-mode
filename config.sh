@@ -8,7 +8,13 @@
 # ============================================================
 
 # --- Home location (loaded from config_secrets.sh, not tracked by git) ---
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+# If config.sh is sourced from an external wrapper (e.g. Magisk service.d),
+# $0 points to the wrapper path rather than this file's directory. Fall back
+# to the canonical runtime location if config_secrets is not alongside $0.
+if [ ! -f "$SCRIPT_DIR/config_secrets.sh" ] && [ -f "/data/local/tmp/focus_mode/config_secrets.sh" ]; then
+	SCRIPT_DIR="/data/local/tmp/focus_mode"
+fi
 . "$SCRIPT_DIR/config_secrets.sh"
 
 # --- Radius in meters ---
@@ -39,12 +45,27 @@ export STATUS_FILE="$STATE_DIR/status.json"
 # re-check. focus_daemon.sh polls for it and skips the remainder of its sleep.
 export RECHECK_TRIGGER="$STATE_DIR/trigger_recheck"
 
+# --- Boot-time autostart safety gate ---
+# Critical safety default: do NOT auto-start focus daemons at boot unless
+# explicitly enabled. This avoids device instability during early boot on
+# vendor ROMs after resets/updates.
+# Late-auto mode: boot stack starts only after Android reports boot complete.
+export FOCUS_BOOT_AUTOSTART=1
+# Extra grace period after sys.boot_completed. Keep at or below 10 seconds.
+export FOCUS_BOOT_DELAY_SECONDS=10
+# Hard timeout while waiting for sys.boot_completed in Magisk service script.
+export FOCUS_BOOT_WAIT_MAX_SECONDS=180
+# Emergency kill switch file: if this marker exists on phone, boot autostart
+# is skipped entirely for this boot. Create with:
+#   adb shell su -c 'touch /data/local/tmp/focus_mode/disable_boot_autostart'
+export FOCUS_BOOT_EMERGENCY_DISABLE_FILE="$STATE_DIR/disable_boot_autostart"
+
 # --- Hosts enforcer state (see hosts_enforcer.sh) ---
 # Canonical hosts file pushed by deploy.sh. The enforcer bind-mounts this
 # over /system/etc/hosts and restores any tampering.
-export HOSTS_CANONICAL="/data/adb/focus_mode/hosts.canonical"
+export HOSTS_CANONICAL="$STATE_DIR/hosts.canonical"
 export HOSTS_TARGET="/system/etc/hosts"
-export HOSTS_SHA_FILE="/data/adb/focus_mode/hosts.sha256"
+export HOSTS_SHA_FILE="$STATE_DIR/hosts.sha256"
 export HOSTS_CHECK_INTERVAL=15
 export HOSTS_LOG="$STATE_DIR/hosts_enforcer.log"
 
@@ -102,17 +123,54 @@ export DNS_DOH_IPV6="
 2a10:50c0::ad1:ff
 2a10:50c0::ad2:ff
 "
+# Additional content hosts to block at the firewall layer. This is a fallback
+# for ROMs where /etc/hosts cannot be mounted (read-only partitions with no
+# hosts inode). dns_enforcer.sh resolves these hostnames periodically and
+# rejects traffic to their current endpoints on ports 80/443.
+export DNS_BLOCK_HOSTS="
+youtube.com
+www.youtube.com
+m.youtube.com
+youtu.be
+youtubei.googleapis.com
+www.youtube-nocookie.com
+googlevideo.com
+ytimg.com
+"
+
+# Block network for selected distraction/system apps at firewall level by UID.
+# This avoids pm disable/uninstall on system packages (which can destabilize
+# boot on some vendor ROMs) while still making the apps effectively unusable.
+#
+# DNS_BLOCK_PACKAGES_ALWAYS: blocked at all times. Use for hard-distraction
+#   apps that should never have web access (YouTube app, YouTube Music, the
+#   stock browser). Hosts-file blocking handles their *content*; the UID rule
+#   keeps them from using DoH/QUIC fallbacks.
+# DNS_BLOCK_PACKAGES_FOCUS_ONLY: blocked only while focus mode is active
+#   (current_mode.txt = focus). Use for apps that have legitimate use outside
+#   focus mode (Play Store for installing apps you want, package installer).
+export DNS_BLOCK_PACKAGES_ALWAYS="
+com.google.android.youtube
+com.google.android.apps.youtube.music
+com.android.chrome
+"
+export DNS_BLOCK_PACKAGES_FOCUS_ONLY="
+com.android.vending
+"
+# Backwards-compat: code paths still referencing DNS_BLOCK_PACKAGES treat it
+# as the always-blocked list.
+export DNS_BLOCK_PACKAGES="$DNS_BLOCK_PACKAGES_ALWAYS"
 
 # --- Launcher enforcer state (see launcher_enforcer.sh) ---
 # Keeps Minimalist Phone installed and locked as the default HOME app.
 # The APK is snapshotted by `deploy.sh --snapshot-launcher` from the
 # currently-installed copy (user installs once via Aurora/Play).
 export LAUNCHER_PACKAGE="com.qqlabs.minimalistlauncher"
-export LAUNCHER_APK="/data/adb/focus_mode/minimalist_launcher.apk"
-export LAUNCHER_SHA_FILE="/data/adb/focus_mode/minimalist_launcher.sha256"
+export LAUNCHER_APK="$STATE_DIR/minimalist_launcher.apk"
+export LAUNCHER_SHA_FILE="$STATE_DIR/minimalist_launcher.sha256"
 # Captured home-activity component (package/.Activity). Saved by
 # --snapshot-launcher so the enforcer knows which component to pin as HOME.
-export LAUNCHER_ACTIVITY_FILE="/data/adb/focus_mode/minimalist_launcher.activity"
+export LAUNCHER_ACTIVITY_FILE="$STATE_DIR/minimalist_launcher.activity"
 # Competing launchers to disable so the "pick a launcher" dialog has
 # nothing else to offer. Matched exactly; add more with `focus_ctl.sh
 # launcher-disable-other <pkg>`.
@@ -125,6 +183,11 @@ com.google.android.apps.nexuslauncher
 "
 export LAUNCHER_CHECK_INTERVAL=15
 export LAUNCHER_LOG="$STATE_DIR/launcher_enforcer.log"
+# Boot-time launcher enforcement is intentionally opt-in. Starting it from
+# Magisk service.d can strand the phone on a broken HOME configuration if the
+# snapshot is stale or the launcher update changed components. Keep this off by
+# default and only enable it after verifying the launcher snapshot is healthy.
+export LAUNCHER_BOOT_AUTOSTART=0
 
 # ============================================================
 # WHITELISTED APPS
@@ -183,6 +246,9 @@ com.google.android.gm
 ch.protonmail.android
 com.microsoft.teams
 
+# --- App installation alternative (keep visible in focus mode) ---
+com.aurora.store
+
 # --- Manga reader ---
 eu.kanade.tachiyomi.sy
 
@@ -222,38 +288,20 @@ com.xiaomi.smarthome
 # ============================================================
 
 export BLOCKED_SYSTEM_APPS="
-# --- Browsers ---
-com.android.chrome
-com.chrome.beta
-com.chrome.dev
-com.chrome.canary
-com.sec.android.app.sbrowser
-com.opera.browser
-com.opera.mini.native
-com.brave.browser
-com.vivaldi.browser
-com.microsoft.emmx
-com.kiwibrowser.browser
-com.duckduckgo.mobile.android
-
-# --- Package installers / stores ---
-# Blocking these prevents re-installing or re-enabling apps while in
-# focus mode. Play Services (com.google.android.gms) is intentionally
-# left enabled because banking apps require it.
-com.android.vending
-com.google.market
-com.android.packageinstaller
-com.google.android.packageinstaller
-com.android.documentsui
-com.google.android.documentsui
-
-# --- Shells / terminals that could be used to bypass restrictions ---
-com.termux
-com.termux.api
-com.termux.boot
-jackpal.androidterm
-com.server.auditor.ssh.client
-org.connectbot
+# *** INTENTIONALLY EMPTY ***
+#
+# pm disable-user state persists across reboots. Android always kills daemon
+# processes with SIGKILL during shutdown, bypassing the shell cleanup trap.
+# Any system package left disabled across a reboot can trigger MTK bootloop
+# protection → recovery → factory wipe (confirmed: caused 3 wipes on BL9000).
+#
+# System apps (Chrome, YouTube, Play Store, etc.) are enforced via
+# DNS+iptables in dns_enforcer.sh instead — that layer is stateless and
+# requires no cleanup on reboot.
+#
+# Only user-installed 3rd-party apps (pm list packages -3) are safe for
+# pm disable-user because the MTK bootloop trigger only fires on missing or
+# disabled ROM/system components, not on user-installed packages.
 "
 
 # --- System / essential packages that must NEVER be disabled ---

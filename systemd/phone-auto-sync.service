@@ -1,0 +1,9 @@
+[Unit]
+Description=Phone focus mode auto sync
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/testsAndMisc/scripts/run_all/run_phone.sh auto
+StandardOutput=journal
+StandardError=journal

@@ -28,6 +28,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/config.sh"
 
 PIDFILE="$STATE_DIR/hosts_enforcer.pid"
+MISSING_TARGET_LOGGED=0
+MAGISK_HOSTS_LOGGED=0
+# Magisk "Systemless Hosts" module path. When this module is enabled,
+# Magisk magic-mounts files placed under its system/ tree onto the live
+# /system at boot. Copying our canonical hosts there makes Magisk overlay
+# /system/etc/hosts on next boot, even on read-only system partitions.
+MAGISK_HOSTS_MODULE_DIR="/data/adb/modules/hosts"
+MAGISK_HOSTS_TARGET="$MAGISK_HOSTS_MODULE_DIR/system/etc/hosts"
 
 mkdir -p "$STATE_DIR" "$(dirname "$HOSTS_CANONICAL")"
 touch "$HOSTS_LOG"
@@ -89,6 +97,10 @@ is_bind_mounted_correctly() {
     [ -n "$target_hash" ] && [ "$target_hash" = "$canonical_hash" ]
 }
 
+has_hosts_target() {
+    [ -f "$HOSTS_TARGET" ]
+}
+
 unmount_existing_hosts_mount() {
     # If anything else is already mounted on /system/etc/hosts (OEM overlay
     # or a previous failed bind), unmount it so we can take its place.
@@ -123,13 +135,32 @@ make_target_writable_once() {
 }
 
 assert_bind_mount() {
+    if ! has_hosts_target; then
+        # Target file doesn't exist yet - try to create it by directly writing
+        # /system (remount rw briefly). On Magisk-rooted devices this usually
+        # works because Magisk intercepts the remount. If it fails we fall back
+        # to the firewall-only path and log a warning.
+        log "hosts target missing - attempting to create $HOSTS_TARGET via /system remount"
+        make_target_writable_once
+        if ! has_hosts_target; then
+            if [ "$MISSING_TARGET_LOGGED" -eq 0 ]; then
+                log "WARN: could not create $HOSTS_TARGET on this ROM (hosts bind enforcement disabled)"
+                MISSING_TARGET_LOGGED=1
+            fi
+            return 0
+        fi
+        log "Created and populated $HOSTS_TARGET directly"
+        return 0
+    fi
+
     if is_bind_mounted_correctly; then
         return 0
     fi
     # Something is in the way (OEM overlay or previous partial mount).
     unmount_existing_hosts_mount
     # Try plain bind mount - no remount-rw of /system needed.
-    if mount --bind "$HOSTS_CANONICAL" "$HOSTS_TARGET" 2>/dev/null; then
+    # Android toybox mount commonly supports "-o bind" but not "--bind".
+    if mount -o bind "$HOSTS_CANONICAL" "$HOSTS_TARGET" 2>/dev/null; then
         mount -o remount,ro,bind "$HOSTS_TARGET" 2>/dev/null || true
         if is_bind_mounted_correctly; then
             log "Bind-mounted $HOSTS_CANONICAL over $HOSTS_TARGET"
@@ -150,6 +181,44 @@ assert_bind_mount() {
 ensure_canonical_immutable() {
     chmod 644 "$HOSTS_CANONICAL" 2>/dev/null || true
     chattr +i "$HOSTS_CANONICAL" 2>/dev/null || true
+}
+
+# Populate the Magisk "Systemless Hosts" module. Magisk's magic mount picks
+# up files under /data/adb/modules/<id>/system/ at boot and overlays them
+# onto the live /system tree. By placing our canonical hosts there we get
+# /system/etc/hosts on next boot even on ROMs whose system partition is
+# truly read-only (where remount,rw silently fails).
+# Returns 0 if module is present and now in sync, 1 otherwise.
+populate_magisk_hosts_module() {
+    if [ ! -d "$MAGISK_HOSTS_MODULE_DIR" ]; then
+        if [ "$MAGISK_HOSTS_LOGGED" -eq 0 ]; then
+            log "WARN: Magisk hosts module dir absent ($MAGISK_HOSTS_MODULE_DIR); enable 'Systemless Hosts' in the Magisk app."
+            MAGISK_HOSTS_LOGGED=1
+        fi
+        return 1
+    fi
+    if [ -f "$MAGISK_HOSTS_MODULE_DIR/disable" ] || [ -f "$MAGISK_HOSTS_MODULE_DIR/remove" ]; then
+        if [ "$MAGISK_HOSTS_LOGGED" -eq 0 ]; then
+            log "WARN: Magisk hosts module is disabled or pending removal"
+            MAGISK_HOSTS_LOGGED=1
+        fi
+        return 1
+    fi
+    mkdir -p "$(dirname "$MAGISK_HOSTS_TARGET")" 2>/dev/null || true
+    local module_hash canonical_hash
+    module_hash="$(sha256_of "$MAGISK_HOSTS_TARGET")"
+    canonical_hash="$(sha256_of "$HOSTS_CANONICAL")"
+    if [ -n "$module_hash" ] && [ "$module_hash" = "$canonical_hash" ]; then
+        return 0
+    fi
+    if cp "$HOSTS_CANONICAL" "$MAGISK_HOSTS_TARGET" 2>/dev/null; then
+        chmod 644 "$MAGISK_HOSTS_TARGET" 2>/dev/null || true
+        log "Synced canonical hosts -> Magisk module ($MAGISK_HOSTS_TARGET); active after next reboot"
+        MAGISK_HOSTS_LOGGED=0
+        return 0
+    fi
+    log "ERROR: failed to copy canonical hosts to $MAGISK_HOSTS_TARGET"
+    return 1
 }
 
 verify_and_restore() {
@@ -177,6 +246,16 @@ verify_and_restore() {
         return 1
     fi
 
+    if ! has_hosts_target; then
+        if [ "$MISSING_TARGET_LOGGED" -eq 0 ]; then
+            log "WARN: hosts target missing on this ROM: $HOSTS_TARGET (integrity checks skipped)"
+            MISSING_TARGET_LOGGED=1
+        fi
+        return 0
+    fi
+
+    MISSING_TARGET_LOGGED=0
+
     # Live target integrity check
     local actual_target
     actual_target="$(sha256_of "$HOSTS_TARGET")"
@@ -199,7 +278,10 @@ main() {
     log "hosts_enforcer started (PID=$$)"
 
     ensure_canonical_immutable
-    # Initial assertion
+    # Seed the Magisk systemless hosts module so /system/etc/hosts gets
+    # magic-mounted on next boot.
+    populate_magisk_hosts_module || true
+    # Initial assertion (covers the case where target already exists).
     assert_bind_mount || true
 
     # Seed sha file if missing
@@ -210,6 +292,7 @@ main() {
     fi
 
     while true; do
+        populate_magisk_hosts_module || true
         verify_and_restore
         rotate_log
         sleep "$HOSTS_CHECK_INTERVAL"

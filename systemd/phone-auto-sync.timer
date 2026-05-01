@@ -1,0 +1,10 @@
+[Unit]
+Description=Run phone focus mode auto sync periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
