@@ -14,35 +14,38 @@ SCRIPT_DIR="/data/local/tmp/focus_mode"
 
 PIDFILE="$STATE_DIR/daemon.pid"
 
-recover_pidfile() {
-    local pidfile="$1"
-    local script_name="$2"
-    local pid
-
-    if [ -f "$pidfile" ]; then
-        pid="$(cat "$pidfile" 2>/dev/null)"
-        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-            return 0
-        fi
-    fi
-
-    pid="$(pgrep -f "$script_name" 2>/dev/null | head -1)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        echo "$pid" > "$pidfile" 2>/dev/null || true
-        chmod 666 "$pidfile" 2>/dev/null || true
-        echo "$pid"
-        return 0
-    fi
-
-    return 1
-}
-
 # ---- Logging ----
 log() {
     local ts
     ts="$(date '+%Y-%m-%d %H:%M:%S')"
     echo "[$ts] $1" >> "$LOG_FILE"
+}
+
+# Emit one valid package name per line from WHITELIST.
+# This strips comments/blank lines from the multi-line quoted string and avoids
+# treating heading text (e.g. "---") as package tokens.
+iter_whitelist_packages() {
+    printf '%s\n' "$WHITELIST" | while IFS= read -r line; do
+        line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        case "$line" in
+            ""|\#*) continue ;;
+        esac
+
+        # Keep first token only; ignore any inline prose if present.
+        set -- $line
+        pkg="$1"
+
+        # Package names are dot-delimited identifiers.
+        case "$pkg" in
+            *.*) ;;
+            *) continue ;;
+        esac
+        case "$pkg" in
+            *[!A-Za-z0-9._]*) continue ;;
+        esac
+
+        echo "$pkg"
+    done
 }
 
 usage() {
@@ -71,6 +74,10 @@ usage() {
     echo "  launcher-stop    - Stop the launcher enforcer daemon"
     echo "  launcher-log     - Show launcher enforcer log"
     echo "  launcher-snapshot - Back up currently-installed launcher APK"
+    echo "  workout-status   - Show StrongLifts workout-detection state"
+    echo "  workout-start    - Start the workout detector daemon"
+    echo "  workout-stop     - Stop the workout detector daemon (sets flag=0)"
+    echo "  workout-log      - Show workout detector log"
     echo "  recheck    - Nudge the daemon to perform a fresh location check now"
     echo "  notif-status - Show companion status-notification details"
     echo ""
@@ -78,7 +85,13 @@ usage() {
 
 # Helper to check if daemon is running
 daemon_pid() {
-    recover_pidfile "$PIDFILE" "focus_daemon.sh"
+    if [ -f "$PIDFILE" ]; then
+        local pid
+        pid="$(cat "$PIDFILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+        fi
+    fi
 }
 
 cmd_start() {
@@ -170,7 +183,7 @@ cmd_enable() {
     for pkg in $(pm list packages -3 2>/dev/null | sed 's/^package://'); do
         # Check whitelist
         whitelisted=0
-        for w in $WHITELIST; do
+        for w in $(iter_whitelist_packages); do
             w_clean="$(echo "$w" | tr -d '[:space:]')"
             [ -z "$w_clean" ] && continue
             [ "$pkg" = "$w_clean" ] && { whitelisted=1; break; }
@@ -253,7 +266,7 @@ cmd_list_apps() {
     echo "=== Third-party apps NOT in whitelist ==="
     for pkg in $(pm list packages -3 2>/dev/null | sed 's/^package://'); do
         whitelisted=0
-        for w in $WHITELIST; do
+        for w in $(iter_whitelist_packages); do
             w="$(echo "$w" | tr -d '[:space:]')"
             [ -z "$w" ] && continue
             [ "$pkg" = "$w" ] && { whitelisted=1; break; }
@@ -269,7 +282,7 @@ cmd_list_apps() {
     done
     echo ""
     echo "=== Whitelisted apps ==="
-    for w in $WHITELIST; do
+    for w in $(iter_whitelist_packages); do
         w="$(echo "$w" | tr -d '[:space:]')"
         [ -z "$w" ] && continue
         echo "  [allowed] $w"
@@ -278,7 +291,7 @@ cmd_list_apps() {
 
 cmd_whitelist() {
     echo "=== Whitelisted packages ==="
-    for w in $WHITELIST; do
+    for w in $(iter_whitelist_packages); do
         w="$(echo "$w" | tr -d '[:space:]')"
         [ -z "$w" ] && continue
         # Check if installed
@@ -293,7 +306,13 @@ cmd_whitelist() {
 HOSTS_PIDFILE="$STATE_DIR/hosts_enforcer.pid"
 
 hosts_enforcer_pid() {
-    recover_pidfile "$HOSTS_PIDFILE" "hosts_enforcer.sh"
+    if [ -f "$HOSTS_PIDFILE" ]; then
+        local pid
+        pid="$(cat "$HOSTS_PIDFILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+        fi
+    fi
 }
 
 cmd_hosts_status() {
@@ -380,7 +399,13 @@ cmd_hosts_log() {
 DNS_PIDFILE="$STATE_DIR/dns_enforcer.pid"
 
 dns_enforcer_pid() {
-    recover_pidfile "$DNS_PIDFILE" "dns_enforcer.sh"
+    if [ -f "$DNS_PIDFILE" ]; then
+        local pid
+        pid="$(cat "$DNS_PIDFILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+        fi
+    fi
 }
 
 cmd_dns_status() {
@@ -467,7 +492,13 @@ LAUNCHER_PIDFILE="$STATE_DIR/launcher_enforcer.pid"
 DISABLED_COMPETITORS_FILE="$STATE_DIR/disabled_competitors.txt"
 
 launcher_enforcer_pid() {
-    recover_pidfile "$LAUNCHER_PIDFILE" "launcher_enforcer.sh"
+    if [ -f "$LAUNCHER_PIDFILE" ]; then
+        local pid
+        pid="$(cat "$LAUNCHER_PIDFILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+        fi
+    fi
 }
 
 cmd_launcher_snapshot() {
@@ -601,6 +632,120 @@ cmd_launcher_log() {
     fi
 }
 
+# ---- Workout detector ----
+
+WORKOUT_PIDFILE="$STATE_DIR/workout_detector.pid"
+
+workout_detector_pid() {
+    if [ -f "$WORKOUT_PIDFILE" ]; then
+        local pid
+        pid="$(cat "$WORKOUT_PIDFILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+        fi
+    fi
+}
+
+cmd_workout_status() {
+    local pid
+    pid="$(workout_detector_pid)"
+    echo "=== Workout Detector Status ==="
+    if [ -n "$pid" ]; then
+        echo "Daemon:        RUNNING (PID $pid)"
+    else
+        echo "Daemon:        STOPPED"
+    fi
+    echo "Package:       $WORKOUT_TRIGGER_PACKAGE"
+    if pm path "$WORKOUT_TRIGGER_PACKAGE" >/dev/null 2>&1; then
+        echo "Installed:     YES"
+    else
+        echo "Installed:     NO (detector will always report inactive)"
+    fi
+    echo "sqlite3:       $WORKOUT_SQLITE3_BIN"
+    if [ -x "$WORKOUT_SQLITE3_BIN" ]; then
+        echo "sqlite3 ver:   $("$WORKOUT_SQLITE3_BIN" -version 2>/dev/null | awk '{print $1}')"
+    else
+        echo "sqlite3 ver:   <missing or not executable — detector cannot query DB>"
+    fi
+    echo "DB path:       $WORKOUT_DB_PATH"
+    if [ -f "$WORKOUT_DB_PATH" ]; then
+        echo "DB present:    YES"
+    else
+        echo "DB present:    NO"
+    fi
+    echo "Poll interval: ${WORKOUT_DETECTOR_INTERVAL}s"
+    local flag="<unset>"
+    if [ -f "$WORKOUT_ACTIVE_FILE" ]; then
+        flag="$(cat "$WORKOUT_ACTIVE_FILE" 2>/dev/null)"
+    fi
+    case "$flag" in
+        1) echo "Workout flag:  1 (workout IN PROGRESS → YouTube hosts UNBLOCKED)" ;;
+        0) echo "Workout flag:  0 (no workout → YouTube hosts BLOCKED)" ;;
+        *) echo "Workout flag:  '$flag' (treated as 0, fail-closed)" ;;
+    esac
+    # Live one-shot query so the user can see ground truth without waiting
+    # for the next poll cycle. Best-effort — never fails the status command.
+    if [ -x "$WORKOUT_SQLITE3_BIN" ] && [ -f "$WORKOUT_DB_PATH" ]; then
+        local live_count
+        live_count="$("$WORKOUT_SQLITE3_BIN" "file:${WORKOUT_DB_PATH}?mode=ro" \
+            "SELECT COUNT(*) FROM workouts WHERE start>0 AND (finish IS NULL OR finish=0);" \
+            2>/dev/null)"
+        echo "Live DB query: in-progress workouts = ${live_count:-<query failed>}"
+    fi
+    if [ -f "$HOSTS_CANONICAL_WORKOUT" ]; then
+        echo "Workout hosts: $HOSTS_CANONICAL_WORKOUT ($(wc -l < "$HOSTS_CANONICAL_WORKOUT" 2>/dev/null) lines)"
+    else
+        echo "Workout hosts: <missing — deploy.sh must regenerate it>"
+    fi
+}
+
+cmd_workout_start() {
+    local pid
+    pid="$(workout_detector_pid)"
+    if [ -n "$pid" ]; then
+        echo "Workout detector already running (PID $pid)"
+        return
+    fi
+    if [ ! -x "$WORKOUT_SQLITE3_BIN" ]; then
+        echo "ERROR: $WORKOUT_SQLITE3_BIN missing or not executable. Re-run deploy.sh."
+        return 1
+    fi
+    setsid sh "$SCRIPT_DIR/workout_detector.sh" </dev/null >/dev/null 2>&1 &
+    sleep 2
+    pid="$(workout_detector_pid)"
+    if [ -n "$pid" ]; then
+        echo "Workout detector started (PID $pid)"
+    else
+        echo "ERROR: Workout detector failed to start. Check log: $WORKOUT_DETECTOR_LOG"
+    fi
+}
+
+cmd_workout_stop() {
+    local pid
+    pid="$(workout_detector_pid)"
+    if [ -z "$pid" ]; then
+        echo "Workout detector not running"
+        rm -f "$WORKOUT_PIDFILE"
+    else
+        kill -TERM "$pid"
+        echo "Workout detector stopped (sent SIGTERM to PID $pid)"
+    fi
+    # Fail-closed on manual stop: write 0 so the hosts enforcer reverts to
+    # the full-block canonical and YouTube goes back to being blocked.
+    printf '0\n' > "$WORKOUT_ACTIVE_FILE" 2>/dev/null || true
+    chmod 666 "$WORKOUT_ACTIVE_FILE" 2>/dev/null || true
+    echo "workout_active flag forced to 0"
+}
+
+cmd_workout_log() {
+    local lines="${1:-50}"
+    if [ -f "$WORKOUT_DETECTOR_LOG" ]; then
+        tail -n "$lines" "$WORKOUT_DETECTOR_LOG"
+    else
+        echo "Workout detector log not found: $WORKOUT_DETECTOR_LOG"
+    fi
+}
+
 case "$1" in
     start)    cmd_start ;;
     stop)     cmd_stop ;;
@@ -624,6 +769,10 @@ case "$1" in
     launcher-stop)     cmd_launcher_stop ;;
     launcher-log)      cmd_launcher_log "${2:-50}" ;;
     launcher-snapshot) cmd_launcher_snapshot ;;
+    workout-status)    cmd_workout_status ;;
+    workout-start)     cmd_workout_start ;;
+    workout-stop)      cmd_workout_stop ;;
+    workout-log)       cmd_workout_log "${2:-50}" ;;
     recheck)   cmd_recheck ;;
     notif-status) cmd_notif_status ;;
     *)        usage ;;

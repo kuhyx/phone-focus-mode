@@ -28,14 +28,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/config.sh"
 
 PIDFILE="$STATE_DIR/hosts_enforcer.pid"
-MISSING_TARGET_LOGGED=0
-MAGISK_HOSTS_LOGGED=0
-# Magisk "Systemless Hosts" module path. When this module is enabled,
-# Magisk magic-mounts files placed under its system/ tree onto the live
-# /system at boot. Copying our canonical hosts there makes Magisk overlay
-# /system/etc/hosts on next boot, even on read-only system partitions.
-MAGISK_HOSTS_MODULE_DIR="/data/adb/modules/hosts"
-MAGISK_HOSTS_TARGET="$MAGISK_HOSTS_MODULE_DIR/system/etc/hosts"
 
 mkdir -p "$STATE_DIR" "$(dirname "$HOSTS_CANONICAL")"
 touch "$HOSTS_LOG"
@@ -83,22 +75,46 @@ sha256_of() {
     fi
 }
 
+# ---- Workout-aware canonical selection ----
+# When workout_detector.sh writes "1" to $WORKOUT_ACTIVE_FILE, switch to
+# the YouTube-relaxed canonical. Any other value (including missing file or
+# unreadable) falls back to the full-block canonical (fail-closed).
+workout_active() {
+    [ -f "$WORKOUT_ACTIVE_FILE" ] || return 1
+    local v
+    v="$(cat "$WORKOUT_ACTIVE_FILE" 2>/dev/null | tr -d '[:space:]')"
+    [ "$v" = "1" ]
+}
+
+current_canonical() {
+    if workout_active && [ -f "$HOSTS_CANONICAL_WORKOUT" ]; then
+        echo "$HOSTS_CANONICAL_WORKOUT"
+    else
+        echo "$HOSTS_CANONICAL"
+    fi
+}
+
+current_sha_file() {
+    if workout_active && [ -f "$HOSTS_SHA_FILE_WORKOUT" ]; then
+        echo "$HOSTS_SHA_FILE_WORKOUT"
+    else
+        echo "$HOSTS_SHA_FILE"
+    fi
+}
+
 is_bind_mounted_correctly() {
     # Android devices often already have /system/etc/hosts as its own mount
     # point (OEM overlay / f2fs block). A mere "path is in /proc/self/mounts"
     # check is not enough - we must verify the mounted content matches our
-    # canonical by hash. Otherwise we'd accept OEM mounts as our own.
+    # currently-active canonical by hash (which depends on workout state).
     if [ ! -f "$HOSTS_TARGET" ]; then
         return 1
     fi
-    local target_hash canonical_hash
+    local target_hash canonical_hash canonical
+    canonical="$(current_canonical)"
     target_hash="$(sha256_of "$HOSTS_TARGET")"
-    canonical_hash="$(sha256_of "$HOSTS_CANONICAL")"
+    canonical_hash="$(sha256_of "$canonical")"
     [ -n "$target_hash" ] && [ "$target_hash" = "$canonical_hash" ]
-}
-
-has_hosts_target() {
-    [ -f "$HOSTS_TARGET" ]
 }
 
 unmount_existing_hosts_mount() {
@@ -121,49 +137,34 @@ unmount_existing_hosts_mount() {
 make_target_writable_once() {
     # /system is usually mounted read-only. Make it rw just long enough
     # to overwrite HOSTS_TARGET with the canonical content, then remount ro.
-    local system_mount
+    local system_mount canonical
+    canonical="$(current_canonical)"
     system_mount="$(awk '$2=="/system"{print $2; exit}' /proc/self/mounts)"
     if [ -z "$system_mount" ]; then
         system_mount="/system"
     fi
     mount -o remount,rw "$system_mount" 2>/dev/null || true
     chattr -i "$HOSTS_TARGET" 2>/dev/null || true
-    cp "$HOSTS_CANONICAL" "$HOSTS_TARGET" 2>/dev/null || true
+    cp "$canonical" "$HOSTS_TARGET" 2>/dev/null || true
     chmod 644 "$HOSTS_TARGET" 2>/dev/null || true
     chattr +i "$HOSTS_TARGET" 2>/dev/null || true
     mount -o remount,ro "$system_mount" 2>/dev/null || true
 }
 
 assert_bind_mount() {
-    if ! has_hosts_target; then
-        # Target file doesn't exist yet - try to create it by directly writing
-        # /system (remount rw briefly). On Magisk-rooted devices this usually
-        # works because Magisk intercepts the remount. If it fails we fall back
-        # to the firewall-only path and log a warning.
-        log "hosts target missing - attempting to create $HOSTS_TARGET via /system remount"
-        make_target_writable_once
-        if ! has_hosts_target; then
-            if [ "$MISSING_TARGET_LOGGED" -eq 0 ]; then
-                log "WARN: could not create $HOSTS_TARGET on this ROM (hosts bind enforcement disabled)"
-                MISSING_TARGET_LOGGED=1
-            fi
-            return 0
-        fi
-        log "Created and populated $HOSTS_TARGET directly"
-        return 0
-    fi
-
     if is_bind_mounted_correctly; then
         return 0
     fi
     # Something is in the way (OEM overlay or previous partial mount).
     unmount_existing_hosts_mount
+    local canonical
+    canonical="$(current_canonical)"
     # Try plain bind mount - no remount-rw of /system needed.
-    # Android toybox mount commonly supports "-o bind" but not "--bind".
-    if mount -o bind "$HOSTS_CANONICAL" "$HOSTS_TARGET" 2>/dev/null; then
+    if mount --bind "$canonical" "$HOSTS_TARGET" 2>/dev/null; then
         mount -o remount,ro,bind "$HOSTS_TARGET" 2>/dev/null || true
         if is_bind_mounted_correctly; then
-            log "Bind-mounted $HOSTS_CANONICAL over $HOSTS_TARGET"
+            log "Bind-mounted $canonical over $HOSTS_TARGET"
+            sync_magisk_module "$canonical"
             return 0
         fi
         log "Bind mount reported success but target still mismatches - unmounting"
@@ -173,94 +174,82 @@ assert_bind_mount() {
     log "Bind mount failed - falling back to direct overwrite"
     make_target_writable_once
     if is_bind_mounted_correctly; then
+        sync_magisk_module "$canonical"
         return 0
     fi
     return 1
+}
+
+# Keep the Magisk Systemless Hosts module file in sync with the currently
+# active canonical so that a future reboot mounts the correct variant. We
+# only rewrite when the contents differ (cheap hash compare) to avoid
+# touching the module dir on every loop iteration.
+sync_magisk_module() {
+    local canonical="$1"
+    [ -n "$canonical" ] && [ -f "$canonical" ] || return 0
+    [ -d "$(dirname "$HOSTS_MAGISK_MODULE_FILE")" ] || return 0
+    local module_hash canonical_hash
+    module_hash="$(sha256_of "$HOSTS_MAGISK_MODULE_FILE")"
+    canonical_hash="$(sha256_of "$canonical")"
+    if [ "$module_hash" != "$canonical_hash" ]; then
+        cp "$canonical" "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || return 0
+        chmod 644 "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || true
+        log "Synced Magisk module hosts to $(basename "$canonical")"
+    fi
 }
 
 ensure_canonical_immutable() {
+    # Lock both canonical variants — whichever is currently active and the
+    # other one (so a future workout transition is just as tamper-resistant).
     chmod 644 "$HOSTS_CANONICAL" 2>/dev/null || true
     chattr +i "$HOSTS_CANONICAL" 2>/dev/null || true
-}
-
-# Populate the Magisk "Systemless Hosts" module. Magisk's magic mount picks
-# up files under /data/adb/modules/<id>/system/ at boot and overlays them
-# onto the live /system tree. By placing our canonical hosts there we get
-# /system/etc/hosts on next boot even on ROMs whose system partition is
-# truly read-only (where remount,rw silently fails).
-# Returns 0 if module is present and now in sync, 1 otherwise.
-populate_magisk_hosts_module() {
-    if [ ! -d "$MAGISK_HOSTS_MODULE_DIR" ]; then
-        if [ "$MAGISK_HOSTS_LOGGED" -eq 0 ]; then
-            log "WARN: Magisk hosts module dir absent ($MAGISK_HOSTS_MODULE_DIR); enable 'Systemless Hosts' in the Magisk app."
-            MAGISK_HOSTS_LOGGED=1
-        fi
-        return 1
+    if [ -f "$HOSTS_CANONICAL_WORKOUT" ]; then
+        chmod 644 "$HOSTS_CANONICAL_WORKOUT" 2>/dev/null || true
+        chattr +i "$HOSTS_CANONICAL_WORKOUT" 2>/dev/null || true
     fi
-    if [ -f "$MAGISK_HOSTS_MODULE_DIR/disable" ] || [ -f "$MAGISK_HOSTS_MODULE_DIR/remove" ]; then
-        if [ "$MAGISK_HOSTS_LOGGED" -eq 0 ]; then
-            log "WARN: Magisk hosts module is disabled or pending removal"
-            MAGISK_HOSTS_LOGGED=1
-        fi
-        return 1
-    fi
-    mkdir -p "$(dirname "$MAGISK_HOSTS_TARGET")" 2>/dev/null || true
-    local module_hash canonical_hash
-    module_hash="$(sha256_of "$MAGISK_HOSTS_TARGET")"
-    canonical_hash="$(sha256_of "$HOSTS_CANONICAL")"
-    if [ -n "$module_hash" ] && [ "$module_hash" = "$canonical_hash" ]; then
-        return 0
-    fi
-    if cp "$HOSTS_CANONICAL" "$MAGISK_HOSTS_TARGET" 2>/dev/null; then
-        chmod 644 "$MAGISK_HOSTS_TARGET" 2>/dev/null || true
-        log "Synced canonical hosts -> Magisk module ($MAGISK_HOSTS_TARGET); active after next reboot"
-        MAGISK_HOSTS_LOGGED=0
-        return 0
-    fi
-    log "ERROR: failed to copy canonical hosts to $MAGISK_HOSTS_TARGET"
-    return 1
 }
 
 verify_and_restore() {
-    if [ ! -f "$HOSTS_CANONICAL" ]; then
-        log "ERROR: canonical hosts missing at $HOSTS_CANONICAL"
+    local canonical sha_file
+    canonical="$(current_canonical)"
+    sha_file="$(current_sha_file)"
+
+    if [ ! -f "$canonical" ]; then
+        log "ERROR: canonical hosts missing at $canonical"
         return 1
     fi
 
     local expected
-    expected="$(cat "$HOSTS_SHA_FILE" 2>/dev/null)"
+    expected="$(cat "$sha_file" 2>/dev/null)"
     if [ -z "$expected" ]; then
-        expected="$(sha256_of "$HOSTS_CANONICAL")"
-        echo "$expected" > "$HOSTS_SHA_FILE"
-        chmod 644 "$HOSTS_SHA_FILE" 2>/dev/null || true
-        chattr +i "$HOSTS_SHA_FILE" 2>/dev/null || true
+        expected="$(sha256_of "$canonical")"
+        echo "$expected" > "$sha_file"
+        chmod 644 "$sha_file" 2>/dev/null || true
+        chattr +i "$sha_file" 2>/dev/null || true
     fi
 
     # Canonical integrity check
     local actual_canonical
-    actual_canonical="$(sha256_of "$HOSTS_CANONICAL")"
+    actual_canonical="$(sha256_of "$canonical")"
     if [ "$actual_canonical" != "$expected" ]; then
-        log "TAMPER: canonical hash mismatch (expected $expected, got $actual_canonical)"
+        log "TAMPER: $(basename "$canonical") hash mismatch (expected $expected, got $actual_canonical)"
         # We cannot fix the canonical from here - it is the source of truth.
         # Just log and continue; deploy.sh must re-push.
         return 1
     fi
 
-    if ! has_hosts_target; then
-        if [ "$MISSING_TARGET_LOGGED" -eq 0 ]; then
-            log "WARN: hosts target missing on this ROM: $HOSTS_TARGET (integrity checks skipped)"
-            MISSING_TARGET_LOGGED=1
-        fi
-        return 0
-    fi
-
-    MISSING_TARGET_LOGGED=0
-
-    # Live target integrity check
+    # Live target integrity check. Mismatch can mean either tampering OR a
+    # legitimate workout-state transition that swapped the active canonical.
+    # In both cases the fix is the same: re-assert the bind mount with the
+    # currently-active canonical.
     local actual_target
     actual_target="$(sha256_of "$HOSTS_TARGET")"
     if [ "$actual_target" != "$expected" ]; then
-        log "TAMPER: $HOSTS_TARGET hash mismatch - restoring"
+        if workout_active; then
+            log "Workout-active swap: $HOSTS_TARGET differs from workout canonical - re-mounting"
+        else
+            log "TAMPER or post-workout swap: $HOSTS_TARGET hash mismatch - restoring"
+        fi
         assert_bind_mount
     fi
 }
@@ -278,21 +267,22 @@ main() {
     log "hosts_enforcer started (PID=$$)"
 
     ensure_canonical_immutable
-    # Seed the Magisk systemless hosts module so /system/etc/hosts gets
-    # magic-mounted on next boot.
-    populate_magisk_hosts_module || true
-    # Initial assertion (covers the case where target already exists).
+    # Initial assertion
     assert_bind_mount || true
 
-    # Seed sha file if missing
-    if [ ! -f "$HOSTS_SHA_FILE" ]; then
+    # Seed sha files if missing — one per canonical variant.
+    if [ ! -f "$HOSTS_SHA_FILE" ] && [ -f "$HOSTS_CANONICAL" ]; then
         sha256_of "$HOSTS_CANONICAL" > "$HOSTS_SHA_FILE"
         chmod 644 "$HOSTS_SHA_FILE" 2>/dev/null || true
         chattr +i "$HOSTS_SHA_FILE" 2>/dev/null || true
     fi
+    if [ ! -f "$HOSTS_SHA_FILE_WORKOUT" ] && [ -f "$HOSTS_CANONICAL_WORKOUT" ]; then
+        sha256_of "$HOSTS_CANONICAL_WORKOUT" > "$HOSTS_SHA_FILE_WORKOUT"
+        chmod 644 "$HOSTS_SHA_FILE_WORKOUT" 2>/dev/null || true
+        chattr +i "$HOSTS_SHA_FILE_WORKOUT" 2>/dev/null || true
+    fi
 
     while true; do
-        populate_magisk_hosts_module || true
         verify_and_restore
         rotate_log
         sleep "$HOSTS_CHECK_INTERVAL"

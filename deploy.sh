@@ -224,7 +224,22 @@ do_deploy() {
     adb_cmd push "$SCRIPT_DIR/hosts_enforcer.sh"     "/data/local/tmp/focus_stage/hosts_enforcer.sh"
     adb_cmd push "$SCRIPT_DIR/dns_enforcer.sh"       "/data/local/tmp/focus_stage/dns_enforcer.sh"
     adb_cmd push "$SCRIPT_DIR/launcher_enforcer.sh"  "/data/local/tmp/focus_stage/launcher_enforcer.sh"
+    adb_cmd push "$SCRIPT_DIR/workout_detector.sh"   "/data/local/tmp/focus_stage/workout_detector.sh"
     adb_cmd push "$SCRIPT_DIR/magisk_service.sh"     "/data/local/tmp/focus_stage/99-focus-mode.sh"
+
+    # ---- sqlite3 binary for workout_detector.sh ----
+    # Stored outside the repo (binary-files policy). Built once via the NDK
+    # against the SQLite amalgamation; see workout_detector.sh comments for
+    # the recipe. ~1.6 MB stripped, aarch64, PIE, dynamically linked against
+    # bionic (Android 30+).
+    SQLITE3_BIN="$SCRIPT_DIR/../../testsAndMisc_binaries/phone_focus_mode/sqlite3"
+    if [ -f "$SQLITE3_BIN" ]; then
+        echo "  Uploading sqlite3 binary ($(stat -c%s "$SQLITE3_BIN") bytes)..."
+        adb_cmd push "$SQLITE3_BIN" "/data/local/tmp/focus_stage/sqlite3"
+    else
+        echo "  WARNING: sqlite3 binary not found at $SQLITE3_BIN"
+        echo "           workout_detector will not function until you build & place it there."
+    fi
 
     # Generate and upload the canonical hosts file (StevenBlack + custom entries).
     # This mirrors what linux_configuration/hosts/install.sh installs on the PC.
@@ -240,6 +255,56 @@ do_deploy() {
             echo "  Uploading canonical hosts ($(wc -l < "$HOSTS_TMP") lines)..."
             adb_cmd push "$HOSTS_TMP" "/data/local/tmp/focus_stage/hosts.canonical"
             adb_cmd push "$HOSTS_SHA_TMP" "/data/local/tmp/focus_stage/hosts.sha256"
+
+            # ---- Workout-variant canonical ----
+            # Same content as the full canonical, with all lines that block
+            # any of $WORKOUT_UNBLOCK_DOMAINS removed. Used by hosts_enforcer
+            # while a StrongLifts workout is in progress.
+            HOSTS_WORKOUT_TMP="$(mktemp)"
+            HOSTS_WORKOUT_SHA_TMP="$(mktemp)"
+            # Read $WORKOUT_UNBLOCK_DOMAINS from the freshly-staged config.sh
+            # so the generator and the runtime always agree on the domain set.
+            UNBLOCK_DOMAINS="$(
+                # shellcheck disable=SC1091
+                ( . "$SCRIPT_DIR/config.sh" >/dev/null 2>&1; printf '%s\n' "$WORKOUT_UNBLOCK_DOMAINS" ) \
+                    | sed 's/[[:space:]]\{1,\}/\n/g' \
+                    | grep -vE '^[[:space:]]*(#|$)' \
+                    | sort -u
+            )"
+            if [ -n "$UNBLOCK_DOMAINS" ]; then
+                # Build an awk regex of exact-match domains anchored as the
+                # *value* column of a hosts entry ("<ip> <domain>" possibly
+                # followed by aliases). We strip any line whose first non-IP
+                # token matches one of the unblock domains.
+                python3 - "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP" <<PY_EOF || cp "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP"
+import sys
+
+unblock = set("""
+$UNBLOCK_DOMAINS
+""".split())
+
+with open(sys.argv[1], 'r', encoding='utf-8', errors='replace') as src, \
+     open(sys.argv[2], 'w', encoding='utf-8') as dst:
+    for line in src:
+        s = line.strip()
+        if not s or s.startswith('#'):
+            dst.write(line)
+            continue
+        parts = s.split()
+        # Hosts entry layout: <ip> <name> [aliases...]
+        if len(parts) >= 2 and any(p.lower() in unblock for p in parts[1:]):
+            continue
+        dst.write(line)
+PY_EOF
+                workout_hash="$(compute_file_hash "$HOSTS_WORKOUT_TMP")"
+                printf '%s\n' "$workout_hash" > "$HOSTS_WORKOUT_SHA_TMP"
+                stripped_lines=$(($(wc -l < "$HOSTS_TMP") - $(wc -l < "$HOSTS_WORKOUT_TMP")))
+                echo "  Uploading workout-variant hosts (stripped $stripped_lines YouTube lines)..."
+                adb_cmd push "$HOSTS_WORKOUT_TMP" "/data/local/tmp/focus_stage/hosts.canonical.workout"
+                adb_cmd push "$HOSTS_WORKOUT_SHA_TMP" "/data/local/tmp/focus_stage/hosts.sha256.workout"
+            fi
+            rm -f "$HOSTS_WORKOUT_TMP" "$HOSTS_WORKOUT_SHA_TMP"
+
             rm -f "$HOSTS_TMP"
             rm -f "$HOSTS_SHA_TMP"
         else
@@ -267,6 +332,11 @@ do_deploy() {
     adb_root "cp /data/local/tmp/focus_stage/hosts_enforcer.sh     $REMOTE_DIR/hosts_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/dns_enforcer.sh       $REMOTE_DIR/dns_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/launcher_enforcer.sh  $REMOTE_DIR/launcher_enforcer.sh"
+    adb_root "cp /data/local/tmp/focus_stage/workout_detector.sh   $REMOTE_DIR/workout_detector.sh"
+    if adb_cmd shell "test -f /data/local/tmp/focus_stage/sqlite3" 2>/dev/null; then
+        adb_root "cp /data/local/tmp/focus_stage/sqlite3 $REMOTE_DIR/sqlite3"
+        adb_root "chmod 0755 $REMOTE_DIR/sqlite3"
+    fi
     if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
         adb_root "cp /data/local/tmp/focus_stage/99-focus-mode.sh      /data/adb/service.d/99-focus-mode.sh"
     else
@@ -284,6 +354,22 @@ do_deploy() {
         adb_root "chmod 644 $REMOTE_DIR/hosts.sha256"
         adb_root "chattr +i $REMOTE_DIR/hosts.canonical 2>/dev/null; true"
         adb_root "chattr +i $REMOTE_DIR/hosts.sha256 2>/dev/null; true"
+
+        # ---- Workout-variant canonical (optional) ----
+        # Same lockdown treatment as the full canonical. Pushed by the workout
+        # hosts generator block above. Missing variant means workout_detector\
+        # will simply have no relaxed file to swap to (hosts_enforcer falls\
+        # back to the full canonical).
+        if adb_cmd shell "test -f /data/local/tmp/focus_stage/hosts.canonical.workout" 2>/dev/null; then
+            adb_root "chattr -i $REMOTE_DIR/hosts.canonical.workout 2>/dev/null; true"
+            adb_root "cp /data/local/tmp/focus_stage/hosts.canonical.workout $REMOTE_DIR/hosts.canonical.workout"
+            adb_root "chmod 644 $REMOTE_DIR/hosts.canonical.workout"
+            adb_root "chattr -i $REMOTE_DIR/hosts.sha256.workout 2>/dev/null; true"
+            adb_root "cp /data/local/tmp/focus_stage/hosts.sha256.workout $REMOTE_DIR/hosts.sha256.workout"
+            adb_root "chmod 644 $REMOTE_DIR/hosts.sha256.workout"
+            adb_root "chattr +i $REMOTE_DIR/hosts.canonical.workout 2>/dev/null; true"
+            adb_root "chattr +i $REMOTE_DIR/hosts.sha256.workout 2>/dev/null; true"
+        fi
 
         # ---- Magisk Systemless Hosts module (REQUIRED) ----
         # This module magic-mounts /data/adb/modules/hosts/system/etc/hosts
@@ -329,13 +415,13 @@ do_deploy() {
     adb_root "rm -rf /data/local/tmp/focus_stage"
 
     echo "[5/7] Setting permissions..."
-    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh" || true
+    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh $REMOTE_DIR/workout_detector.sh" || true
     if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
         adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
     fi
-    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log"
+    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/workout_detector.log"
     # State files need 666 so the daemons can write regardless of SELinux context drift
-    adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log" || true
+    adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/workout_detector.log" || true
 
     echo "[6/7] Starting daemons..."
     # Stop existing daemons, then start fresh
@@ -343,23 +429,32 @@ do_deploy() {
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/hosts_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/workout_detector.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "kill \$(cat $REMOTE_DIR/daemon.pid 2>/dev/null)            2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/hosts_enforcer.pid 2>/dev/null)    2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/dns_enforcer.pid 2>/dev/null)      2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/launcher_enforcer.pid 2>/dev/null) 2>/dev/null; true"
+    adb_root "kill \$(cat $REMOTE_DIR/workout_detector.pid 2>/dev/null)  2>/dev/null; true"
     sleep 1
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/focus_daemon.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/hosts_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/workout_detector.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     sleep 1
-    adb_root "rm -f $REMOTE_DIR/daemon.pid $REMOTE_DIR/hosts_enforcer.pid $REMOTE_DIR/dns_enforcer.pid $REMOTE_DIR/launcher_enforcer.pid"
+    adb_root "rm -f $REMOTE_DIR/daemon.pid $REMOTE_DIR/hosts_enforcer.pid $REMOTE_DIR/dns_enforcer.pid $REMOTE_DIR/launcher_enforcer.pid $REMOTE_DIR/workout_detector.pid"
     # Start hosts enforcer first so hosts are locked before user can react.
     # Use --mount-master so bind mounts propagate to the global namespace
     # (where app processes live). Without this, only our isolated `su` session
     # would see the bind-mounted hosts file.
     if adb_root "test -f $REMOTE_DIR/hosts.canonical" 2>/dev/null; then
         adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/hosts_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    fi
+    # Start workout detector BEFORE the hosts enforcer's first integrity check
+    # so the enforcer sees a non-stale workout_active flag. The detector itself
+    # is harmless if no workout is in progress (it just writes 0).
+    if adb_root "test -x $REMOTE_DIR/sqlite3" 2>/dev/null; then
+        adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/workout_detector.sh </dev/null >/dev/null 2>/dev/null &'
     fi
     # Start DNS enforcer (forces Private DNS off, blocks DoH/DoT). Always on.
     adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/dns_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
@@ -379,7 +474,15 @@ do_deploy() {
     APK="$APP_DIR/build/focus_status.apk"
     if [ -d "$APP_DIR" ]; then
         echo "[7/7] Building & installing companion status-notification app..."
-        if [ ! -f "$APK" ] || [ "$APP_DIR/AndroidManifest.xml" -nt "$APK" ] || [ "$APP_DIR/build.sh" -nt "$APK" ]; then
+        needs_rebuild=0
+        if [ ! -f "$APK" ]; then
+            needs_rebuild=1
+        elif [ "$APP_DIR/AndroidManifest.xml" -nt "$APK" ]; then
+            needs_rebuild=1
+        elif [ "$APP_DIR/build.sh" -nt "$APK" ]; then
+            needs_rebuild=1
+        fi
+        if [ "$needs_rebuild" -eq 1 ]; then
             echo "  Building APK..."
             (cd "$APP_DIR" && bash build.sh) >/dev/null
         fi
@@ -389,7 +492,10 @@ do_deploy() {
             # Grant runtime permission (Android 13+ requires it for notifications).
             adb_cmd shell pm grant com.kuhy.focusstatus android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
             # Pre-approve Magisk SU so the app never shows the approval prompt.
-            APP_UID="$(adb_cmd shell dumpsys package com.kuhy.focusstatus 2>/dev/null | grep -oE 'userId=[0-9]+' | head -1 | cut -d= -f2)"
+            APP_UID="$(
+                adb_cmd shell dumpsys package com.kuhy.focusstatus 2>/dev/null \
+                    | awk 'match($0, /userId=[0-9]+/) {print substr($0, RSTART + 7, RLENGTH - 7); exit}'
+            )"
             if [ -n "$APP_UID" ]; then
                 adb_cmd shell "su -c 'magisk --sqlite \"INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES ($APP_UID,2,0,1,1)\"'" >/dev/null 2>&1 || true
             fi

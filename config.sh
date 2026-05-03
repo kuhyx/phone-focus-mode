@@ -13,7 +13,7 @@ SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 # $0 points to the wrapper path rather than this file's directory. Fall back
 # to the canonical runtime location if config_secrets is not alongside $0.
 if [ ! -f "$SCRIPT_DIR/config_secrets.sh" ] && [ -f "/data/local/tmp/focus_mode/config_secrets.sh" ]; then
-	SCRIPT_DIR="/data/local/tmp/focus_mode"
+    SCRIPT_DIR="/data/local/tmp/focus_mode"
 fi
 . "$SCRIPT_DIR/config_secrets.sh"
 
@@ -68,6 +68,53 @@ export HOSTS_TARGET="/system/etc/hosts"
 export HOSTS_SHA_FILE="$STATE_DIR/hosts.sha256"
 export HOSTS_CHECK_INTERVAL=15
 export HOSTS_LOG="$STATE_DIR/hosts_enforcer.log"
+# Workout-variant canonical: same content as $HOSTS_CANONICAL but with all
+# YouTube-related domain blocks removed. hosts_enforcer.sh switches to this
+# variant when $WORKOUT_ACTIVE_FILE contains "1" (StrongLifts workout in
+# progress) and switches back when it contains "0" or is missing.
+export HOSTS_CANONICAL_WORKOUT="$STATE_DIR/hosts.canonical.workout"
+export HOSTS_SHA_FILE_WORKOUT="$STATE_DIR/hosts.sha256.workout"
+# Magisk Systemless Hosts module path. The enforcer keeps this in sync with
+# the currently-active canonical so a fresh boot sees the right hosts file.
+export HOSTS_MAGISK_MODULE_FILE="/data/adb/modules/hosts/system/etc/hosts"
+
+# --- Workout detector (see workout_detector.sh) ---
+# Polls the StrongLifts SQLite DB to determine whether a workout is in
+# progress. A workout is "in progress" iff there is at least one row in
+# `workouts` with start>0 AND (finish IS NULL OR finish=0). While true,
+# YouTube is unblocked at the hosts level (see HOSTS_CANONICAL_WORKOUT).
+export WORKOUT_DETECTOR_INTERVAL=10
+export WORKOUT_ACTIVE_FILE="$STATE_DIR/workout_active"
+export WORKOUT_DETECTOR_LOG="$STATE_DIR/workout_detector.log"
+# Static aarch64 sqlite3 binary pushed by deploy.sh. Built from the SQLite
+# amalgamation against the Android NDK; ~1.6 MB. Stored outside the repo at
+# ../testsAndMisc_binaries/phone_focus_mode/sqlite3 per binary-files policy.
+export WORKOUT_SQLITE3_BIN="/data/local/tmp/focus_mode/sqlite3"
+export WORKOUT_DB_PATH="/data/data/com.stronglifts.app/databases/StrongLifts-Database-3"
+# StrongLifts package — must be in $WHITELIST so its DB stays writable while
+# focus mode is enforcing. Used here only for status/log clarity.
+export WORKOUT_TRIGGER_PACKAGE="com.stronglifts.app"
+# Domains unblocked while a workout is in progress. Used by deploy.sh to
+# generate $HOSTS_CANONICAL_WORKOUT (each line becomes a `0.0.0.0 <host>`
+# match that is stripped from the canonical) and by focus_ctl.sh status.
+# Comments and blank lines ignored. Keep entries lower-case.
+export WORKOUT_UNBLOCK_DOMAINS="
+youtube.com
+www.youtube.com
+m.youtube.com
+youtu.be
+youtubei.googleapis.com
+youtube.googleapis.com
+youtube-nocookie.com
+www.youtube-nocookie.com
+googlevideo.com
+ytimg.com
+i.ytimg.com
+s.ytimg.com
+yt3.ggpht.com
+yt3.googleusercontent.com
+i9.ytimg.com
+"
 
 # --- DNS enforcer state (see dns_enforcer.sh) ---
 # The hosts file is only consulted by the *system* resolver. Apps using
@@ -123,54 +170,17 @@ export DNS_DOH_IPV6="
 2a10:50c0::ad1:ff
 2a10:50c0::ad2:ff
 "
-# Additional content hosts to block at the firewall layer. This is a fallback
-# for ROMs where /etc/hosts cannot be mounted (read-only partitions with no
-# hosts inode). dns_enforcer.sh resolves these hostnames periodically and
-# rejects traffic to their current endpoints on ports 80/443.
-export DNS_BLOCK_HOSTS="
-youtube.com
-www.youtube.com
-m.youtube.com
-youtu.be
-youtubei.googleapis.com
-www.youtube-nocookie.com
-googlevideo.com
-ytimg.com
-"
-
-# Block network for selected distraction/system apps at firewall level by UID.
-# This avoids pm disable/uninstall on system packages (which can destabilize
-# boot on some vendor ROMs) while still making the apps effectively unusable.
-#
-# DNS_BLOCK_PACKAGES_ALWAYS: blocked at all times. Use for hard-distraction
-#   apps that should never have web access (YouTube app, YouTube Music, the
-#   stock browser). Hosts-file blocking handles their *content*; the UID rule
-#   keeps them from using DoH/QUIC fallbacks.
-# DNS_BLOCK_PACKAGES_FOCUS_ONLY: blocked only while focus mode is active
-#   (current_mode.txt = focus). Use for apps that have legitimate use outside
-#   focus mode (Play Store for installing apps you want, package installer).
-export DNS_BLOCK_PACKAGES_ALWAYS="
-com.google.android.youtube
-com.google.android.apps.youtube.music
-com.android.chrome
-"
-export DNS_BLOCK_PACKAGES_FOCUS_ONLY="
-com.android.vending
-"
-# Backwards-compat: code paths still referencing DNS_BLOCK_PACKAGES treat it
-# as the always-blocked list.
-export DNS_BLOCK_PACKAGES="$DNS_BLOCK_PACKAGES_ALWAYS"
 
 # --- Launcher enforcer state (see launcher_enforcer.sh) ---
 # Keeps Minimalist Phone installed and locked as the default HOME app.
 # The APK is snapshotted by `deploy.sh --snapshot-launcher` from the
 # currently-installed copy (user installs once via Aurora/Play).
 export LAUNCHER_PACKAGE="com.qqlabs.minimalistlauncher"
-export LAUNCHER_APK="$STATE_DIR/minimalist_launcher.apk"
-export LAUNCHER_SHA_FILE="$STATE_DIR/minimalist_launcher.sha256"
+export LAUNCHER_APK="/data/adb/focus_mode/minimalist_launcher.apk"
+export LAUNCHER_SHA_FILE="/data/adb/focus_mode/minimalist_launcher.sha256"
 # Captured home-activity component (package/.Activity). Saved by
 # --snapshot-launcher so the enforcer knows which component to pin as HOME.
-export LAUNCHER_ACTIVITY_FILE="$STATE_DIR/minimalist_launcher.activity"
+export LAUNCHER_ACTIVITY_FILE="/data/adb/focus_mode/minimalist_launcher.activity"
 # Competing launchers to disable so the "pick a launcher" dialog has
 # nothing else to offer. Matched exactly; add more with `focus_ctl.sh
 # launcher-disable-other <pkg>`.
@@ -183,11 +193,6 @@ com.google.android.apps.nexuslauncher
 "
 export LAUNCHER_CHECK_INTERVAL=15
 export LAUNCHER_LOG="$STATE_DIR/launcher_enforcer.log"
-# Boot-time launcher enforcement is intentionally opt-in. Starting it from
-# Magisk service.d can strand the phone on a broken HOME configuration if the
-# snapshot is stale or the launcher update changed components. Keep this off by
-# default and only enable it after verifying the launcher snapshot is healthy.
-export LAUNCHER_BOOT_AUTOSTART=0
 
 # ============================================================
 # WHITELISTED APPS
@@ -212,8 +217,33 @@ com.kuhy.focusstatus
 com.stronglifts.app
 com.ichi2.anki
 com.metrolist.music
+org.mozilla.fenix
+org.fossify.clock
+ws.xsoh.etar
+com.fsck.k9
 com.kuhy.pomodoro_app
 com.kuhy.horatio
+
+# --- Default phone/contacts/messages handlers (NEVER disable - boot will
+#     fall back to the system FallbackHome shim and SystemUI gestures
+#     break). ---
+org.fossify.phone
+org.fossify.contacts
+org.fossify.messages
+
+# --- Active launcher (de.thomaskuenneth.benice). Must stay enabled or HOME
+#     resolves to the system FallbackHome shim. ---
+de.thomaskuenneth.benice
+
+# --- Google system packages that ship in /data/app (so they show up in
+#     pm-list-packages-3 output) but are required for system stability. ---
+com.google.android.safetycore
+com.google.android.contactkeys
+
+# --- User-allowed utilities and communication ---
+com.sosauce.cutecalc
+org.thoughtcrime.securesms
+com.discord
 
 # --- Google system apps (add by name even though they show as system) ---
 com.google.android.apps.maps
@@ -245,9 +275,11 @@ com.microsoft.office.outlook
 com.google.android.gm
 ch.protonmail.android
 com.microsoft.teams
+com.facebook.orca
 
-# --- App installation alternative (keep visible in focus mode) ---
+# --- App installation alternatives (must stay usable in focus mode) ---
 com.aurora.store
+com.machiav3lli.fdroid
 
 # --- Manga reader ---
 eu.kanade.tachiyomi.sy
@@ -293,15 +325,10 @@ export BLOCKED_SYSTEM_APPS="
 # pm disable-user state persists across reboots. Android always kills daemon
 # processes with SIGKILL during shutdown, bypassing the shell cleanup trap.
 # Any system package left disabled across a reboot can trigger MTK bootloop
-# protection → recovery → factory wipe (confirmed: caused 3 wipes on BL9000).
+# protection → recovery → factory wipe (confirmed on BL9000).
 #
-# System apps (Chrome, YouTube, Play Store, etc.) are enforced via
-# DNS+iptables in dns_enforcer.sh instead — that layer is stateless and
-# requires no cleanup on reboot.
-#
-# Only user-installed 3rd-party apps (pm list packages -3) are safe for
-# pm disable-user because the MTK bootloop trigger only fires on missing or
-# disabled ROM/system components, not on user-installed packages.
+# System/distraction apps are enforced via DNS+iptables in dns_enforcer.sh
+# instead of persistent package-disable state.
 "
 
 # --- System / essential packages that must NEVER be disabled ---

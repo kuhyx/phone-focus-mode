@@ -54,6 +54,17 @@ rotate_log() {
 build_whitelist_file() {
     echo "$WHITELIST" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
         | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/whitelist.txt"
+    # Sanity check: the WHITELIST string in config.sh is fragile - any
+    # literal double-quote inside a comment will close the heredoc and
+    # silently truncate the variable. Log the parsed line count so any
+    # future regression is visible in the log, and warn loudly if it
+    # falls below a known floor (we always have ~70+ entries).
+    local n
+    n=$(wc -l < "$STATE_DIR/whitelist.txt" 2>/dev/null | tr -d ' ')
+    log "Whitelist parsed: $n entries"
+    if [ "${n:-0}" -lt 30 ]; then
+        log "WARN: whitelist suspiciously small ($n lines) - check config.sh for stray quotes inside WHITELIST string"
+    fi
 }
 
 build_sysprotect_file() {
@@ -112,6 +123,7 @@ init() {
 
     build_whitelist_file
     build_sysprotect_file
+    refresh_default_handlers
     rotate_log
 
     if [ -f "$MODE_FILE" ]; then
@@ -168,7 +180,49 @@ is_allowed() {
             "$prefix"*) return 0 ;;
         esac
     done < "$STATE_DIR/sysprotect.txt"
+    # Hard-stop guard: refuse to disable any package that is the current
+    # default handler for a critical role (Dialer / SMS / Home / Contacts).
+    # Without this, a misconfigured WHITELIST can disable the default Phone
+    # app and Android falls back to com.android.settings/.FallbackHome -
+    # the persistent "Phone is starting..." screen with broken SystemUI
+    # gestures (no swipe-up recents). Recovering requires `pm enable` over
+    # ADB. Treat the guard as last-resort safety net independent of WHITELIST
+    # contents so a future config edit can never wipe these out.
+    is_default_handler "$pkg" && return 0
     return 1
+}
+
+# ---- Default handler detection ----
+# Refreshed once per focus_daemon tick into $STATE_DIR/default_handlers.txt.
+# Each line is a package name. Lookup is a cheap grep against this file.
+refresh_default_handlers() {
+    local f="$STATE_DIR/default_handlers.txt"
+    local tmp="$f.tmp"
+    : > "$tmp"
+    # Default Home (launcher). resolve-activity prints "Activity Resolver Table:"
+    # on line 1 and "<pkg>/<.Activity>" on line 2 in --brief mode.
+    cmd package resolve-activity --brief \
+        -c android.intent.category.HOME -a android.intent.action.MAIN 2>/dev/null \
+        | awk -F/ 'NR==2 && $1 != "" {print $1}' >> "$tmp"
+    # Default Dialer
+    local dialer
+    dialer="$(cmd telecom get-default-dialer 2>/dev/null | tr -d '[:space:]')"
+    [ -n "$dialer" ] && echo "$dialer" >> "$tmp"
+    # Default SMS handler (settings provider key)
+    local sms
+    sms="$(settings get secure sms_default_application 2>/dev/null | tr -d '[:space:]')"
+    [ -n "$sms" ] && [ "$sms" != "null" ] && echo "$sms" >> "$tmp"
+    # Default Browser handler (resolve-activity for VIEW http://)
+    cmd package resolve-activity --brief \
+        -a android.intent.action.VIEW -d http://example.com 2>/dev/null \
+        | awk -F/ 'NR==2 && $1 != "" {print $1}' >> "$tmp"
+    sort -u "$tmp" -o "$f"
+    rm -f "$tmp"
+}
+
+is_default_handler() {
+    local pkg="$1"
+    grep -qxF "$pkg" "$STATE_DIR/default_handlers.txt" 2>/dev/null
 }
 
 # ---- Focus Mode Control ----
@@ -180,6 +234,11 @@ enable_focus_mode() {
         log "ENABLING focus mode - restricting non-whitelisted apps"
         : > "$DISABLED_APPS_FILE"
     fi
+
+    # Refresh default-handler list every tick. The user may switch dialer /
+    # SMS / launcher between sweeps; the guard in is_allowed() consults this
+    # list so a newly-promoted handler is never disabled.
+    refresh_default_handlers
 
     # Build blocked system app list (used both at entry and for periodic sweep)
     local blocked_sys="$STATE_DIR/blocked_sys.txt"
