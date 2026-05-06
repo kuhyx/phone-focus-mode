@@ -381,9 +381,18 @@ PY_EOF
         # Without it, no app-level hosts blocking is possible, so we STOP here
         # and require user action before the deploy can proceed.
         local magisk_hosts_ok=0
+        local magisk_hosts_state="absent"
         if adb_root "test -d /data/adb/modules/hosts" 2>/dev/null; then
-            if adb_root "test ! -f /data/adb/modules/hosts/disable -a ! -f /data/adb/modules/hosts/remove" 2>/dev/null; then
+            if adb_root "test -f /data/adb/modules/hosts/disable -o -f /data/adb/modules/hosts/remove" 2>/dev/null; then
+                magisk_hosts_state="disabled"
+            elif ! adb_root "test -f /system/etc/hosts" 2>/dev/null; then
+                # Module dir exists, no disable marker, but the magic-mount
+                # has not happened yet. Either the user just enabled it but
+                # has not rebooted, or the module is in a broken state.
+                magisk_hosts_state="not-mounted"
+            else
                 magisk_hosts_ok=1
+                magisk_hosts_state="ok"
             fi
         fi
 
@@ -392,25 +401,48 @@ PY_EOF
             echo "╔══════════════════════════════════════════════════════════════════╗"
             echo "║  ACTION REQUIRED — Deploy cannot continue                       ║"
             echo "╠══════════════════════════════════════════════════════════════════╣"
-            echo "║  The Magisk 'Systemless Hosts' module is not enabled.           ║"
-            echo "║  Without it, hosts-file blocking is impossible on this device   ║"
-            echo "║  (the system partition is hardware read-only even with root).   ║"
-            echo "║                                                                 ║"
-            echo "║  Steps to fix:                                                  ║"
-            echo "║    1. Open the Magisk app on the phone                         ║"
-            echo "║    2. Tap the Modules tab (puzzle-piece icon)                   ║"
-            echo "║    3. Find 'Systemless Hosts' and toggle it ON                  ║"
-            echo "║    4. Reboot the phone when prompted                            ║"
-            echo "║    5. Re-run this deploy command                                ║"
+            if [[ "$magisk_hosts_state" == "not-mounted" ]]; then
+                echo "║  Magisk 'Systemless Hosts' module is enabled on disk but the   ║"
+                echo "║  /system/etc/hosts magic-mount has NOT happened yet.            ║"
+                echo "║  This means the device has not been rebooted since the module  ║"
+                echo "║  was last toggled on. Without the magic-mount, no hosts-file    ║"
+                echo "║  blocking is possible (the partition is hardware read-only).   ║"
+                echo "║                                                                 ║"
+                echo "║  Steps to fix:                                                  ║"
+                echo "║    1. Reboot the phone now (adb reboot, or hold power)         ║"
+                echo "║    2. After reboot, re-run this deploy command                  ║"
+            else
+                echo "║  The Magisk 'Systemless Hosts' module is not enabled.           ║"
+                echo "║  Without it, hosts-file blocking is impossible on this device   ║"
+                echo "║  (the system partition is hardware read-only even with root).   ║"
+                echo "║                                                                 ║"
+                echo "║  Steps to fix:                                                  ║"
+                echo "║    1. Open the Magisk app on the phone                         ║"
+                echo "║    2. Tap the Modules tab (puzzle-piece icon)                   ║"
+                echo "║    3. Find 'Systemless Hosts' and toggle it ON                  ║"
+                echo "║    4. Reboot the phone when prompted                            ║"
+                echo "║    5. Re-run this deploy command                                ║"
+            fi
             echo "╚══════════════════════════════════════════════════════════════════╝"
             echo ""
             exit 1
         fi
 
         adb_root "mkdir -p /data/adb/modules/hosts/system/etc"
+        # Drop any +i lock the runtime hosts_enforcer may have set on the
+        # module dir / hosts file so we can update them. The enforcer will
+        # re-lock on its next poll cycle. Also pre-emptively delete any
+        # disable/remove markers that may exist on disk before we start.
+        adb_root "chattr -i /data/adb/modules/hosts /data/adb/modules/hosts/system/etc/hosts 2>/dev/null; rm -f /data/adb/modules/hosts/disable /data/adb/modules/hosts/remove /data/adb/modules/hosts/update; true"
         adb_root "cp $REMOTE_DIR/hosts.canonical /data/adb/modules/hosts/system/etc/hosts"
         adb_root "chmod 644 /data/adb/modules/hosts/system/etc/hosts"
-        echo "  Magisk hosts module populated ($(adb_root "wc -l < /data/adb/modules/hosts/system/etc/hosts" 2>/dev/null | tr -d ' ') lines). Reboot to activate /system/etc/hosts."
+        # Lock the module dir to block the Magisk app's "Disable" / "Remove"
+        # buttons (they create marker files inside the dir). Files already
+        # in the dir stay mutable so the runtime enforcer can still update
+        # the hosts file on workout state changes.
+        adb_root "chattr +i /data/adb/modules/hosts/system/etc/hosts 2>/dev/null; true"
+        adb_root "chattr +i /data/adb/modules/hosts 2>/dev/null; true"
+        echo "  Magisk hosts module populated ($(adb_root "wc -l < /data/adb/modules/hosts/system/etc/hosts" 2>/dev/null | tr -d ' ') lines), locked against UI-disable. Reboot to activate /system/etc/hosts."
     fi
     adb_root "rm -rf /data/local/tmp/focus_stage"
 

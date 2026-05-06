@@ -187,15 +187,71 @@ assert_bind_mount() {
 sync_magisk_module() {
     local canonical="$1"
     [ -n "$canonical" ] && [ -f "$canonical" ] || return 0
-    [ -d "$(dirname "$HOSTS_MAGISK_MODULE_FILE")" ] || return 0
+    local module_dir
+    module_dir="$(dirname "$(dirname "$(dirname "$HOSTS_MAGISK_MODULE_FILE")")")"
+    [ -d "$module_dir" ] || return 0
     local module_hash canonical_hash
     module_hash="$(sha256_of "$HOSTS_MAGISK_MODULE_FILE")"
     canonical_hash="$(sha256_of "$canonical")"
     if [ "$module_hash" != "$canonical_hash" ]; then
+        # Drop +i on the module dir + file long enough to update, then re-lock.
+        chattr -i "$module_dir" 2>/dev/null || true
+        chattr -i "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || true
         cp "$canonical" "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || return 0
         chmod 644 "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || true
+        chattr +i "$HOSTS_MAGISK_MODULE_FILE" 2>/dev/null || true
         log "Synced Magisk module hosts to $(basename "$canonical")"
     fi
+    # Always re-assert dir-level lock at the end so a partial earlier failure
+    # leaves us in the locked state on the next iteration.
+    protect_magisk_module
+}
+
+# Defense against the user disabling the Magisk Systemless Hosts module via
+# the Magisk app UI. The "Disable" / "Remove" buttons work by creating a
+# marker file inside the module directory:
+#
+#     /data/adb/modules/hosts/disable      # disable on next reboot
+#     /data/adb/modules/hosts/remove       # uninstall on next reboot
+#
+# We do TWO things every poll cycle:
+#   1. Delete those markers if they appeared (so a reboot still loads us)
+#   2. Set chattr +i on the module directory itself so the Magisk app cannot
+#      create those markers in the first place. The +i flag on a directory
+#      blocks adding/removing/renaming entries inside it, which is exactly
+#      what `touch disable` does. Files already inside remain mutable, so
+#      sync_magisk_module() can still rewrite the hosts file (it briefly
+#      drops the lock above to handle the rare case where it must).
+#
+# To intentionally disable the module for maintenance, run from a root
+# shell on the phone:
+#     focus_ctl.sh hosts-stop
+#     chattr -i /data/adb/modules/hosts
+#     touch /data/adb/modules/hosts/disable
+protect_magisk_module() {
+    local module_dir
+    module_dir="$(dirname "$(dirname "$(dirname "$HOSTS_MAGISK_MODULE_FILE")")")"
+    [ -d "$module_dir" ] || return 0
+    # Step 1: nuke any disable/remove markers that may have been created
+    # since the last poll. We have to chattr -i first because either of the
+    # two locks below may already be in effect.
+    local removed=0
+    for marker in disable remove update; do
+        local f="$module_dir/$marker"
+        if [ -e "$f" ]; then
+            chattr -i "$module_dir" 2>/dev/null || true
+            chattr -i "$f" 2>/dev/null || true
+            if rm -f "$f" 2>/dev/null; then
+                removed=$((removed + 1))
+                log "TAMPER: removed Magisk module marker $f"
+            fi
+        fi
+    done
+    # Step 2: re-lock the module dir so the Magisk app cannot recreate them
+    # via its UI. Best-effort - if the kernel/fs rejects +i, the runtime
+    # delete loop above is still our safety net.
+    chattr +i "$module_dir" 2>/dev/null || true
+    return $removed
 }
 
 ensure_canonical_immutable() {
@@ -267,6 +323,7 @@ main() {
     log "hosts_enforcer started (PID=$$)"
 
     ensure_canonical_immutable
+    protect_magisk_module
     # Initial assertion
     assert_bind_mount || true
 
@@ -284,6 +341,7 @@ main() {
 
     while true; do
         verify_and_restore
+        protect_magisk_module
         rotate_log
         sleep "$HOSTS_CHECK_INTERVAL"
     done

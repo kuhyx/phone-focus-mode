@@ -351,6 +351,26 @@ cmd_hosts_status() {
     else
         echo "Canonical hosts file missing - run deploy.sh"
     fi
+    # Magisk Systemless Hosts module protection state.
+    local module_dir="/data/adb/modules/hosts"
+    if [ -d "$module_dir" ]; then
+        local lock_state="UNLOCKED (Magisk app can disable!)"
+        if lsattr -d "$module_dir" 2>/dev/null | awk '{print $1}' | grep -q i; then
+            lock_state="LOCKED (chattr +i)"
+        fi
+        echo "Magisk dir: $module_dir [$lock_state]"
+        local marker_warn=""
+        for marker in disable remove update; do
+            if [ -e "$module_dir/$marker" ]; then
+                marker_warn="$marker_warn $marker"
+            fi
+        done
+        if [ -n "$marker_warn" ]; then
+            echo "WARN:      Magisk markers present:$marker_warn (will be auto-removed by hosts_enforcer)"
+        fi
+    else
+        echo "Magisk dir: <missing - module not installed>"
+    fi
 }
 
 cmd_hosts_start() {
