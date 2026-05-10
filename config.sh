@@ -275,6 +275,7 @@ com.microsoft.office.outlook
 com.google.android.gm
 ch.protonmail.android
 com.microsoft.teams
+com.facebook.katana
 com.facebook.orca
 
 # --- App installation alternatives (must stay usable in focus mode) ---
