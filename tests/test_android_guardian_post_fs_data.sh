@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
-TARGET_SCRIPT="$REPO_DIR/scripts/utils/android_guardian/post-fs-data.sh"
+TARGET_SCRIPT="$REPO_DIR/scripts/periodic_background/utils/android_guardian/post-fs-data.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2

@@ -1,0 +1,206 @@
+# Android Guardian - Blocked Apps List
+# One package name per line
+# Lines starting with # are comments
+
+# ===== Food Delivery Apps =====
+# Uber Eats
+com.ubercab.eats
+com.ubercab
+
+# Glovo
+com.glovo
+com.glovo.courier
+
+# Wolt
+com.wolt.android
+
+# Bolt Food / Bolt
+com.bolt.deliveryclient
+ee.mtakso.client
+ee.mtakso.food
+ee.mtakso
+
+# Pyszne.pl / Takeaway
+com.takeaway.android
+com.pyszne.pl
+com.takeaway.android.pl
+
+# Jush (Polish quick delivery)
+pl.jush.app
+pl.jush.android
+
+# Delio (Polish delivery)
+pl.delio.app
+pl.delio.android
+com.delio.app
+
+# Lisek (Polish quick delivery)
+pl.lisek.app
+com.lisek.app
+
+# Stava (Polish delivery)
+pl.stava.app
+
+# Barbora (Polish grocery delivery)
+pl.barbora.app
+com.barbora.pl
+
+# Frisco (Polish grocery delivery)
+pl.frisco.app
+com.frisco.android
+
+# Szama (Polish food delivery)
+pl.szama.app
+
+# Biedronka online grocery
+pl.biedronka.app
+com.jeronimo.biedronka
+
+# DoorDash
+com.dd.doordash
+
+# Grubhub
+com.grubhub.android
+
+# Deliveroo
+com.deliveroo.orderapp
+
+# Just Eat
+com.justeat.app.uk
+com.justeat.android
+
+# Postmates
+com.postmates.android
+
+# Seamless
+com.seamless.consumer
+
+# Foodpanda
+com.global.foodpanda.android
+
+# Getir (quick delivery)
+com.getir
+com.getir.express
+
+# Flink
+com.flink.android
+com.flink.consumer
+
+# GoPuff
+com.gopuff.android
+
+# Instacart
+com.instacart.client
+
+# Gorillas
+com.gorillas.consumer
+
+# ===== Browsers (to prevent bypassing blocks) =====
+# Firefox (allowed - hosts blocking is sufficient)
+# org.mozilla.firefox
+# org.mozilla.firefox_beta
+# org.mozilla.fenix
+
+# Chrome (comment out if needed for some functionality)
+# com.android.chrome
+
+# Opera
+com.opera.browser
+com.opera.mini.native
+com.opera.gx
+
+# Brave
+com.brave.browser
+
+# Samsung Internet
+com.sec.android.app.sbrowser
+
+# Microsoft Edge
+com.microsoft.emmx
+
+# DuckDuckGo
+com.duckduckgo.mobile.android
+
+# Kiwi Browser
+com.kiwibrowser.browser
+
+# Vivaldi
+com.vivaldi.browser
+
+# UC Browser
+com.UCMobile.intl
+
+# Tor Browser
+org.torproject.torbrowser
+
+# ===== YouTube Apps =====
+com.google.android.youtube
+com.vanced.android.youtube
+app.revanced.android.youtube
+app.revanced.android.apps.youtube.music
+
+# ===== Alternative YouTube Frontend Apps =====
+# NewPipe
+org.schabi.newpipe
+org.schabi.newpipelegacy
+
+# LibreTube
+com.github.libretube
+
+# SkyTube
+free.rm.skytube.oss
+free.rm.skytube.extra
+
+# Clipious (Invidious client)
+com.github.lamarios.clipious
+
+# Hyperion (YouTube client)
+us.spotco.hyperion
+
+# GrayJay
+com.futo.platformplayer
+
+# PipePipe
+InfinityLoop1309.NewPipeEnhanced
+
+# Materialious
+com.materialious.app
+
+# VueTube
+app.vuetube.app
+
+# ===== Fast Food Apps =====
+# McDonald's
+com.mcdonalds.app
+com.mcdonalds.mobileapp
+
+# KFC
+com.yum.kfcpolska
+com.kfc.app
+
+# Burger King
+com.emn8.mobilem8.nativeapp.bk
+com.burgerking
+
+# Pizza Hut
+com.pizzahut.app
+
+# Domino's
+com.dominospizza
+
+# Subway
+com.subway.mobile
+
+# ===== Other Distracting Apps =====
+# TikTok
+com.zhiliaoapp.musically
+com.ss.android.ugc.trill
+
+# Instagram (optional - comment out if needed)
+# com.instagram.android
+
+# Facebook (optional)
+# com.facebook.katana
+
+# Twitter/X
+# com.twitter.android
