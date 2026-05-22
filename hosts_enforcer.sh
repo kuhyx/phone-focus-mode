@@ -254,6 +254,37 @@ protect_magisk_module() {
     return $removed
 }
 
+# Write user.js to every Firefox profile to hard-disable DNS-over-HTTPS.
+# Firefox uses hardcoded Cloudflare bootstrap IPs (104.16.248.249 etc.) to
+# reach mozilla.cloudflare-dns.com, bypassing /etc/hosts entirely.
+# TRR mode 5 = DoH disabled; the pref is re-applied on every flush so it
+# survives Firefox's automatic pref-reset logic.
+disable_firefox_doh() {
+    local profile_dir
+    for profile_dir in /data/data/org.mozilla.fenix/files/mozilla/*/; do
+        # Only write to real profile directories (they contain prefs.js).
+        [ -f "${profile_dir}prefs.js" ] || continue
+        grep -qF '"network.trr.mode"' "${profile_dir}user.js" 2>/dev/null \
+            || { printf 'user_pref("network.trr.mode", 5);\n' >> "${profile_dir}user.js" 2>/dev/null \
+                     && log "Wrote DoH-disable pref to ${profile_dir}user.js"; }
+    done
+}
+
+# Force-stop browsers so their in-process DNS caches are cleared.
+# Apps like Firefox and Chrome cache resolved IPs internally; without
+# a fresh start they continue reaching blocked domains despite hosts.
+# Called at daemon startup and after every detected restore/tamper.
+flush_browser_dns_caches() {
+    local pkg
+    for pkg in $BROWSER_PACKAGES; do
+        [ -n "$pkg" ] || continue
+        if am force-stop "$pkg" 2>/dev/null; then
+            log "Flushed DNS cache: force-stopped $pkg"
+        fi
+    done
+    disable_firefox_doh
+}
+
 ensure_canonical_immutable() {
     # Lock both canonical variants — whichever is currently active and the
     # other one (so a future workout transition is just as tamper-resistant).
@@ -263,6 +294,40 @@ ensure_canonical_immutable() {
         chmod 644 "$HOSTS_CANONICAL_WORKOUT" 2>/dev/null || true
         chattr +i "$HOSTS_CANONICAL_WORKOUT" 2>/dev/null || true
     fi
+}
+
+# Restart netd so it re-reads the bind-mounted hosts file from disk.
+# Android 13's DNS resolver (libnetd_resolv.so) caches /etc/hosts entirely
+# in memory when netd starts. Our bind mount updates the on-disk file but
+# netd's in-memory cache stays stale until netd restarts.
+#
+# We use a PID-stamp file: if netd's PID hasn't changed since our last
+# restart, we already restarted it in this boot session and skip the work.
+# This avoids a network blip on every enforcer restart, while still
+# triggering a reload if netd itself has been cycled.
+restart_netd_for_hosts_cache() {
+    local stamp_file="$STATE_DIR/netd_restart.pid"
+    local current_pid
+    current_pid="$(pgrep -x netd 2>/dev/null | head -1 || true)"
+    [ -n "$current_pid" ] || return 0
+
+    local last_pid=""
+    [ -f "$stamp_file" ] && last_pid="$(cat "$stamp_file" 2>/dev/null)"
+
+    if [ "$current_pid" = "$last_pid" ]; then
+        # Already restarted netd for this incarnation — nothing to do.
+        return 0
+    fi
+
+    log "Restarting netd (PID $current_pid) to reload hosts file cache (~3s network pause)..."
+    stop netd 2>/dev/null || true
+    sleep 2
+    start netd 2>/dev/null || true
+    sleep 2
+    local new_pid
+    new_pid="$(pgrep -x netd 2>/dev/null | head -1 || true)"
+    echo "${new_pid:-$current_pid}" > "$stamp_file" 2>/dev/null || true
+    log "netd restarted (new PID ${new_pid:-unknown}) — hosts cache is now live"
 }
 
 verify_and_restore() {
@@ -307,6 +372,7 @@ verify_and_restore() {
             log "TAMPER or post-workout swap: $HOSTS_TARGET hash mismatch - restoring"
         fi
         assert_bind_mount
+        flush_browser_dns_caches
     fi
 }
 
@@ -326,6 +392,11 @@ main() {
     protect_magisk_module
     # Initial assertion
     assert_bind_mount || true
+    # Restart netd so its in-memory hosts cache picks up the bind mount.
+    # Android 13 caches /etc/hosts at netd startup and never re-reads it;
+    # without this restart every DNS query bypasses our block list.
+    restart_netd_for_hosts_cache
+    flush_browser_dns_caches
 
     # Seed sha files if missing — one per canonical variant.
     if [ ! -f "$HOSTS_SHA_FILE" ] && [ -f "$HOSTS_CANONICAL" ]; then

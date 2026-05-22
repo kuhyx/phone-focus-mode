@@ -18,6 +18,11 @@ PHONE_IP="${1:-}"
 ACTION="${2:---deploy}"
 REMOTE_DIR="/data/local/tmp/focus_mode"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared config constants (BROWSER_PACKAGES, REMOTE_DIR, etc.)
+# shellcheck source=config.sh
+. "$SCRIPT_DIR/config.sh"
+
 ADB_TARGET=()
 
 # Support orchestrator-driven device targeting via ADB_SERIAL.
@@ -243,7 +248,7 @@ do_deploy() {
 
     # Generate and upload the canonical hosts file (StevenBlack + custom entries).
     # This mirrors what linux_configuration/hosts/install.sh installs on the PC.
-    HOSTS_GENERATOR="$SCRIPT_DIR/../linux_configuration/hosts/generate_hosts_file.sh"
+    HOSTS_GENERATOR="$SCRIPT_DIR/../linux_configuration/scripts/periodic_background/hosts/generate_hosts_file.sh"
     if [ -f "$HOSTS_GENERATOR" ]; then
         chmod +x "$HOSTS_GENERATOR" 2>/dev/null || true
         echo "  Generating canonical hosts file..."
@@ -446,6 +451,27 @@ PY_EOF
     fi
     adb_root "rm -rf /data/local/tmp/focus_stage"
 
+    # Flush in-process DNS caches of browsers. Apps like Firefox and Chrome
+    # cache resolved IPs internally and bypass /etc/hosts until restarted.
+    echo "  Flushing browser DNS caches..."
+    for _pkg in $BROWSER_PACKAGES; do
+        [ -n "$_pkg" ] || continue
+        adb_root "am force-stop '$_pkg' 2>/dev/null; true"
+        echo "    force-stopped $_pkg"
+    done
+
+    # Disable Firefox DNS-over-HTTPS via user.js. Firefox uses hardcoded
+    # Cloudflare bootstrap IPs (104.16.248.249, 104.16.249.249) to reach
+    # mozilla.cloudflare-dns.com, completely bypassing /etc/hosts even
+    # after a fresh start. TRR mode 5 disables DoH so Firefox falls back
+    # to the system resolver which sees our 0.0.0.0 blocks.
+    echo "  Disabling Firefox DNS-over-HTTPS..."
+    adb_root "for _p in /data/data/org.mozilla.fenix/files/mozilla/*/; do
+        [ -f \"\${_p}prefs.js\" ] || continue
+        grep -qF '\"network.trr.mode\"' \"\${_p}user.js\" 2>/dev/null \
+            || { printf 'user_pref(\"network.trr.mode\", 5);\\n' >> \"\${_p}user.js\" 2>/dev/null && echo \"  Wrote DoH-disable pref to \${_p}user.js\"; }
+    done; true"
+
     echo "[5/7] Setting permissions..."
     adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh $REMOTE_DIR/workout_detector.sh" || true
     if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
@@ -499,7 +525,11 @@ PY_EOF
         echo "        $0 $PHONE_IP --snapshot-launcher"
     fi
     adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/focus_daemon.sh </dev/null >/dev/null 2>/dev/null &'
-    sleep 4
+
+    # Wait for hosts_enforcer to apply the bind mount and restart netd.
+    # hosts_enforcer.sh restarts netd once at startup (takes ~4 s); we wait
+    # 10 s total so the network is stable before the companion-app install.
+    sleep 10
 
     # ---- Companion status notification app ----
     APP_DIR="$SCRIPT_DIR/focus_status_app"

@@ -100,13 +100,20 @@ ensure_chain() {
         }
         log "Created $ipt chain $DNS_IPT_CHAIN"
     fi
-    # Ensure OUTPUT references our chain exactly once.
-    if ! "$ipt" -C OUTPUT -j "$DNS_IPT_CHAIN" >/dev/null 2>&1; then
-        "$ipt" -I OUTPUT 1 -j "$DNS_IPT_CHAIN" 2>/dev/null || {
-            log "ERROR: could not insert OUTPUT -> $DNS_IPT_CHAIN for $ipt"
-            return 1
-        }
-        log "Linked OUTPUT -> $DNS_IPT_CHAIN ($ipt)"
+    # Remove ALL existing OUTPUT -> chain jumps (handles duplicates from
+    # previous iptables lock races where -C returned error but -I succeeded).
+    local removed=0
+    while "$ipt" -D OUTPUT -j "$DNS_IPT_CHAIN" 2>/dev/null; do
+        removed=$((removed + 1))
+    done
+    # Insert exactly one jump at position 1 of OUTPUT.
+    if "$ipt" -I OUTPUT 1 -j "$DNS_IPT_CHAIN" 2>/dev/null; then
+        if [ "$removed" -gt 1 ]; then
+            log "De-duped $removed -> 1 OUTPUT jump for $ipt chain $DNS_IPT_CHAIN"
+        fi
+    else
+        log "ERROR: could not insert OUTPUT -> $DNS_IPT_CHAIN for $ipt"
+        return 1
     fi
 }
 

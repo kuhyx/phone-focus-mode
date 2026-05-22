@@ -159,6 +159,8 @@ export DNS_DOH_IPV4="
 208.67.220.220
 45.90.28.0
 45.90.30.0
+104.16.248.249
+104.16.249.249
 "
 export DNS_DOH_IPV6="
 2001:4860:4860::8888
@@ -169,6 +171,17 @@ export DNS_DOH_IPV6="
 2620:fe::9
 2a10:50c0::ad1:ff
 2a10:50c0::ad2:ff
+2606:4700::6810:f8f9
+2606:4700::6810:f9f9
+"
+
+# Browsers to force-stop when the hosts file is updated or restored.
+# Force-stopping clears the in-process DNS cache so the next launch
+# consults the system resolver (which sees our /etc/hosts blocks).
+# Packages not installed on the device are silently skipped.
+export BROWSER_PACKAGES="
+org.mozilla.fenix
+com.android.chrome
 "
 
 # --- Launcher enforcer state (see launcher_enforcer.sh) ---
