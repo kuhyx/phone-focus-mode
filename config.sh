@@ -273,9 +273,14 @@ com.kolejeslaskie.mss
 # --- Banking (must always work) ---
 pl.mbank
 pl.pkobp.iko
+com.revolut.revolut
+
+# --- Government / digital ID (Polish mObywatel — must always work) ---
+pl.nask.mobywatel
 
 # --- Security & root tools (must always work) ---
 com.topjohnwu.magisk
+com.kuhy.vaultkitbypass
 moe.shizuku.privileged.api
 me.phh.superuser
 com.beemdevelopment.aegis
