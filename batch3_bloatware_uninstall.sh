@@ -1,117 +1,181 @@
 #!/bin/bash
-DEVICE_SERIAL="BL9000EEA0000102"
-BACKUP_BASE="/home/kuhy/testsAndMisc_binaries/phone_focus_mode_backups"
-APPS_TO_UNINSTALL=("com.android.settings" "com.android.systemui" "com.google.android.gms" "com.google.android.apps.docs" "com.google.android.apps.maps")
-SUBSTITUTE_APPS=("com.android.tv" "com.android.managedprovisioning" "com.google.android.apps.fitness" "com.google.android.apps.books" "com.google.android.apps.wellbeing" "com.google.android.apps.mediashell")
+# ============================================================
+# BL-9000 Bloatware Uninstall
+#
+# Removes Blackview OEM bloatware and specified Google apps
+# using `pm uninstall --user 0` (soft-remove, reversible via
+# `pm install-existing --user 0 <pkg>`).  No reboots between
+# packages — one optional reboot at the end.
+#
+# Usage:
+#   ./batch3_bloatware_uninstall.sh [--list] [--reboot]
+#
+#   --list    Dry-run: show which packages would be removed.
+#   --reboot  Reboot the phone after all removals.
+#
+# Device selection (pick one):
+#   ADB_SERIAL=BL9000EEA0000102 ./batch3_bloatware_uninstall.sh
+#   PHONE_IP=192.168.1.x        ./batch3_bloatware_uninstall.sh
+# ============================================================
 
-function log_msg() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-}
+set -euo pipefail
 
-function verify_device() {
-  adb -s "$DEVICE_SERIAL" shell echo "Device OK" &>/dev/null
-  [ $? -ne 0 ] && log_msg "ERROR: Device not accessible" && exit 1
-}
+DRY_RUN=0
+DO_REBOOT=0
 
-function get_app_version() {
-  adb -s "$DEVICE_SERIAL" shell dumpsys package "$1" 2>/dev/null | grep "versionName=" | head -1 | cut -d'=' -f2
-}
-
-function app_exists() {
-  adb -s "$DEVICE_SERIAL" shell pm list packages | grep -q "^package:${1}$"
-}
-
-function get_substitute() {
-  for sub in "${SUBSTITUTE_APPS[@]}"; do
-    app_exists "$sub" && echo "$sub" && return 0
-  done
-  return 1
-}
-
-function execute_checkpoint() {
-  local pkg=$1 app_num=$2
-  log_msg "========================================="
-  log_msg "APP #${app_num}: Processing $pkg"
-  log_msg "========================================="
-
-  if ! app_exists "$pkg"; then
-    log_msg "WARNING: $pkg not found. Searching for substitute..."
-    actual_pkg=$(get_substitute "$pkg")
-    [ -z "$actual_pkg" ] && log_msg "ERROR: Could not find substitute. Skipping." && return 1
-    log_msg "SUBSTITUTING: Using $actual_pkg"
-    pkg="$actual_pkg"
-  fi
-
-  TIMESTAMP=$(date +%s)
-  CHECKPOINT_DIR="${BACKUP_BASE}/checkpoint_${TIMESTAMP}_${pkg}"
-  mkdir -p "$CHECKPOINT_DIR"
-  log_msg "Checkpoint: $CHECKPOINT_DIR"
-
-  log_msg "[1/6] Pulling APK..."
-  adb -s "$DEVICE_SERIAL" shell pm path "$pkg" > "$CHECKPOINT_DIR/package_path.txt"
-  if grep -q "^package:" "$CHECKPOINT_DIR/package_path.txt"; then
-    APK_PATH=$(grep "^package:" "$CHECKPOINT_DIR/package_path.txt" | cut -d':' -f2)
-    pull_log="$CHECKPOINT_DIR/pull_output.txt"
-    adb -s "$DEVICE_SERIAL" pull "$APK_PATH" "$CHECKPOINT_DIR/app.apk" > "$pull_log" 2>&1 || true
-    if ! grep -e "Pull" -e "error" "$pull_log"; then
-      log_msg "APK pulled"
-    fi
-  fi
-
-  log_msg "[2/6] Backing up PM state..."
-  adb -s "$DEVICE_SERIAL" shell dumpsys package "$pkg" > "$CHECKPOINT_DIR/pm_state.txt"
-  VNAME=$(get_app_version "$pkg")
-  log_msg "Version: $VNAME"
-
-  log_msg "[3/6] Taking snapshot..."
-  adb -s "$DEVICE_SERIAL" shell dumpsys activity activities > "$CHECKPOINT_DIR/activities_before.txt"
-  adb -s "$DEVICE_SERIAL" shell pm list packages > "$CHECKPOINT_DIR/packages_before.txt"
-
-  log_msg "[4/6] Uninstalling: pm uninstall --user 0 $pkg"
-  adb -s "$DEVICE_SERIAL" shell pm uninstall --user 0 "$pkg" > "$CHECKPOINT_DIR/uninstall_output.txt" 2>&1
-  UNINSTALL_RESULT=$(cat "$CHECKPOINT_DIR/uninstall_output.txt")
-  log_msg "Result: $UNINSTALL_RESULT"
-
-  log_msg "[5/6] Rebooting device..."
-  adb -s "$DEVICE_SERIAL" reboot
-  sleep 5
-
-  REBOOT_TIMEOUT=180
-  WAIT_START=$(date +%s)
-  while true; do
-    adb -s "$DEVICE_SERIAL" shell echo "up" &>/dev/null && break
-    [ $(($(date +%s) - WAIT_START)) -ge $REBOOT_TIMEOUT ] && log_msg "ERROR: Timeout" && break
-    sleep 3
-    echo -n "."
-  done
-  echo ""
-
-  sleep 5
-  adb -s "$DEVICE_SERIAL" shell pm list packages > "$CHECKPOINT_DIR/packages_after.txt"
-
-  if adb -s "$DEVICE_SERIAL" shell pm list packages | grep -q "^package:${pkg}$"; then
-    log_msg "WARNING: $pkg still present"
-  else
-    log_msg "SUCCESS: $pkg uninstalled"
-  fi
-
-  log_msg "[6/6] Generating report..."
-  cat > "$CHECKPOINT_DIR/report.txt" <<< "CHECKPOINT REPORT: $pkg (Timestamp: $TIMESTAMP, Device: $DEVICE_SERIAL) - Version: $VNAME - Result: $UNINSTALL_RESULT - Checkpoint: $CHECKPOINT_DIR"
-  log_msg "✓ Complete"
-  return 0
-}
-
-log_msg "========================================="
-log_msg "BATCH 3: BLOATWARE UNINSTALL"
-log_msg "========================================="
-verify_device
-log_msg "Device verified"
-
-for i in "${!APPS_TO_UNINSTALL[@]}"; do
-  execute_checkpoint "${APPS_TO_UNINSTALL[$i]}" $((i + 1))
-  [ $((i + 1)) -lt ${#APPS_TO_UNINSTALL[@]} ] && sleep 5
+for arg in "$@"; do
+    case "$arg" in
+        --list)   DRY_RUN=1 ;;
+        --reboot) DO_REBOOT=1 ;;
+        *)        echo "Unknown flag: $arg"; exit 1 ;;
+    esac
 done
 
-log_msg "========================================="
-log_msg "BATCH 3 COMPLETE"
-log_msg "========================================="
+# ---- Device targeting (mirrors deploy.sh) ----
+ADB_TARGET=()
+if [[ -n "${ADB_SERIAL:-}" ]]; then
+    ADB_TARGET=(-s "${ADB_SERIAL}")
+elif [[ -n "${PHONE_IP:-}" ]]; then
+    echo "Connecting to ${PHONE_IP}:5555 ..."
+    adb connect "${PHONE_IP}:5555"
+    ADB_TARGET=(-s "${PHONE_IP}:5555")
+fi
+
+adb_cmd() { adb "${ADB_TARGET[@]}" "$@"; }
+
+# Requires --mount-master so the command runs in the global mount namespace.
+adb_root() {
+    printf '%s\n' "$1" | adb_cmd shell su --mount-master -c "sh -s"
+}
+
+# ============================================================
+# PACKAGES TO REMOVE
+#
+# All removed with `pm uninstall --user 0` — the APK stays in
+# /system so a factory reset or `pm install-existing` restores
+# it.  Safe to run even if a package is absent (skipped).
+# ============================================================
+
+# ---- Blackview OEM bloatware (BL-9000 confirmed packages) ----
+BV_BLOATWARE=(
+    com.blackview.apkupgrade           # Blackview OTA updater
+    com.blackview.bvworkspace          # BV desktop workspace
+    com.blackview.childmode            # Child mode
+    com.blackview.cplog                # CPU/hardware logger
+    com.blackview.darkmode.one         # Dark mode theme variant
+    com.blackview.darkmode.two
+    com.blackview.darkmode.three
+    com.blackview.easytrans            # BV easy-transfer tool
+    com.blackview.filetrans            # BV file-transfer tool
+    com.blackview.focusmode            # BV own focus mode (replaced by ours)
+    com.blackview.frozenapp            # App freezer
+    com.blackview.gamemode             # Game mode panel
+    com.blackview.health               # BV health tracker
+    com.blackview.helper               # BV AI assistant / helper
+    com.blackview.launcher             # BV launcher (competitor to Minimalist Phone)
+    com.blackview.launcher.overlay.framework
+    com.blackview.leftscreen           # Left swipe panel
+    com.blackview.notebook             # BV notes app
+    com.blackview.qrcode               # QR scanner (camera does it natively)
+    com.blackview.reversepay           # Reverse wireless charging pay
+    com.blackview.smscode              # SMS code extractor
+    com.blackview.systemmanager        # BV system manager
+    com.blackview.theme.color.mode0    # Color themes (8 variants)
+    com.blackview.theme.color.mode1
+    com.blackview.theme.color.mode2
+    com.blackview.theme.color.mode3
+    com.blackview.theme.color.mode4
+    com.blackview.theme.color.mode5
+    com.blackview.theme.color.mode6
+    com.blackview.theme.color.mode7
+    com.blackview.theme.config
+    com.blackview.theme.icon.clearwave # Icon themes
+    com.blackview.theme.icon.oil
+    com.blackview.tool                 # BV diagnostic tool
+    com.blackview.userfeedback         # BV telemetry / feedback
+    com.blackview.wallpaper            # BV wallpaper collection
+    com.blackview.wallpaperpicker
+    com.blackview.wallpaperpicker.overlay
+    com.blackview.weather              # BV weather widget
+)
+
+# ---- Google apps explicitly requested for removal ----
+GOOGLE_REMOVE=(
+    com.android.chrome                        # Google Chrome  (Firefox is whitelisted)
+    com.google.android.youtube                # YouTube app    (hosts-blocked anyway)
+    com.google.android.apps.youtube.music     # YouTube Music
+)
+
+ALL_PACKAGES=("${BV_BLOATWARE[@]}" "${GOOGLE_REMOVE[@]}")
+
+# ============================================================
+# Main
+# ============================================================
+echo "============================================================"
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "DRY RUN — packages that would be removed:"
+else
+    echo "BL-9000 bloatware removal"
+fi
+echo "============================================================"
+
+echo ""
+echo "[1] Verifying device connection..."
+if ! adb_cmd get-state >/dev/null 2>&1; then
+    echo "ERROR: No ADB device reachable."
+    echo "  Set ADB_SERIAL=<serial> or PHONE_IP=<ip> and retry."
+    exit 1
+fi
+
+echo "[2] Verifying root..."
+if ! adb_root "id" 2>/dev/null | grep -q "uid=0"; then
+    echo "ERROR: Root shell failed. Ensure Magisk is installed."
+    exit 1
+fi
+echo "  Root confirmed."
+echo ""
+
+removed=0
+skipped=0
+errors=0
+
+for pkg in "${ALL_PACKAGES[@]}"; do
+    # Check presence
+    if ! adb_cmd shell pm list packages 2>/dev/null | grep -qx "package:${pkg}"; then
+        printf '  %-55s [not installed]\n' "$pkg"
+        (( skipped++ )) || true
+        continue
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf '  %-55s [would remove]\n' "$pkg"
+        (( removed++ )) || true
+        continue
+    fi
+
+    printf '  Removing %-48s ... ' "$pkg"
+    result="$(adb_cmd shell pm uninstall --user 0 "$pkg" 2>&1 || true)"
+    if echo "$result" | grep -qi "success"; then
+        echo "OK"
+        (( removed++ )) || true
+    else
+        echo "FAILED (${result})"
+        (( errors++ )) || true
+    fi
+done
+
+echo ""
+echo "============================================================"
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "Dry-run complete: ${removed} would be removed, ${skipped} not installed."
+    echo "Run without --list to apply."
+else
+    echo "Done: ${removed} removed, ${skipped} skipped (not installed), ${errors} errors."
+    if [[ $DO_REBOOT -eq 1 ]]; then
+        echo "Rebooting phone..."
+        adb_cmd reboot
+    else
+        echo "Run with --reboot to reboot now, or reboot manually."
+    fi
+fi
+echo "============================================================"

@@ -228,6 +228,8 @@ com.kuhy.focusstatus
 
 # --- User-requested productive apps ---
 com.stronglifts.app
+com.kuhy.workout_app
+com.shazam.android
 com.ichi2.anki
 com.metrolist.music
 org.mozilla.fenix

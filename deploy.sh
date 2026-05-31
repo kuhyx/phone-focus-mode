@@ -18,6 +18,7 @@ PHONE_IP="${1:-}"
 ACTION="${2:---deploy}"
 REMOTE_DIR="/data/local/tmp/focus_mode"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+NEEDS_GPS_FETCH=0  # set to 1 by check_coords when local coords are placeholder
 
 # Source shared config constants (BROWSER_PACKAGES, REMOTE_DIR, etc.)
 # shellcheck source=config.sh
@@ -56,6 +57,7 @@ usage() {
     echo "  --list     List all third-party apps and whitelist status"
     echo "  --pull-log Download log file locally"
     echo "  --find-pkg Show installed packages matching a filter (e.g. --find-pkg pomodoro)"
+    echo "  --capture-coords     Capture current GPS as home location (run after WiFi setup)"
     echo "  --hosts-status  Show hosts enforcer status on the phone"
     echo "  --hosts-log     Show hosts enforcer log on the phone"
     echo "  --launcher-status    Show launcher enforcer status on the phone"
@@ -84,15 +86,17 @@ check_coords() {
     local lat lon
     lat="$(grep '^.*HOME_LAT=' "$SCRIPT_DIR/config.sh" "$SCRIPT_DIR/config_secrets.sh" 2>/dev/null | tail -1 | cut -d'"' -f2)"
     lon="$(grep '^.*HOME_LON=' "$SCRIPT_DIR/config.sh" "$SCRIPT_DIR/config_secrets.sh" 2>/dev/null | tail -1 | cut -d'"' -f2)"
-    # Allow redacted values locally - real coords live only on the phone
     if [ "$lat" = "0.000000" ] && [ "$lon" = "0.000000" ]; then
-        echo "ERROR: Home coordinates not set (all zeros). Set them in config_secrets.sh."
+        echo "ERROR: Home coordinates not set (all zeros)."
         exit 1
     fi
-    if [ -z "$lat" ] || [ -z "$lon" ]; then
-        echo "  Home location: (not set locally - will use values on phone)"
-    else
+    # If both look like valid floats, use them; otherwise auto-capture from phone GPS.
+    if [[ -n "$lat" && "$lat" =~ ^[+-]?[0-9]+\.[0-9]+$ && -n "$lon" && "$lon" =~ ^[+-]?[0-9]+\.[0-9]+$ ]]; then
+        NEEDS_GPS_FETCH=0
         echo "  Home location: $lat, $lon"
+    else
+        NEEDS_GPS_FETCH=1
+        echo "  Home location: placeholder — will be captured from phone GPS at deploy time."
     fi
 }
 
@@ -151,6 +155,144 @@ compute_file_hash() {
     fi
 
     md5sum "$path" | awk '{print $1}'
+}
+
+# ============================================================
+# GPS HOME COORDINATE CAPTURE
+# ============================================================
+# Called when config_secrets.sh has placeholder/non-numeric coords.
+# Enables Android location, waits up to GPS_MAX_WAIT_SECS for a
+# network/fused fix, and prints "lat lon" on stdout.  All progress
+# messages go to stderr so the caller can capture only the coords.
+GPS_MAX_WAIT_SECS=90
+
+fetch_home_coords_from_phone() {
+    echo "  Enabling location services on phone..." >&2
+    adb_cmd shell settings put secure location_mode 3 2>/dev/null || true
+
+    echo "  Waiting for network/fused location fix (up to ${GPS_MAX_WAIT_SECS}s)..." >&2
+    local waited=0 coords=""
+    while [[ -z "$coords" && $waited -lt $GPS_MAX_WAIT_SECS ]]; do
+        sleep 3
+        waited=$((waited + 3))
+        # Format on Android 10+: "      last location=Location[fused LAT,LON ...]"
+        local raw
+        raw="$(adb_cmd shell dumpsys location 2>/dev/null \
+            | grep 'last location=Location\[' \
+            | grep -oE '[+-]?[0-9]+\.[0-9]+,[+-]?[0-9]+\.[0-9]+' \
+            | head -1 || true)"
+        [[ -n "$raw" ]] && coords="$raw"
+        printf '.' >&2
+    done
+    printf '\n' >&2
+
+    if [[ -z "$coords" ]]; then
+        echo "ERROR: No location fix after ${GPS_MAX_WAIT_SECS}s." >&2
+        echo "  Make sure the phone has cellular or WiFi data, then retry." >&2
+        echo "  Or set HOME_LAT/HOME_LON manually in config_secrets.sh." >&2
+        return 1
+    fi
+
+    local lat="${coords%,*}"
+    local lon="${coords#*,}"
+    echo "  GPS fix acquired: ${lat}, ${lon}" >&2
+    printf '%s %s' "$lat" "$lon"
+}
+
+# ============================================================
+# MAGISK SYSTEMLESS HOSTS AUTO-INSTALL
+# ============================================================
+# Creates the module dir+module.prop if absent, removes disable
+# markers if disabled, then reboots the device and waits up to
+# HOSTS_MODULE_REBOOT_WAIT_SECS for it to come back with the
+# magic-mount active.  No-ops if the module is already OK.
+HOSTS_MODULE_REBOOT_WAIT_SECS=180
+
+ensure_magisk_hosts_module() {
+    local state="absent"
+    if adb_root "test -d /data/adb/modules/hosts" >/dev/null 2>&1; then
+        if adb_root "test -f /data/adb/modules/hosts/disable -o -f /data/adb/modules/hosts/remove" >/dev/null 2>&1; then
+            state="disabled"
+        elif adb_root "test -f /system/etc/hosts" >/dev/null 2>&1; then
+            state="ok"
+        else
+            state="not-mounted"
+        fi
+    fi
+
+    if [[ "$state" == "ok" ]]; then
+        echo "  Magisk Systemless Hosts: active."
+        return 0
+    fi
+
+    echo "  Magisk Systemless Hosts state: ${state} — auto-installing..."
+
+    case "$state" in
+        absent)
+            adb_root "mkdir -p /data/adb/modules/hosts/system/etc"
+            # module.prop is required for Magisk to recognise and process the module.
+            adb_root "printf 'id=hosts\nname=Systemless Hosts\nversion=v1\nversionCode=1\nauthor=Magisk\ndescription=Replace /system/etc/hosts\n' \
+                > /data/adb/modules/hosts/module.prop"
+            # Seed a minimal hosts file so the mount target exists at first boot.
+            adb_root "printf '127.0.0.1 localhost\n::1 localhost\n' \
+                > /data/adb/modules/hosts/system/etc/hosts"
+            adb_root "chmod 644 /data/adb/modules/hosts/system/etc/hosts"
+            ;;
+        disabled)
+            adb_root "rm -f /data/adb/modules/hosts/disable \
+                           /data/adb/modules/hosts/remove \
+                           /data/adb/modules/hosts/update"
+            ;;
+        not-mounted)
+            : # module exists and enabled, just needs a reboot
+            ;;
+    esac
+
+    echo "  Rebooting phone to activate Magisk Hosts module..."
+    adb_cmd reboot
+    # Give the device time to actually begin shutting down before we poll.
+    sleep 20
+
+    echo "  Waiting for device to come back (up to ${HOSTS_MODULE_REBOOT_WAIT_SECS}s)..."
+    local waited=0
+    # Re-establish wireless ADB connection if needed.
+    while true; do
+        if [[ -n "${PHONE_IP:-}" ]]; then
+            adb connect "${PHONE_IP}:5555" >/dev/null 2>&1 || true
+        fi
+        if adb_cmd shell echo ok 2>/dev/null | grep -q '^ok$'; then
+            break
+        fi
+        sleep 3
+        waited=$((waited + 3))
+        if [[ $waited -ge $HOSTS_MODULE_REBOOT_WAIT_SECS ]]; then
+            echo "ERROR: Device did not come back after ${HOSTS_MODULE_REBOOT_WAIT_SECS}s."
+            echo "  Check USB connection or re-enable wireless ADB, then run deploy again."
+            exit 1
+        fi
+        printf '.'
+    done
+    printf '\n'
+
+    # Wait for Magisk early-init and root to be ready.
+    echo "  Waiting for Magisk root to be available..."
+    waited=0
+    while ! adb_root "id" 2>/dev/null | grep -q "uid=0"; do
+        sleep 3
+        waited=$((waited + 3))
+        [[ $waited -ge 60 ]] && echo "ERROR: Root not available after reboot." && exit 1
+        printf '.'
+    done
+    printf '\n'
+
+    # Final assertion: the magic-mount must now be active.
+    if ! adb_root "test -f /system/etc/hosts" >/dev/null 2>&1; then
+        echo "ERROR: /system/etc/hosts is not magic-mounted after reboot."
+        echo "  Magisk may not have applied the module correctly."
+        echo "  Check the Magisk app for module errors and run deploy again."
+        exit 1
+    fi
+    echo "  Magisk Systemless Hosts module is now active."
 }
 
 # ============================================================
@@ -215,6 +357,9 @@ do_deploy() {
         exit 1
     fi
     echo "  Root confirmed."
+
+    echo "[2.5] Ensuring Magisk Systemless Hosts module..."
+    ensure_magisk_hosts_module
 
     echo "[3/7] Creating directories on device..."
     # Use world-writable staging dir so non-root adb push works
@@ -324,6 +469,26 @@ PY_EOF
     # Only push config_secrets.sh if phone doesn't already have one
     if adb_root "test -f $REMOTE_DIR/config_secrets.sh" 2>/dev/null; then
         echo "  config_secrets.sh already exists on phone - skipping (preserving real coords)"
+    elif [[ "${NEEDS_GPS_FETCH}" -eq 1 ]]; then
+        # Local config_secrets.sh has placeholder coords — capture current GPS from the phone.
+        # The phone is assumed to be at home during setup, so current location = home location.
+        local gps_result="" gps_lat="" gps_lon=""
+        if gps_result="$(fetch_home_coords_from_phone 2>&1)"; then
+            gps_lat="${gps_result% *}"
+            gps_lon="${gps_result#* }"
+            adb_root "printf '#!/system/bin/sh\n# Home coordinates auto-captured from GPS at deploy time\nexport HOME_LAT=\"${gps_lat}\"\nexport HOME_LON=\"${gps_lon}\"\n' \
+                > $REMOTE_DIR/config_secrets.sh"
+            echo "  Home coordinates written to phone: ${gps_lat}, ${gps_lon}"
+        else
+            # GPS unavailable (no WiFi/cellular yet on fresh phone).
+            # Write stub coords — focus mode stays OFF, hosts/DNS blocking still works.
+            # User should run:  ./deploy.sh [ip] --capture-coords  after configuring WiFi.
+            adb_root "printf '#!/system/bin/sh\n# STUB: run ./deploy.sh --capture-coords after WiFi setup\nexport HOME_LAT=\"0.000001\"\nexport HOME_LON=\"0.000001\"\n' \
+                > $REMOTE_DIR/config_secrets.sh"
+            echo "  WARNING: GPS capture failed — focus mode location enforcement is DISABLED."
+            echo "  Hosts/DNS blocking is active.  After configuring WiFi, run:"
+            echo "    ADB_SERIAL=${ADB_SERIAL:-\$PHONE_IP:5555} ./deploy.sh --capture-coords"
+        fi
     else
         echo "  Pushing config_secrets.sh (first install)..."
         adb_cmd push "$SCRIPT_DIR/config_secrets.sh" "/data/local/tmp/focus_stage/config_secrets.sh"
@@ -376,60 +541,10 @@ PY_EOF
             adb_root "chattr +i $REMOTE_DIR/hosts.sha256.workout 2>/dev/null; true"
         fi
 
-        # ---- Magisk Systemless Hosts module (REQUIRED) ----
-        # This module magic-mounts /data/adb/modules/hosts/system/etc/hosts
-        # as /system/etc/hosts at boot — the only way to create that file on
-        # this ROM's hardware-read-only system partition.
-        #
-        # The module must be ENABLED in the Magisk app by the user (one-time,
-        # after each factory reset). We CANNOT enable it programmatically.
-        # Without it, no app-level hosts blocking is possible, so we STOP here
-        # and require user action before the deploy can proceed.
-        local magisk_hosts_ok=0
-        local magisk_hosts_state="absent"
-        if adb_root "test -d /data/adb/modules/hosts" 2>/dev/null; then
-            if adb_root "test -f /data/adb/modules/hosts/disable -o -f /data/adb/modules/hosts/remove" 2>/dev/null; then
-                magisk_hosts_state="disabled"
-            elif ! adb_root "test -f /system/etc/hosts" 2>/dev/null; then
-                # Module dir exists, no disable marker, but the magic-mount
-                # has not happened yet. Either the user just enabled it but
-                # has not rebooted, or the module is in a broken state.
-                magisk_hosts_state="not-mounted"
-            else
-                magisk_hosts_ok=1
-                magisk_hosts_state="ok"
-            fi
-        fi
-
-        if [[ "$magisk_hosts_ok" -eq 0 ]]; then
-            echo ""
-            echo "╔══════════════════════════════════════════════════════════════════╗"
-            echo "║  ACTION REQUIRED — Deploy cannot continue                       ║"
-            echo "╠══════════════════════════════════════════════════════════════════╣"
-            if [[ "$magisk_hosts_state" == "not-mounted" ]]; then
-                echo "║  Magisk 'Systemless Hosts' module is enabled on disk but the   ║"
-                echo "║  /system/etc/hosts magic-mount has NOT happened yet.            ║"
-                echo "║  This means the device has not been rebooted since the module  ║"
-                echo "║  was last toggled on. Without the magic-mount, no hosts-file    ║"
-                echo "║  blocking is possible (the partition is hardware read-only).   ║"
-                echo "║                                                                 ║"
-                echo "║  Steps to fix:                                                  ║"
-                echo "║    1. Reboot the phone now (adb reboot, or hold power)         ║"
-                echo "║    2. After reboot, re-run this deploy command                  ║"
-            else
-                echo "║  The Magisk 'Systemless Hosts' module is not enabled.           ║"
-                echo "║  Without it, hosts-file blocking is impossible on this device   ║"
-                echo "║  (the system partition is hardware read-only even with root).   ║"
-                echo "║                                                                 ║"
-                echo "║  Steps to fix:                                                  ║"
-                echo "║    1. Open the Magisk app on the phone                         ║"
-                echo "║    2. Tap the Modules tab (puzzle-piece icon)                   ║"
-                echo "║    3. Find 'Systemless Hosts' and toggle it ON                  ║"
-                echo "║    4. Reboot the phone when prompted                            ║"
-                echo "║    5. Re-run this deploy command                                ║"
-            fi
-            echo "╚══════════════════════════════════════════════════════════════════╝"
-            echo ""
+        # Magisk Systemless Hosts module was ensured (and rebooted if needed) in
+        # step [2.5] above.  Sanity-assert it's still active before writing to it.
+        if ! adb_root "test -f /system/etc/hosts" 2>/dev/null; then
+            echo "ERROR: /system/etc/hosts not magic-mounted — run deploy again."
             exit 1
         fi
 
@@ -604,6 +719,27 @@ do_pull_log() {
     echo "Done."
 }
 
+do_capture_coords() {
+    # Standalone GPS capture for post-WiFi-setup use.
+    # Overwrites config_secrets.sh on the phone with the current location.
+    connect_adb
+    if ! adb_root "id" 2>/dev/null | grep -q "uid=0"; then
+        echo "ERROR: Root not available."
+        exit 1
+    fi
+    echo "Capturing home coordinates from phone GPS..."
+    local gps_result gps_lat gps_lon
+    gps_result="$(fetch_home_coords_from_phone)"
+    gps_lat="${gps_result% *}"
+    gps_lon="${gps_result#* }"
+    adb_root "printf '#!/system/bin/sh\n# Home coordinates auto-captured from GPS\nexport HOME_LAT=\"${gps_lat}\"\nexport HOME_LON=\"${gps_lon}\"\n' \
+        > $REMOTE_DIR/config_secrets.sh"
+    echo "Home coordinates updated on phone: ${gps_lat}, ${gps_lon}"
+    echo "Restarting focus daemon to apply new coordinates..."
+    adb_root "sh $REMOTE_DIR/focus_ctl.sh restart" 2>/dev/null || true
+    echo "Done."
+}
+
 do_find_pkg() {
     local filter="${3:-}"
     if [ -z "$filter" ]; then
@@ -656,6 +792,7 @@ case "$ACTION" in
     --hosts-log)     connect_adb; adb_root "sh $REMOTE_DIR/focus_ctl.sh hosts-log 100" ;;
     --launcher-status) do_control "launcher-status" ;;
     --launcher-log)    connect_adb; adb_root "sh $REMOTE_DIR/focus_ctl.sh launcher-log 100" ;;
+    --capture-coords)    do_capture_coords ;;
     --snapshot-launcher) do_snapshot_launcher ;;
     --install-aurora)    do_install_aurora ;;
     *)               echo "Unknown action: $ACTION"; usage ;;
