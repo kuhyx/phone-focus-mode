@@ -72,8 +72,12 @@ BV_BLOATWARE=(
     com.blackview.gamemode             # Game mode panel
     com.blackview.health               # BV health tracker
     com.blackview.helper               # BV AI assistant / helper
-    com.blackview.launcher             # BV launcher (competitor to Minimalist Phone)
-    com.blackview.launcher.overlay.framework
+    # NOTE: com.blackview.launcher is intentionally NOT removed here.
+    # Blackview embeds com.android.quickstep.RecentsActivity inside this APK —
+    # removing it kills the "swipe up for recent apps" gesture system-wide.
+    # Focus mode already disables it as a HOME competitor via LAUNCHER_COMPETITORS.
+    # com.blackview.launcher
+    # com.blackview.launcher.overlay.framework
     com.blackview.leftscreen           # Left swipe panel
     com.blackview.notebook             # BV notes app
     com.blackview.qrcode               # QR scanner (camera does it natively)

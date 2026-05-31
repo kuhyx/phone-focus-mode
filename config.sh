@@ -197,9 +197,10 @@ export LAUNCHER_ACTIVITY_FILE="/data/adb/focus_mode/minimalist_launcher.activity
 # Competing launchers to disable so the "pick a launcher" dialog has
 # nothing else to offer. Matched exactly; add more with `focus_ctl.sh
 # launcher-disable-other <pkg>`.
+# com.blackview.launcher is intentionally excluded from LAUNCHER_COMPETITORS:
+# Blackview embeds com.android.quickstep.RecentsActivity inside this APK,
+# so disabling it kills the system-wide "swipe up for recent apps" gesture.
 export LAUNCHER_COMPETITORS="
-com.blackview.launcher
-com.blackview.launcher.overlay.framework
 com.android.launcher
 com.android.launcher3
 com.google.android.apps.nexuslauncher
@@ -219,6 +220,11 @@ export WHITELIST="
 # launcher is not listed, focus mode will disable it and the home screen
 # becomes blank. Keep this in sync with LAUNCHER_PACKAGE above.
 com.qqlabs.minimalistlauncher
+
+# --- Blackview Recents (MUST be whitelisted, do NOT remove) ---
+# RecentsActivity lives in this APK; removing it breaks swipe-up-for-recents.
+com.blackview.launcher
+com.blackview.launcher.overlay.framework
 
 # --- Companion status-notification app (MUST be whitelisted) ---
 # Provides the persistent focus-mode notification + Re-check-now button.
