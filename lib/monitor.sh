@@ -3,6 +3,11 @@
 # Requires: adb_common.sh sourced, ADB_SERIAL set, backup_manifest.sh sourced.
 set -euo pipefail
 
+# Directory of this library, used to locate sibling helper scripts (BASH_SOURCE
+# resolves to monitor.sh even when sourced, so the path is stable).
+_MONITOR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly _MONITOR_LIB_DIR
+
 readonly _MONITOR_REMOTE_DIR="/data/local/tmp/focus_mode"
 readonly _MONITOR_HOSTS_CANONICAL="/data/local/tmp/focus_mode/hosts.canonical"
 readonly _MONITOR_HOSTS_SHA_FILE="/data/local/tmp/focus_mode/hosts.sha256"
@@ -431,33 +436,7 @@ monitor_print_summary() {
         return 0
     }
 
-    python - "${report_path}" <<'PY'
-import json
-import sys
-
-report_path = sys.argv[1]
-with open(report_path, encoding="utf-8") as handle:
-    report = json.load(handle)
-
-counts = {"ok": 0, "warn": 0, "error": 0, "fatal": 0}
-issues = []
-for check in report.get("checks", []):
-    status = check.get("status", "warn")
-    counts[status] = counts.get(status, 0) + 1
-    if status in {"warn", "error", "fatal"}:
-        issues.append((status, check.get("check", "unknown"), check.get("message", "")))
-
-print("\n=== Monitoring Summary ===")
-print(
-    f"  ok={counts.get('ok', 0):<3}  warn={counts.get('warn', 0):<3}  "
-    f"error={counts.get('error', 0):<3}  fatal={counts.get('fatal', 0):<3}"
-)
-if issues:
-    print("\nIssues found:")
-    for status, check_name, message in issues:
-        print(f"  [{status}] {check_name}: {message}")
-print("==========================\n")
-PY
+    python "${_MONITOR_LIB_DIR}/monitor_report.py" summary "${report_path}"
 }
 
 monitor_severity_exit() {
@@ -466,18 +445,5 @@ monitor_severity_exit() {
 
     [[ -f "${report_path}" ]] || return 0
 
-    python - "${report_path}" <<'PY'
-import json
-import sys
-
-report_path = sys.argv[1]
-with open(report_path, encoding="utf-8") as handle:
-    report = json.load(handle)
-
-has_severe = any(
-    check.get("status") in {"fatal", "error"}
-    for check in report.get("checks", [])
-)
-raise SystemExit(1 if has_severe else 0)
-PY
+    python "${_MONITOR_LIB_DIR}/monitor_report.py" severity "${report_path}"
 }

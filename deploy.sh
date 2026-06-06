@@ -426,26 +426,9 @@ do_deploy() {
                 # *value* column of a hosts entry ("<ip> <domain>" possibly
                 # followed by aliases). We strip any line whose first non-IP
                 # token matches one of the unblock domains.
-                python3 - "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP" <<PY_EOF || cp "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP"
-import sys
-
-unblock = set("""
-$UNBLOCK_DOMAINS
-""".split())
-
-with open(sys.argv[1], 'r', encoding='utf-8', errors='replace') as src, \
-     open(sys.argv[2], 'w', encoding='utf-8') as dst:
-    for line in src:
-        s = line.strip()
-        if not s or s.startswith('#'):
-            dst.write(line)
-            continue
-        parts = s.split()
-        # Hosts entry layout: <ip> <name> [aliases...]
-        if len(parts) >= 2 and any(p.lower() in unblock for p in parts[1:]):
-            continue
-        dst.write(line)
-PY_EOF
+                WORKOUT_UNBLOCK_DOMAINS="$UNBLOCK_DOMAINS" \
+                    python3 "$SCRIPT_DIR/strip_workout_hosts.py" "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP" \
+                    || cp "$HOSTS_TMP" "$HOSTS_WORKOUT_TMP"
                 workout_hash="$(compute_file_hash "$HOSTS_WORKOUT_TMP")"
                 printf '%s\n' "$workout_hash" > "$HOSTS_WORKOUT_SHA_TMP"
                 stripped_lines=$(($(wc -l < "$HOSTS_TMP") - $(wc -l < "$HOSTS_WORKOUT_TMP")))
