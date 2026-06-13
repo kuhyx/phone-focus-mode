@@ -52,6 +52,14 @@
         </receiver>
 
         <receiver
+            android:name=".CurfewDemoReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kuhy.focusstatus.CURFEW_DEMO" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".BootReceiver"
             android:exported="true"
             android:enabled="true">

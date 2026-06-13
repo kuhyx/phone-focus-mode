@@ -173,42 +173,71 @@ night_uids() {
 
 ensure_net_chain() {
     local ipt="$1"
-    if ! "$ipt" -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
-        "$ipt" -N "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
+    if ! iptw "$ipt" -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
+        iptw "$ipt" -N "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
     fi
     # De-dupe and pin exactly one OUTPUT jump at position 1.
-    while "$ipt" -D OUTPUT -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null; do :; done
-    "$ipt" -I OUTPUT 1 -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
+    while iptw "$ipt" -D OUTPUT -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null; do :; done
+    iptw "$ipt" -I OUTPUT 1 -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
 }
 
 fill_net_chain() {
     local ipt="$1" reject="$2"
-    "$ipt" -F "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
+    iptw "$ipt" -F "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || return 1
     # Always-allowed plumbing: loopback, established flows, the OS itself, the
     # daemon/ADB (root + shell), and DNS (apps resolve via netd, a different
     # uid, so allow port 53 broadly or every lookup fails under the cut-off).
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -o lo -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 0 -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 1000 -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 2000 -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -p udp --dport 53 -j ACCEPT 2>/dev/null || true
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -p tcp --dport 53 -j ACCEPT 2>/dev/null || true
-    # Allow each whitelisted app UID.
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -o lo -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 0 -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 1000 -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 2000 -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -p udp --dport 53 -j ACCEPT 2>/dev/null || true
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -p tcp --dport 53 -j ACCEPT 2>/dev/null || true
+    # Allow each whitelisted app UID, read from the cache (refreshed once per
+    # main tick). Reading the cache instead of calling night_uids() here keeps
+    # the fast watchdog fork-free (no `pm list packages` on every rebuild).
     local uid
-    for uid in $(night_uids); do
-        case "$uid" in ''|*[!0-9]*) continue ;; esac
-        "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner "$uid" -j ACCEPT 2>/dev/null || true
-    done
+    if [ -f "$CURFEW_NET_UID_CACHE" ]; then
+        while IFS= read -r uid; do
+            case "$uid" in ''|*[!0-9]*) continue ;; esac
+            iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner "$uid" -j ACCEPT 2>/dev/null || true
+        done < "$CURFEW_NET_UID_CACHE"
+    fi
     # Cut off every remaining ordinary APP uid (10000-19999 = user-0 app range).
     # Scoped to the app range so kernel/system sockets (no owner / low uids) are
     # never touched — far safer than a blanket default-DROP.
-    "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 10000-19999 -j REJECT \
+    iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner 10000-19999 -j REJECT \
         --reject-with "$reject" 2>/dev/null || true
 }
 
-apply_net() {
-    [ "${CURFEW_NET_ENABLED:-0}" = "1" ] || return 0
+# Run iptables/ip6tables with a 2s xtables lock-wait. Android's netd runs its
+# own concurrent `iptables-restore`; without -w our calls silently fail the
+# instant netd holds the lock (proven on-device: partial 19-rule chains and
+# multi-second outages). -w queues for the lock so our calls actually land.
+# iptables 1.8.7 legacy supports it. $1 = binary (iptables/ip6tables).
+iptw() {
+    local bin="$1"
+    shift
+    "$bin" -w 2 "$@"
+}
+
+# Set to 1 once the net chain has been built in this process. Used purely to
+# tell an *anomalous* mid-curfew disappearance (something outside this script
+# deleted the chain) apart from the legitimate first build on curfew entry.
+# Because it is a process-local var, a fresh enforcer starts empty and never
+# false-flags its own initial build.
+NET_BUILT=""
+
+# Refresh the cached UID list (one `pm list packages -U` fork). Called once per
+# main tick so the fast watchdog can rebuild from the cache without forking.
+refresh_uid_cache() {
+    night_uids > "$CURFEW_NET_UID_CACHE.tmp" 2>/dev/null \
+        && mv "$CURFEW_NET_UID_CACHE.tmp" "$CURFEW_NET_UID_CACHE" 2>/dev/null || true
+}
+
+# Rebuild the chain from cache for whichever iptables variants exist. No pm fork.
+rebuild_net_from_cache() {
     if command -v iptables >/dev/null 2>&1; then
         ensure_net_chain iptables && fill_net_chain iptables icmp-port-unreachable
     fi
@@ -217,13 +246,52 @@ apply_net() {
     fi
 }
 
+# Fast watchdog: for `total` seconds, every CURFEW_NET_REASSERT_INTERVAL check
+# whether netd wiped our chain and, if so, re-pin it from cache. Replaces the
+# plain inter-tick sleep while curfew is active so the leak window drops from
+# the full 5s tick to <=1s. Echoes the number of rebuilds it performed.
+net_hold() {
+    local total="$1" elapsed=0 rebuilds=0 step="${CURFEW_NET_REASSERT_INTERVAL:-1}"
+    while [ "$elapsed" -lt "$total" ]; do
+        sleep "$step"
+        elapsed=$((elapsed + step))
+        if command -v iptables >/dev/null 2>&1 \
+            && ! iptw iptables -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
+            rebuild_net_from_cache
+            rebuilds=$((rebuilds + 1))
+        fi
+    done
+    echo "$rebuilds"
+}
+
+apply_net() {
+    [ "${CURFEW_NET_ENABLED:-0}" = "1" ] || return 0
+    refresh_uid_cache
+    # Discriminating probe: if we already built the chain on a prior tick but it
+    # is gone now, an external actor wiped it (Android netd rewriting the filter
+    # table, or a manual flush during debugging). Log each disappearance so the
+    # live test reads "flush + self-heal" vs "dead process" directly, instead of
+    # inferring it from log silence.
+    if [ -n "$NET_BUILT" ] && command -v iptables >/dev/null 2>&1 \
+        && ! iptables -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
+        log "net chain $CURFEW_NET_IPT_CHAIN vanished since last tick - rebuilding (external flush?)"
+    fi
+    if command -v iptables >/dev/null 2>&1; then
+        ensure_net_chain iptables && fill_net_chain iptables icmp-port-unreachable
+    fi
+    if command -v ip6tables >/dev/null 2>&1; then
+        ensure_net_chain ip6tables && fill_net_chain ip6tables icmp6-port-unreachable
+    fi
+    NET_BUILT=1
+}
+
 teardown_net() {
     local ipt
     for ipt in iptables ip6tables; do
         command -v "$ipt" >/dev/null 2>&1 || continue
-        while "$ipt" -D OUTPUT -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null; do :; done
-        "$ipt" -F "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || true
-        "$ipt" -X "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || true
+        while iptw "$ipt" -D OUTPUT -j "$CURFEW_NET_IPT_CHAIN" 2>/dev/null; do :; done
+        iptw "$ipt" -F "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || true
+        iptw "$ipt" -X "$CURFEW_NET_IPT_CHAIN" 2>/dev/null || true
     done
 }
 
@@ -246,7 +314,8 @@ exit_curfew() {
     restore_grayscale
     restore_dnd
     teardown_net
-    rm -f "$CURFEW_ENFORCER_STATE"
+    NET_BUILT=""
+    rm -f "$CURFEW_ENFORCER_STATE" "$CURFEW_NET_UID_CACHE"
     log "Curfew OFF - restored display/DND, tore down net chain"
 }
 
@@ -263,14 +332,32 @@ trap cleanup INT TERM
 main() {
     acquire_lock
     log "curfew_enforcer started (PID=$$, window=${NIGHT_CURFEW_START}-${NIGHT_CURFEW_END}, net=${CURFEW_NET_ENABLED})"
+    local tick=0 act netstate rebuilds
     while true; do
-        if should_act; then
-            enter_curfew
-        else
-            exit_curfew
+        if should_act; then act=1; enter_curfew; else act=0; exit_curfew; fi
+        # Heartbeat every ~6 ticks (~30s): proves the loop is alive even when it
+        # is quietly re-applying. Without this, "alive but idle" and "dead" look
+        # identical in the log, so process death can't be inferred from silence.
+        tick=$((tick + 1))
+        if [ "$((tick % 6))" -eq 0 ]; then
+            if iptw iptables -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
+                netstate=up
+            else
+                netstate=down
+            fi
+            log "heartbeat tick=$tick act=$act net=$netstate"
         fi
         rotate_log
-        sleep "$CURFEW_ENFORCER_INTERVAL"
+        # While curfew is active with the net layer on, hold the chain pinned
+        # against netd's table rewrites for the whole interval (fast watchdog),
+        # instead of sleeping blind. Otherwise a plain sleep is enough.
+        if [ "$act" = 1 ] && [ "${CURFEW_NET_ENABLED:-0}" = "1" ]; then
+            rebuilds="$(net_hold "$CURFEW_ENFORCER_INTERVAL")"
+            [ "${rebuilds:-0}" -gt 0 ] 2>/dev/null \
+                && log "net watchdog re-pinned chain ${rebuilds}x in last ${CURFEW_ENFORCER_INTERVAL}s (netd flush)"
+        else
+            sleep "$CURFEW_ENFORCER_INTERVAL"
+        fi
     done
 }
 

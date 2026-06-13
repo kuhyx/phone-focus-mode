@@ -85,6 +85,8 @@ usage() {
     echo "  curfew-log       - Show curfew enforcer log"
     echo "  curfew-test-on   - Force curfew ACTIVE now (daytime validation)"
     echo "  curfew-test-off  - Clear the test force"
+    echo "  curfew-demo-on   - Start a demo: full curfew now, easy one-tap off"
+    echo "  curfew-demo-off  - Stop the demo"
     echo "  curfew-off       - Escape hatch: suspend curfew now (2am opt-out)"
     echo "  curfew-on        - Re-arm curfew (clear the override)"
     echo "  notif-status - Show companion status-notification details"
@@ -819,7 +821,7 @@ cmd_curfew_status() {
         echo "Enforcer:       STOPPED"
     fi
     ctl_is_curfew_now && echo "Within window:  YES" || echo "Within window:  no"
-    [ -e "$CURFEW_FORCE_FILE" ]    && echo "Forced ON:      YES (test hook active)"
+    [ -e "$CURFEW_FORCE_FILE" ]    && echo "Forced ON:      YES (demo/test active)"
     [ -e "$CURFEW_OVERRIDE_FILE" ] && echo "Override:       YES (curfew SUSPENDED)"
     if [ -f "$MODE_FILE" ]; then
         echo "Focus mode:     $(cat "$MODE_FILE" 2>/dev/null)"
@@ -883,6 +885,23 @@ cmd_curfew_test_off() {
     echo "Curfew force cleared. Back to clock-based behaviour."
 }
 
+# Demo mode = the same force mechanism as the test hook, worded for an
+# on-demand demo. The companion app's Start/Stop demo button drives the same
+# force file. Easy off: curfew-demo-off (or tap "Stop demo curfew").
+cmd_curfew_demo_on() {
+    touch "$CURFEW_FORCE_FILE"; chmod 666 "$CURFEW_FORCE_FILE" 2>/dev/null || true
+    rm -f "$CURFEW_OVERRIDE_FILE"
+    touch "$RECHECK_TRIGGER" 2>/dev/null || true
+    echo "Demo curfew STARTED - full curfew engaged now (apps, grayscale, DND, net)."
+    echo "Stop any time with: curfew-demo-off  (or tap 'Stop demo curfew')"
+}
+
+cmd_curfew_demo_off() {
+    rm -f "$CURFEW_FORCE_FILE"
+    touch "$RECHECK_TRIGGER" 2>/dev/null || true
+    echo "Demo curfew STOPPED - back to clock-based behaviour."
+}
+
 # Escape hatch: suspend curfew now (the 2am 'let me out' button). Survives
 # until you re-arm. Reachable on-device only via ADB (this command) unless a
 # root file-manager/terminal has been added to NIGHT_WHITELIST.
@@ -933,6 +952,8 @@ case "$1" in
     curfew-log)      cmd_curfew_log "${2:-50}" ;;
     curfew-test-on)  cmd_curfew_test_on ;;
     curfew-test-off) cmd_curfew_test_off ;;
+    curfew-demo-on)  cmd_curfew_demo_on ;;
+    curfew-demo-off) cmd_curfew_demo_off ;;
     curfew-off)      cmd_curfew_off ;;
     curfew-on)       cmd_curfew_on ;;
     *)        usage ;;

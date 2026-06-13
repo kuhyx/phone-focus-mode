@@ -17,6 +17,7 @@ final class Status {
 
     boolean curfewActive = false;
     boolean curfewOverride = false;
+    boolean curfewForce = false;
 
     boolean daemonAlive = false;
     boolean hostsAlive = false;
@@ -77,6 +78,7 @@ final class Status {
         s.disabledCount = parseLongOr(extract(json, "disabled_count"), 0);
         s.curfewActive = parseLongOr(extract(json, "curfew"), 0) == 1;
         s.curfewOverride = parseLongOr(extract(json, "curfew_override"), 0) == 1;
+        s.curfewForce = parseLongOr(extract(json, "curfew_force"), 0) == 1;
         s.lastCheckTs = parseLongOr(extract(json, "last_check_ts"), 0);
         s.lastCheckIso = extract(json, "last_check_iso");
         return s;

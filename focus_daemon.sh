@@ -401,7 +401,7 @@ disable_focus_mode() {
 # last_check_ts (unix), last_check_iso (human).
 write_status_snapshot() {
     local mode="$1" lat="$2" lon="$3" dist="$4" thr="$5"
-    local count iso ts cf ov
+    local count iso ts cf ov frc
     count="$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
     [ -z "$count" ] && count=0
     ts="$(date +%s)"
@@ -411,6 +411,9 @@ write_status_snapshot() {
     # = the escape-hatch file is set (curfew suspended).
     if curfew_active; then cf=1; else cf=0; fi
     if [ -e "$CURFEW_OVERRIDE_FILE" ]; then ov=1; else ov=0; fi
+    # "curfew_force" = the demo/test force file is set (curfew forced on
+    # regardless of clock). Lets the companion app show Start/Stop demo.
+    if [ -e "$CURFEW_FORCE_FILE" ]; then frc=1; else frc=0; fi
     local tmp="$STATUS_FILE.tmp"
     # Shell-emitted JSON — keep values numeric where possible, strings quoted.
     {
@@ -424,6 +427,7 @@ write_status_snapshot() {
         printf '"disabled_count":%s,' "$count"
         printf '"curfew":%s,' "$cf"
         printf '"curfew_override":%s,' "$ov"
+        printf '"curfew_force":%s,' "$frc"
         printf '"last_check_ts":%s,' "$ts"
         printf '"last_check_iso":"%s"' "$iso"
         printf '}\n'

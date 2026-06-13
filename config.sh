@@ -93,6 +93,15 @@ export CURFEW_DND_ENABLED=1
 # largely redundant with the app-disable layer, so leaving it off is safe.
 export CURFEW_NET_ENABLED=1
 export CURFEW_NET_IPT_CHAIN="FOCUS_CURFEW_NET"
+# Android's netd periodically reasserts the whole `filter` table via
+# iptables-restore, which atomically erases our custom chain (proven on-device:
+# the chain vanishes ~every 5s). The main enforcer tick (5s) rebuilds it but
+# leaves up-to-5s leak windows. This fast watchdog re-pins the chain every
+# CURFEW_NET_REASSERT_INTERVAL seconds *from a cached UID list* (no pm fork),
+# shrinking the leak to <=1s. The proper fix is netd's own per-UID firewall
+# (ndc/eBPF), tracked as a follow-up; this is the interim stopgap.
+export CURFEW_NET_REASSERT_INTERVAL=1
+export CURFEW_NET_UID_CACHE="$STATE_DIR/curfew_net_uids.txt"
 # Manual test toggle: `focus_ctl.sh curfew-test-on` writes this file to force
 # curfew ACTIVE regardless of clock, so the whole stack can be validated during
 # the day. `curfew-test-off` removes it.

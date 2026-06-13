@@ -147,25 +147,52 @@ public final class StatusService extends Service {
                         android.R.drawable.ic_popup_sync,
                         "Re-check now", recheck).build());
 
-        // Curfew toggle: shown only while curfew is active or already
-        // suspended (the night-time opt-out). Hidden during the day so it is
-        // not a casual temptation. Label reflects current state.
-        if (s != null && (s.curfewActive || s.curfewOverride)) {
-            PendingIntent curfewToggle = PendingIntent.getBroadcast(
-                    this, 1,
-                    new Intent(this, CurfewToggleReceiver.class)
-                            .setAction("com.kuhy.focusstatus.CURFEW_TOGGLE"),
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            String label = s.curfewOverride
-                    ? "Re-arm curfew"
-                    : "Suspend curfew till morning";
-            int curfewIcon = s.curfewOverride
-                    ? android.R.drawable.ic_lock_idle_lock
-                    : android.R.drawable.ic_menu_close_clear_cancel;
-            b.addAction(new Notification.Action.Builder(
-                    curfewIcon, label, curfewToggle).build());
+        // One contextual curfew action:
+        //   - demo running        -> Stop demo curfew      (force toggle)
+        //   - real curfew active  -> Suspend till morning   (override toggle)
+        //   - override set, idle  -> Re-arm curfew          (override toggle)
+        //   - idle / daytime      -> Start demo curfew      (force toggle)
+        // Demo lets you experience the full curfew on demand with a one-tap
+        // off switch; the companion app/launcher/keyboard stay whitelisted so
+        // the notification is always reachable to stop it.
+        if (s != null) {
+            String label;
+            int actionIcon;
+            PendingIntent pi;
+            if (s.curfewForce) {
+                label = "Stop demo curfew";
+                actionIcon = android.R.drawable.ic_menu_close_clear_cancel;
+                pi = demoIntent();
+            } else if (s.curfewActive) {
+                label = "Suspend curfew till morning";
+                actionIcon = android.R.drawable.ic_menu_close_clear_cancel;
+                pi = overrideIntent();
+            } else if (s.curfewOverride) {
+                label = "Re-arm curfew";
+                actionIcon = android.R.drawable.ic_lock_idle_lock;
+                pi = overrideIntent();
+            } else {
+                label = "Start demo curfew";
+                actionIcon = android.R.drawable.ic_media_play;
+                pi = demoIntent();
+            }
+            b.addAction(new Notification.Action.Builder(actionIcon, label, pi).build());
         }
         return b.build();
+    }
+
+    private PendingIntent overrideIntent() {
+        return PendingIntent.getBroadcast(this, 1,
+                new Intent(this, CurfewToggleReceiver.class)
+                        .setAction("com.kuhy.focusstatus.CURFEW_TOGGLE"),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private PendingIntent demoIntent() {
+        return PendingIntent.getBroadcast(this, 2,
+                new Intent(this, CurfewDemoReceiver.class)
+                        .setAction("com.kuhy.focusstatus.CURFEW_DEMO"),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     private static String buildBigText(Status s) {
@@ -188,7 +215,9 @@ public final class StatusService extends Service {
             sb.append("GPS: ").append(s.lat).append(", ").append(s.lon).append('\n');
         }
         sb.append("Disabled apps: ").append(s.disabledCount).append('\n');
-        if (s.curfewOverride) {
+        if (s.curfewForce) {
+            sb.append("Demo curfew: RUNNING — strict list, grayscale, DND (tap Stop)\n");
+        } else if (s.curfewOverride) {
             sb.append("Night curfew: SUSPENDED (tap to re-arm)\n");
         } else if (s.curfewActive) {
             sb.append("Night curfew: ACTIVE — strict list, grayscale, DND\n");
