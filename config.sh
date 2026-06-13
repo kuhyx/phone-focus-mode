@@ -91,7 +91,7 @@ export CURFEW_DND_ENABLED=1
 # unattended at 23:00. When on, only $NIGHT_WHITELIST app UIDs (plus
 # root/system/shell + DNS) get network; every other app is cut off. It is also
 # largely redundant with the app-disable layer, so leaving it off is safe.
-export CURFEW_NET_ENABLED=0
+export CURFEW_NET_ENABLED=1
 export CURFEW_NET_IPT_CHAIN="FOCUS_CURFEW_NET"
 # Manual test toggle: `focus_ctl.sh curfew-test-on` writes this file to force
 # curfew ACTIVE regardless of clock, so the whole stack can be validated during
