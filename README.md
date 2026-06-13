@@ -114,6 +114,7 @@ script doesn't need this flag because `post-fs-data` already runs there.
 | `config.sh`         | Coordinates, radius, whitelist, constants              |
 | `focus_daemon.sh`   | Main daemon — runs on device, loops every 60s          |
 | `focus_ctl.sh`      | Control utility — runs on device                       |
+| `curfew_enforcer.sh`| Night-curfew enforcer — grayscale + DND + optional net |
 | `hosts_enforcer.sh` | Bind-mounts `hosts.canonical` over `/system/etc/hosts` |
 | `magisk_service.sh` | Magisk boot hook → auto-starts both daemons            |
 | `deploy.sh`         | PC-side ADB deployment and control script              |
@@ -149,6 +150,82 @@ within `CHECK_INTERVAL_FOCUS` seconds. `com.android.vending` (Play Store),
 `com.*.packageinstaller`, and popular terminal apps are also uninstalled
 `--user 0` in focus mode to close the usual bypass paths. Google Play
 Services (`com.google.android.gms`) is left alone so banking apps work.
+
+## Night curfew (after 23:00 at home)
+
+On top of the location-based focus mode, a **time-gated curfew** makes the phone
+boring and largely unusable late at night so you go to sleep instead of doom-
+scrolling. It activates only when focus mode is already ON (i.e. you are at
+home) **and** the local clock is inside the curfew window (default 23:00–05:00).
+Out of that window, or away from home, nothing changes.
+
+While the curfew is active it applies three allow-list layers — *block
+everything except a short essential list*:
+
+1. **Apps.** The daemon swaps the permissive `WHITELIST` for the strict
+   `NIGHT_WHITELIST` (banking, maps, calendar, clock, authenticators, gov ID,
+   workout/diet). Everything else — browsers, social, messaging, email, media,
+   manga, stores — is `pm disable-user`'d and re-enabled automatically at
+   05:00. Same proven mechanism as location focus; no new disable path.
+2. **Display + notifications.** `curfew_enforcer.sh` forces the screen to
+   **grayscale** and DND to **alarms-only**, re-applying every 5s so toggling
+   them off in Settings snaps back. (Snap-back is the realistic lock; truly
+   blocking Settings risks system instability, so it is deliberately avoided.)
+3. **Internet (optional, default OFF).** A per-UID `iptables` allow-list that
+   gives network only to the `NIGHT_WHITELIST` apps (plus root/system/shell +
+   DNS) and cuts off every other app. Enable `CURFEW_NET_ENABLED=1` in
+   `config.sh` only after validating it on-device (see test hook below).
+
+### Configuration (`config.sh`)
+
+```sh
+NIGHT_CURFEW_ENABLED=1       # master switch
+NIGHT_CURFEW_START="2300"    # local HHMM; window wraps past midnight
+NIGHT_CURFEW_END="0500"
+CURFEW_GRAYSCALE_ENABLED=1   # force monochrome
+CURFEW_DND_ENABLED=1         # force DND alarms-only
+CURFEW_NET_ENABLED=0         # per-UID internet allow-list (prove first!)
+```
+
+Edit `NIGHT_WHITELIST` (right below `WHITELIST`) to choose what stays usable at
+night. Allow-list by design: when in doubt, leave it out. The active keyboard
+and the core dialer/SMS/home apps are always protected automatically (a 1am
+reboot can never strand you without a keyboard), and the default browser is
+intentionally *not* protected at night so it can be disabled.
+
+### Control
+
+```bash
+# On-device (root shell):
+focus_ctl.sh curfew-status     # window, enforcer state, what's applied
+focus_ctl.sh curfew-test-on    # FORCE curfew now (daytime validation)
+focus_ctl.sh curfew-test-off   # clear the force
+focus_ctl.sh curfew-off        # escape hatch: suspend curfew now
+focus_ctl.sh curfew-on         # re-arm (clear the override)
+focus_ctl.sh curfew-log        # enforcer log
+```
+
+### Opting out at 2am (no PC)
+
+The companion status notification grows a **"Suspend curfew till morning"**
+action while the curfew is active. Tapping it drops the override file (curfew
+off until you re-arm); the label flips to **"Re-arm curfew"**. The action is
+hidden during the day so it is not a casual temptation. Without the PC this is
+the only on-device opt-out — by design. From the PC you can always
+`./deploy.sh <ip> --restart` or run `focus_ctl.sh curfew-off` over ADB.
+
+### Validating before you trust it overnight
+
+Because a misconfigured curfew can lock apps at 2am, validate it during the day
+with the force hook, **not** by waiting for 23:00:
+
+```bash
+focus_ctl.sh curfew-test-on    # mBank + keyboard work, Firefox gone, gray, DND
+focus_ctl.sh curfew-test-off   # blocked apps come BACK (the reconcile path)
+```
+
+The clock parser fails **open** (treated as daytime) on a malformed time, so a
+broken `date` can never trap you behind the strict list.
 
 ## Updating
 

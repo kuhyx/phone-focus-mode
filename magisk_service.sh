@@ -17,6 +17,7 @@ chmod +x "$SCRIPT_DIR/focus_ctl.sh"
 chmod +x "$SCRIPT_DIR/hosts_enforcer.sh"
 chmod +x "$SCRIPT_DIR/dns_enforcer.sh"
 chmod +x "$SCRIPT_DIR/launcher_enforcer.sh"
+chmod +x "$SCRIPT_DIR/curfew_enforcer.sh" 2>/dev/null
 chmod +x "$SCRIPT_DIR/workout_detector.sh" 2>/dev/null
 chmod +x "$SCRIPT_DIR/sqlite3" 2>/dev/null
 
@@ -40,6 +41,11 @@ setsid sh "$SCRIPT_DIR/dns_enforcer.sh" </dev/null >/dev/null 2>&1 &
 # Start launcher enforcer - keeps Minimalist Phone installed and pinned as
 # the default HOME. Always on (not location-gated).
 setsid sh "$SCRIPT_DIR/launcher_enforcer.sh" </dev/null >/dev/null 2>&1 &
+
+# Start night-curfew enforcer - locks grayscale + DND (and optional per-UID
+# network allow-list) while the curfew window is open at home. Always on; it
+# self-gates on the clock + focus mode and is a no-op during the day.
+setsid sh "$SCRIPT_DIR/curfew_enforcer.sh" </dev/null >/dev/null 2>&1 &
 
 # Start focus daemon in a new session (detached from any controlling terminal)
 setsid sh "$SCRIPT_DIR/focus_daemon.sh" </dev/null >/dev/null 2>&1 &

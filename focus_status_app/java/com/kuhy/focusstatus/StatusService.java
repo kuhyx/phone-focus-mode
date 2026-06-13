@@ -28,6 +28,7 @@ public final class StatusService extends Service {
     private static final String HOSTS_PID = "/data/local/tmp/focus_mode/hosts_enforcer.pid";
     private static final String DNS_PID = "/data/local/tmp/focus_mode/dns_enforcer.pid";
     private static final String LAUNCHER_PID = "/data/local/tmp/focus_mode/launcher_enforcer.pid";
+    private static final String CURFEW_PID = "/data/local/tmp/focus_mode/curfew_enforcer.pid";
 
     private Handler handler;
     private final Runnable tick = new Runnable() {
@@ -72,6 +73,7 @@ public final class StatusService extends Service {
         s.hostsAlive = RootShell.pidAlive(HOSTS_PID);
         s.dnsAlive = RootShell.pidAlive(DNS_PID);
         s.launcherAlive = RootShell.pidAlive(LAUNCHER_PID);
+        s.curfewAlive = RootShell.pidAlive(CURFEW_PID);
 
         NotificationManager nm =
                 (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -144,6 +146,25 @@ public final class StatusService extends Service {
                 .addAction(new Notification.Action.Builder(
                         android.R.drawable.ic_popup_sync,
                         "Re-check now", recheck).build());
+
+        // Curfew toggle: shown only while curfew is active or already
+        // suspended (the night-time opt-out). Hidden during the day so it is
+        // not a casual temptation. Label reflects current state.
+        if (s != null && (s.curfewActive || s.curfewOverride)) {
+            PendingIntent curfewToggle = PendingIntent.getBroadcast(
+                    this, 1,
+                    new Intent(this, CurfewToggleReceiver.class)
+                            .setAction("com.kuhy.focusstatus.CURFEW_TOGGLE"),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            String label = s.curfewOverride
+                    ? "Re-arm curfew"
+                    : "Suspend curfew till morning";
+            int curfewIcon = s.curfewOverride
+                    ? android.R.drawable.ic_lock_idle_lock
+                    : android.R.drawable.ic_menu_close_clear_cancel;
+            b.addAction(new Notification.Action.Builder(
+                    curfewIcon, label, curfewToggle).build());
+        }
         return b.build();
     }
 
@@ -167,13 +188,19 @@ public final class StatusService extends Service {
             sb.append("GPS: ").append(s.lat).append(", ").append(s.lon).append('\n');
         }
         sb.append("Disabled apps: ").append(s.disabledCount).append('\n');
+        if (s.curfewOverride) {
+            sb.append("Night curfew: SUSPENDED (tap to re-arm)\n");
+        } else if (s.curfewActive) {
+            sb.append("Night curfew: ACTIVE — strict list, grayscale, DND\n");
+        }
         sb.append("Last check: ").append(
                 s.lastCheckIso.isEmpty() ? "never" : s.lastCheckIso).append('\n');
         sb.append("Daemons: ")
                 .append(tag("focus", s.daemonAlive)).append(' ')
                 .append(tag("hosts", s.hostsAlive)).append(' ')
                 .append(tag("dns", s.dnsAlive)).append(' ')
-                .append(tag("launcher", s.launcherAlive));
+                .append(tag("launcher", s.launcherAlive)).append(' ')
+                .append(tag("curfew", s.curfewAlive));
         return sb.toString();
     }
 

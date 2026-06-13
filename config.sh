@@ -45,6 +45,59 @@ export STATUS_FILE="$STATE_DIR/status.json"
 # re-check. focus_daemon.sh polls for it and skips the remainder of its sleep.
 export RECHECK_TRIGGER="$STATE_DIR/trigger_recheck"
 
+# ============================================================
+# NIGHT CURFEW (time-gated strict allow-list)
+# ============================================================
+# When focus mode is ON (i.e. you are at home) AND the local clock is inside
+# the curfew window, the daemon switches from the permissive $WHITELIST to the
+# strict $NIGHT_WHITELIST: every app not on that short list is disabled. This
+# is the "stop using the phone after 23:00 at home" layer. The companion
+# enforcer (curfew_enforcer.sh) adds grayscale + DND + an optional per-UID
+# network allow-list on top. Times are local 24h "HHMM"; the window wraps past
+# midnight when START > END (e.g. 2300 -> 0500).
+export NIGHT_CURFEW_ENABLED=1
+export NIGHT_CURFEW_START="2300"
+export NIGHT_CURFEW_END="0500"
+# Escape hatch: if this file exists, curfew is suspended (treated as daytime)
+# everywhere — app list, grayscale, DND and network. Delete it to re-arm.
+# WHO CAN CREATE IT (recovery paths, strongest lock first):
+#   * `focus_ctl.sh curfew-off` over ADB from the PC  (always available daily).
+#   * The Magisk boot emergency-disable file ($FOCUS_BOOT_EMERGENCY_DISABLE_FILE)
+#     stops the whole stack at next boot.
+#   * A root file-manager/terminal ONLY IF one is added to $NIGHT_WHITELIST.
+#     None is whitelisted by default — that is deliberate ("hard to turn off").
+# The active-IME guard in focus_daemon.sh keeps the keyboard alive so whichever
+# path you choose is always typable. If you want a true no-PC 2am opt-out,
+# whitelist a root terminal at night (see NIGHT_WHITELIST) or wire a companion-
+# app button. Until then, recovery is PC/ADB-based by design.
+export CURFEW_OVERRIDE_FILE="$STATE_DIR/curfew_override"
+
+# --- Curfew enforcer (grayscale + DND + per-UID network allow-list) ---
+# See curfew_enforcer.sh. Always-on like dns_enforcer, but only ACTS while the
+# curfew window is open AND focus mode is ON. Re-applies every interval so a
+# manual toggle in Settings snaps back ("hard to turn off"). NOTE: snap-back is
+# the realistic lock; true impossibility would mean blocking the Settings app,
+# which risks system instability, so we deliberately do not.
+export CURFEW_ENFORCER_INTERVAL=5
+export CURFEW_ENFORCER_LOG="$STATE_DIR/curfew_enforcer.log"
+export CURFEW_ENFORCER_STATE="$STATE_DIR/curfew_applied"
+# Grayscale: force the display to monochrome via the accessibility daltonizer.
+export CURFEW_GRAYSCALE_ENABLED=1
+# DND: force Do-Not-Disturb to alarms-only so notifications stop pulling you in
+# while the morning alarm still rings.
+export CURFEW_DND_ENABLED=1
+# Per-UID internet allow-list. DEFAULT OFF: highest-risk layer, must be proven
+# on-device (`focus_ctl.sh curfew-test-on`) before it is trusted to fire
+# unattended at 23:00. When on, only $NIGHT_WHITELIST app UIDs (plus
+# root/system/shell + DNS) get network; every other app is cut off. It is also
+# largely redundant with the app-disable layer, so leaving it off is safe.
+export CURFEW_NET_ENABLED=0
+export CURFEW_NET_IPT_CHAIN="FOCUS_CURFEW_NET"
+# Manual test toggle: `focus_ctl.sh curfew-test-on` writes this file to force
+# curfew ACTIVE regardless of clock, so the whole stack can be validated during
+# the day. `curfew-test-off` removes it.
+export CURFEW_FORCE_FILE="$STATE_DIR/curfew_force_on"
+
 # --- Boot-time autostart safety gate ---
 # Critical safety default: do NOT auto-start focus daemons at boot unless
 # explicitly enabled. This avoids device instability during early boot on
@@ -265,6 +318,7 @@ com.google.android.contactkeys
 com.sosauce.cutecalc
 org.thoughtcrime.securesms
 com.discord
+com.anthropic.claude
 
 # --- Google system apps (add by name even though they show as system) ---
 com.google.android.apps.maps
@@ -332,12 +386,79 @@ pl.orange.mojeorange
 # --- Fitness ---
 org.runnerup
 
+# --- Diet & calorie tracking ---
+com.fitatu.tracker
+com.waist.line
+com.maksimowiczm.foodyou
+
 # --- Bill splitting ---
 com.jwang123.splitbills
 com.Splitwise.SplitwiseMobile
 
 # --- Smart home ---
 com.xiaomi.smarthome
+"
+
+# ============================================================
+# NIGHT CURFEW WHITELIST
+# These are the ONLY third-party apps that stay enabled during the curfew
+# window (see NIGHT_CURFEW_* above). Everything else in $WHITELIST — browsers,
+# social, messaging, email, media, manga, stores, transit — is disabled.
+# Allow-list by design: when in doubt, leave it OUT.
+#
+# Parsed exactly like $WHITELIST (one package per line, '#' comments ignored).
+# The sysprotect prefixes ($SYSTEM_NEVER_DISABLE) and the default-handler guard
+# (dialer/SMS/home/browser/IME) still apply on TOP of this list, so the active
+# keyboard and core system apps are protected even if omitted here.
+# ============================================================
+
+export NIGHT_WHITELIST="
+# --- Infrastructure that MUST stay or the phone/enforcement breaks ---
+com.qqlabs.minimalistlauncher
+de.thomaskuenneth.benice
+com.blackview.launcher
+com.blackview.launcher.overlay.framework
+com.kuhy.focusstatus
+org.fossify.phone
+org.fossify.contacts
+org.fossify.messages
+com.google.android.safetycore
+com.google.android.contactkeys
+com.topjohnwu.magisk
+moe.shizuku.privileged.api
+me.phh.superuser
+com.kuhy.vaultkitbypass
+
+# --- Essentials (must work at night) ---
+# Banking
+pl.mbank
+pl.pkobp.iko
+com.revolut.revolut
+# Maps / navigation home
+com.google.android.apps.maps
+# Calendar
+com.google.android.calendar
+ws.xsoh.etar
+# Alarm clock
+org.fossify.clock
+# Government / digital ID
+pl.nask.mobywatel
+# Authenticators / password vault (needed to log into banking)
+com.beemdevelopment.aegis
+com.azure.authenticator
+oracle.idm.mobile.authenticator
+com.kunzisoft.keepass.libre
+# Smart home (control lights before sleep)
+com.xiaomi.smarthome
+
+# --- Good-for-you apps (not scroll traps; kept per your request) ---
+# Remove any of these if you want a stricter night.
+com.stronglifts.app
+com.kuhy.workout_app
+org.runnerup
+com.fitatu.tracker
+com.waist.line
+com.maksimowiczm.foodyou
 "
 
 # ============================================================

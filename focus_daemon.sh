@@ -67,6 +67,19 @@ build_whitelist_file() {
     fi
 }
 
+build_night_whitelist_file() {
+    # Strict allow-list used while the night curfew is active (see config.sh
+    # NIGHT_WHITELIST and is_curfew_now()). Parsed exactly like the day list.
+    echo "$NIGHT_WHITELIST" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
+        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/night_whitelist.txt"
+    local n
+    n=$(wc -l < "$STATE_DIR/night_whitelist.txt" 2>/dev/null | tr -d ' ')
+    log "Night-curfew whitelist parsed: $n entries"
+    if [ "${n:-0}" -lt 10 ]; then
+        log "WARN: night whitelist suspiciously small ($n lines) - check config.sh for stray quotes inside NIGHT_WHITELIST string"
+    fi
+}
+
 build_sysprotect_file() {
     echo "$SYSTEM_NEVER_DISABLE" | grep -v '^[[:space:]]*$' \
         | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/sysprotect.txt"
@@ -122,6 +135,7 @@ init() {
     fi
 
     build_whitelist_file
+    build_night_whitelist_file
     build_sysprotect_file
     refresh_default_handlers
     rotate_log
@@ -166,11 +180,58 @@ calc_distance() {
     }'
 }
 
+# ---- Night curfew time check ----
+# Returns 0 (true) when the local clock is inside the curfew window.
+# Fails OPEN (return 1 = not curfew) on a malformed clock so a broken `date`
+# can never strand you behind the strict list — essentials stay reachable
+# either way, but the day list is the less-surprising default.
+_dec() {
+    # Strip leading zeros so a zero-padded HHMM ("0500", "0830") is not parsed
+    # as (sometimes invalid) octal by the shell's arithmetic. Portable across
+    # ash/mksh; keeps at least one digit so "0000" -> "0".
+    local n="$1"
+    while [ "${n#0}" != "$n" ] && [ "${#n}" -gt 1 ]; do n="${n#0}"; done
+    printf '%s' "$n"
+}
+
+is_curfew_now() {
+    local now start end
+    now="$(date +%H%M 2>/dev/null)"
+    case "$now" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    now="$(_dec "$now")"; start="$(_dec "$NIGHT_CURFEW_START")"; end="$(_dec "$NIGHT_CURFEW_END")"
+    if [ "$start" -le "$end" ]; then
+        [ "$now" -ge "$start" ] && [ "$now" -lt "$end" ]
+    else
+        # Window wraps past midnight (e.g. 2300 -> 0500).
+        [ "$now" -ge "$start" ] || [ "$now" -lt "$end" ]
+    fi
+}
+
+# Curfew is ACTIVE when enabled, not manually overridden, and either forced on
+# (test hook) or inside the time window. The is_allowed() switch below consults
+# this; because is_allowed() only runs during the focus-mode sweep/reconcile,
+# curfew automatically takes effect only at home and is a no-op when away.
+curfew_active() {
+    [ "${NIGHT_CURFEW_ENABLED:-0}" = "1" ] || return 1
+    [ -e "$CURFEW_OVERRIDE_FILE" ] && return 1
+    [ -e "$CURFEW_FORCE_FILE" ] && return 0
+    is_curfew_now
+}
+
 # ---- Check if package is allowed (whitelist or system-protected) ----
 is_allowed() {
     local pkg="$1"
-    # Exact match against whitelist file
-    if grep -qxF "$pkg" "$STATE_DIR/whitelist.txt" 2>/dev/null; then
+    # During the night curfew, swap the permissive day list for the strict
+    # night list. The sysprotect + default-handler guards below still apply on
+    # top of whichever list is active.
+    local list="$STATE_DIR/whitelist.txt"
+    if curfew_active; then
+        list="$STATE_DIR/night_whitelist.txt"
+    fi
+    # Exact match against the active whitelist file
+    if grep -qxF "$pkg" "$list" 2>/dev/null; then
         return 0
     fi
     # Prefix match against system-protect file
@@ -189,6 +250,12 @@ is_allowed() {
     # ADB. Treat the guard as last-resort safety net independent of WHITELIST
     # contents so a future config edit can never wipe these out.
     is_default_handler "$pkg" && return 0
+    # The default browser is guarded only OUTSIDE curfew. At night the whole
+    # point is to disable browsers, so this guard must not re-allow it.
+    if ! curfew_active \
+        && grep -qxF "$pkg" "$STATE_DIR/default_browser.txt" 2>/dev/null; then
+        return 0
+    fi
     return 1
 }
 
@@ -212,12 +279,24 @@ refresh_default_handlers() {
     local sms
     sms="$(settings get secure sms_default_application 2>/dev/null | tr -d '[:space:]')"
     [ -n "$sms" ] && [ "$sms" != "null" ] && echo "$sms" >> "$tmp"
-    # Default Browser handler (resolve-activity for VIEW http://)
-    cmd package resolve-activity --brief \
-        -a android.intent.action.VIEW -d http://example.com 2>/dev/null \
-        | awk -F/ 'NR==2 && $1 != "" {print $1}' >> "$tmp"
+    # Default input method (active keyboard). Disabling the active IME with
+    # pm disable-user PERSISTS across reboot; a 1am reboot would then leave no
+    # keyboard to type any recovery command. Protect it day and night so the
+    # curfew can never lock you out of typing.
+    local ime
+    ime="$(settings get secure default_input_method 2>/dev/null | cut -d/ -f1)"
+    [ -n "$ime" ] && [ "$ime" != "null" ] && echo "$ime" >> "$tmp"
     sort -u "$tmp" -o "$f"
     rm -f "$tmp"
+
+    # Default Browser handler is tracked SEPARATELY and guarded only OUTSIDE
+    # the curfew window (see is_allowed). During curfew the whole point is to
+    # disable browsers, so the default-handler guard must not resurrect them.
+    local bf="$STATE_DIR/default_browser.txt"
+    cmd package resolve-activity --brief \
+        -a android.intent.action.VIEW -d http://example.com 2>/dev/null \
+        | awk -F/ 'NR==2 && $1 != "" {print $1}' > "$bf.tmp" 2>/dev/null
+    mv "$bf.tmp" "$bf" 2>/dev/null || : > "$bf"
 }
 
 is_default_handler() {
@@ -322,11 +401,16 @@ disable_focus_mode() {
 # last_check_ts (unix), last_check_iso (human).
 write_status_snapshot() {
     local mode="$1" lat="$2" lon="$3" dist="$4" thr="$5"
-    local count iso ts
+    local count iso ts cf ov
     count="$(wc -l < "$DISABLED_APPS_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
     [ -z "$count" ] && count=0
     ts="$(date +%s)"
     iso="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Curfew state for the companion app: 1/0 so it slots into the existing
+    # numeric JSON path. "curfew" = restrictions active now; "curfew_override"
+    # = the escape-hatch file is set (curfew suspended).
+    if curfew_active; then cf=1; else cf=0; fi
+    if [ -e "$CURFEW_OVERRIDE_FILE" ]; then ov=1; else ov=0; fi
     local tmp="$STATUS_FILE.tmp"
     # Shell-emitted JSON — keep values numeric where possible, strings quoted.
     {
@@ -338,6 +422,8 @@ write_status_snapshot() {
         printf '"threshold_m":%s,' "${thr:-null}"
         printf '"radius_m":%s,' "$RADIUS"
         printf '"disabled_count":%s,' "$count"
+        printf '"curfew":%s,' "$cf"
+        printf '"curfew_override":%s,' "$ov"
         printf '"last_check_ts":%s,' "$ts"
         printf '"last_check_iso":"%s"' "$iso"
         printf '}\n'
@@ -401,7 +487,8 @@ main() {
                 disable_focus_mode
             fi
 
-            log "Location: $lat,$lon | Distance: ${distance}m | Threshold: ${threshold}m | Mode: $CURRENT_MODE"
+            curfew_state="day"; curfew_active && curfew_state="CURFEW"
+            log "Location: $lat,$lon | Distance: ${distance}m | Threshold: ${threshold}m | Mode: $CURRENT_MODE | Curfew: $curfew_state"
             write_status_snapshot "$CURRENT_MODE" "$lat" "$lon" "$distance" "$threshold"
         else
             log "Location unavailable - defaulting to focus mode (restrictions ON)"

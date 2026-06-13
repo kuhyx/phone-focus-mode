@@ -44,6 +44,14 @@
         </receiver>
 
         <receiver
+            android:name=".CurfewToggleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kuhy.focusstatus.CURFEW_TOGGLE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".BootReceiver"
             android:exported="true"
             android:enabled="true">

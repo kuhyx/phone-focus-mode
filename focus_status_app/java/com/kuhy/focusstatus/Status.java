@@ -15,10 +15,14 @@ final class Status {
     long lastCheckTs = 0;
     String lastCheckIso = "";
 
+    boolean curfewActive = false;
+    boolean curfewOverride = false;
+
     boolean daemonAlive = false;
     boolean hostsAlive = false;
     boolean dnsAlive = false;
     boolean launcherAlive = false;
+    boolean curfewAlive = false;
 
     /** Extract a JSON string or numeric value by key. Returns "" if missing. */
     static String extract(String json, String key) {
@@ -71,6 +75,8 @@ final class Status {
         s.thresholdM = parseLongOr(extract(json, "threshold_m"), -1);
         s.radiusM = parseLongOr(extract(json, "radius_m"), -1);
         s.disabledCount = parseLongOr(extract(json, "disabled_count"), 0);
+        s.curfewActive = parseLongOr(extract(json, "curfew"), 0) == 1;
+        s.curfewOverride = parseLongOr(extract(json, "curfew_override"), 0) == 1;
         s.lastCheckTs = parseLongOr(extract(json, "last_check_ts"), 0);
         s.lastCheckIso = extract(json, "last_check_iso");
         return s;
