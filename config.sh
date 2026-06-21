@@ -335,6 +335,7 @@ com.google.android.calendar
 
 # --- Notes & productivity ---
 net.cozic.joplin
+dev.kuhy.todo
 
 # --- Navigation & transit (needed when going out) ---
 net.osmand
@@ -370,6 +371,7 @@ com.facebook.orca
 # --- App installation alternatives (must stay usable in focus mode) ---
 com.aurora.store
 com.machiav3lli.fdroid
+org.fdroid.fdroid
 
 # --- Manga reader ---
 eu.kanade.tachiyomi.sy
@@ -406,6 +408,11 @@ com.Splitwise.SplitwiseMobile
 
 # --- Smart home ---
 com.xiaomi.smarthome
+
+# --- Remote SSH access via WireGuard (self-hosted, see
+#     linux_configuration/scripts/single_use/features/setup_wireguard_ssh.sh) ---
+com.zaneschepke.wireguardautotunnel
+org.connectbot
 "
 
 # ============================================================
