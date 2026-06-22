@@ -44,7 +44,7 @@ adb_list_serials() {
 }
 
 _load_trusted_device_values() {
-    local file_path="${1:-${TRUSTED_DEVICE_FILE}}"
+    local file_path="${TRUSTED_DEVICE_FILE}"
     local -a loaded_values=()
 
     [[ -f "${file_path}" ]] || return 1
