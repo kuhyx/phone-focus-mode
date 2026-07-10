@@ -137,13 +137,12 @@ connect_adb() {
 }
 
 # Wrapper: run a root shell command on the phone.
-# Uses --mount-master so the command sees (and can modify) the global mount
-# namespace — required for any status checks that inspect the hosts bind
-# mount, /data/adb/focus_mode files, or for starting daemons.
+# --mount-master was removed in Magisk v26+; plain su -c works and still
+# runs in the correct mount namespace for our use cases.
 adb_root() {
     local command_text="$1"
 
-    printf '%s\n' "$command_text" | adb_cmd shell su --mount-master -c "sh -s"
+    printf '%s\n' "$command_text" | adb_cmd shell su -c "sh -s"
 }
 
 compute_file_hash() {

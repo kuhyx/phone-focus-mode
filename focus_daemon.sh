@@ -85,6 +85,14 @@ build_sysprotect_file() {
         | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/sysprotect.txt"
 }
 
+# $BLOCKED_SYSTEM_APPS is a static config value (never changes without a
+# daemon restart), so - like build_sysprotect_file above - this only needs
+# to run once at startup, not every enable_focus_mode() sweep.
+build_blocked_sys_file() {
+    echo "$BLOCKED_SYSTEM_APPS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
+        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$STATE_DIR/blocked_sys.txt"
+}
+
 reconcile_disabled_apps() {
     [ -f "$DISABLED_APPS_FILE" ] || return
 
@@ -137,6 +145,7 @@ init() {
     build_whitelist_file
     build_night_whitelist_file
     build_sysprotect_file
+    build_blocked_sys_file
     refresh_default_handlers
     rotate_log
 
@@ -213,11 +222,25 @@ is_curfew_now() {
 # (test hook) or inside the time window. The is_allowed() switch below consults
 # this; because is_allowed() only runs during the focus-mode sweep/reconcile,
 # curfew automatically takes effect only at home and is a no-op when away.
+#
+# Memoized once per main-loop tick (reset at the top of main()'s while loop):
+# is_allowed() calls this once per enabled package in the sweep, and
+# is_curfew_now forks `date` - on-device this meant up to ~N extra forks per
+# 10s tick for N enabled apps, all recomputing a value that cannot change
+# within a single tick. Result is cached in _CURFEW_TICK_RESULT.
 curfew_active() {
-    [ "${NIGHT_CURFEW_ENABLED:-0}" = "1" ] || return 1
-    [ -e "$CURFEW_OVERRIDE_FILE" ] && return 1
-    [ -e "$CURFEW_FORCE_FILE" ] && return 0
-    is_curfew_now
+    if [ -n "$_CURFEW_TICK_CACHED" ]; then
+        [ "$_CURFEW_TICK_RESULT" = "1" ]
+        return
+    fi
+    _CURFEW_TICK_CACHED=1
+    _CURFEW_TICK_RESULT=0
+    if [ "${NIGHT_CURFEW_ENABLED:-0}" = "1" ] && [ ! -e "$CURFEW_OVERRIDE_FILE" ]; then
+        if [ -e "$CURFEW_FORCE_FILE" ] || is_curfew_now; then
+            _CURFEW_TICK_RESULT=1
+        fi
+    fi
+    [ "$_CURFEW_TICK_RESULT" = "1" ]
 }
 
 # ---- Check if package is allowed (whitelist or system-protected) ----
@@ -319,10 +342,9 @@ enable_focus_mode() {
     # list so a newly-promoted handler is never disabled.
     refresh_default_handlers
 
-    # Build blocked system app list (used both at entry and for periodic sweep)
+    # Blocked system app list is static; built once in init() (see
+    # build_blocked_sys_file), not rebuilt on every sweep.
     local blocked_sys="$STATE_DIR/blocked_sys.txt"
-    echo "$BLOCKED_SYSTEM_APPS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
-        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$blocked_sys"
 
     # Periodic rescan catches third-party apps the user re-enabled (e.g. via
     # Play Store or `pm enable` in a terminal) since the last tick.
@@ -472,6 +494,9 @@ main() {
     init
 
     while true; do
+        # Invalidate the per-tick curfew_active() memo (see its definition).
+        _CURFEW_TICK_CACHED=""
+
         location="$(get_location)"
 
         if [ -n "$location" ]; then

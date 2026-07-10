@@ -96,11 +96,15 @@ export CURFEW_NET_IPT_CHAIN="FOCUS_CURFEW_NET"
 # Android's netd periodically reasserts the whole `filter` table via
 # iptables-restore, which atomically erases our custom chain (proven on-device:
 # the chain vanishes ~every 5s). The main enforcer tick (5s) rebuilds it but
-# leaves up-to-5s leak windows. This fast watchdog re-pins the chain every
-# CURFEW_NET_REASSERT_INTERVAL seconds *from a cached UID list* (no pm fork),
-# shrinking the leak to <=1s. The proper fix is netd's own per-UID firewall
-# (ndc/eBPF), tracked as a follow-up; this is the interim stopgap.
-export CURFEW_NET_REASSERT_INTERVAL=1
+# leaves up-to-5s leak windows. This watchdog re-pins the chain every
+# CURFEW_NET_REASSERT_INTERVAL seconds *from a cached UID list* (no pm fork).
+# A 1s interval was measured on-device to peg netd at ~30% CPU continuously
+# (an `iptables -L` fork every second, all night), overheating the phone -
+# throttled to 15s (matches HOSTS_CHECK_INTERVAL/LAUNCHER_CHECK_INTERVAL
+# pacing) as a deliberate tradeoff: leak window grows from <=1s to <=15s.
+# The proper fix is netd's own per-UID firewall (ndc/eBPF), tracked as a
+# follow-up; this remains an interim stopgap either way.
+export CURFEW_NET_REASSERT_INTERVAL=15
 export CURFEW_NET_UID_CACHE="$STATE_DIR/curfew_net_uids.txt"
 # Manual test toggle: `focus_ctl.sh curfew-test-on` writes this file to force
 # curfew ACTIVE regardless of clock, so the whole stack can be validated during
@@ -380,6 +384,9 @@ eu.kanade.tachiyomi.sy
 # --- Development ---
 com.github.android
 
+# --- Wake alarm sync (writes alarm time to GitHub Gist for PC sync) ---
+com.kuhy.wake_alarm_sync
+
 # --- Media / podcasts ---
 ac.mdiq.podcini.X
 is.xyz.mpv
@@ -467,6 +474,9 @@ oracle.idm.mobile.authenticator
 com.kunzisoft.keepass.libre
 # Smart home (control lights before sleep)
 com.xiaomi.smarthome
+
+# --- Wake alarm sync (must work at night to set tomorrow's alarm) ---
+com.kuhy.wake_alarm_sync
 
 # --- Good-for-you apps (not scroll traps; kept per your request) ---
 # Remove any of these if you want a stricter night.

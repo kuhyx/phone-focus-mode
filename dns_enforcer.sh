@@ -167,12 +167,49 @@ fill_chain_v6() {
     done
 }
 
+# ---- State-change gate ----
+#
+# fill_chain_v4/v6 flush and reinsert ~50-100 iptables/ip6tables rules each
+# call. Running that unconditionally every $DNS_CHECK_INTERVAL was measured
+# to peg netd at ~50% CPU on-device (contending the xtables lock) even
+# though the rule set never changes at runtime. Only rebuild when the chain
+# is actually missing, untethered from OUTPUT, or the wrong size (i.e.
+# someone/something - netd, a root shell, a flush - tampered with it).
+# Self-healing behavior described in the header comment is preserved; only
+# redundant identical rebuilds are skipped.
+
+expected_rule_count() {
+    # 2 fixed DoT rules (tcp+udp/853) + 4 rules per configured DoH/DNS IP.
+    local n=2 ip
+    for ip in "$@"; do
+        [ -z "$ip" ] && continue
+        [ "${ip#\#}" != "$ip" ] && continue
+        n=$((n + 4))
+    done
+    echo "$n"
+}
+
+chain_intact() {
+    local ipt="$1" expected="$2" actual
+    "$ipt" -C OUTPUT -j "$DNS_IPT_CHAIN" >/dev/null 2>&1 || return 1
+    actual="$("$ipt" -S "$DNS_IPT_CHAIN" 2>/dev/null | grep -c '^-A')"
+    [ "$actual" = "$expected" ]
+}
+
 enforce_iptables() {
     if command -v iptables >/dev/null 2>&1; then
-        ensure_chain iptables && fill_chain_v4
+        if chain_intact iptables "$(expected_rule_count $DNS_DOH_IPV4)"; then
+            :
+        elif ensure_chain iptables && fill_chain_v4; then
+            log "iptables (v4) DNS chain rebuilt (was missing/tampered)"
+        fi
     fi
     if command -v ip6tables >/dev/null 2>&1; then
-        ensure_chain ip6tables && fill_chain_v6
+        if chain_intact ip6tables "$(expected_rule_count $DNS_DOH_IPV6)"; then
+            :
+        elif ensure_chain ip6tables && fill_chain_v6; then
+            log "ip6tables (v6) DNS chain rebuilt (was missing/tampered)"
+        fi
     fi
 }
 
