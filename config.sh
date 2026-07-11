@@ -491,6 +491,9 @@ com.xiaomi.smarthome
 # --- Wake alarm sync (must work at night to set tomorrow's alarm) ---
 com.kuhy.wake_alarm_sync
 
+# --- Notes capture (offline-first; jot an idea before sleep, not a scroll trap) ---
+dev.kuhy.todo
+
 # --- Good-for-you apps (not scroll traps; kept per your request) ---
 # Remove any of these if you want a stricter night.
 com.stronglifts.app
