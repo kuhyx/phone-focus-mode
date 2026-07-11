@@ -306,7 +306,16 @@ com.shazam.android
 com.ichi2.anki
 com.metrolist.music
 org.mozilla.fenix
-org.fossify.clock
+# --- FOSS replacements for stock/Google apps (unhidden per request; hide the
+#     Google originals in the launcher, NOT via package-disable — see the
+#     BLOCKED_SYSTEM_APPS note about MTK bootloop/wipe risk on BL9000) ---
+# Clock You (replaces stock Clock), Camera, Teyin file manager (Google Files),
+# Rain weather, LibreFind (Google Search replacement)
+com.bnyro.clock
+com.vayunmathur.camera
+com.rama.teyin
+com.yoshi.rain
+com.jksalcedo.librefind
 ws.xsoh.etar
 com.fsck.k9
 com.kuhy.pomodoro_app
@@ -366,6 +375,7 @@ oracle.idm.mobile.authenticator
 com.kunzisoft.keepass.libre
 
 # --- Email & communication ---
+net.thunderbird.android.beta
 com.microsoft.office.outlook
 com.google.android.gm
 ch.protonmail.android
@@ -404,6 +414,9 @@ pl.orange.mojeorange
 
 # --- Fitness ---
 org.runnerup
+
+# --- Sports / football predictions ---
+de.kicktipp.mbookmark
 
 # --- Diet & calorie tracking ---
 com.fitatu.tracker
@@ -463,8 +476,8 @@ com.google.android.apps.maps
 # Calendar
 com.google.android.calendar
 ws.xsoh.etar
-# Alarm clock
-org.fossify.clock
+# Alarm clock (Clock You — the installed clock; org.fossify.clock is not present)
+com.bnyro.clock
 # Government / digital ID
 pl.nask.mobywatel
 # Authenticators / password vault (needed to log into banking)
@@ -483,6 +496,8 @@ com.kuhy.wake_alarm_sync
 com.stronglifts.app
 com.kuhy.workout_app
 org.runnerup
+# Music player — kept so a night run has music in the background
+com.metrolist.music
 com.fitatu.tracker
 com.waist.line
 com.maksimowiczm.foodyou
