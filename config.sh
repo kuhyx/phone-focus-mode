@@ -494,6 +494,9 @@ com.kuhy.wake_alarm_sync
 # --- Notes capture (offline-first; jot an idea before sleep, not a scroll trap) ---
 dev.kuhy.todo
 
+# --- Diet guard companion (log meals; health tool, not a scroll trap) ---
+com.kuhy.diet_guard_app
+
 # --- Good-for-you apps (not scroll traps; kept per your request) ---
 # Remove any of these if you want a stricter night.
 com.stronglifts.app
