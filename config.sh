@@ -436,7 +436,7 @@ com.zaneschepke.wireguardautotunnel
 org.connectbot
 
 # --- Self-hosted cloud client (dufs; browse/upload media, see
-#     ~/dufs_client and setup_cloud_gallery.sh) ---
+#     github.com/kuhyx/dufs-cloud → app/) ---
 com.kuhy.dufs_client
 "
 
