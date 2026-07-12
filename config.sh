@@ -434,6 +434,10 @@ com.xiaomi.smarthome
 #     linux_configuration/scripts/single_use/features/setup_wireguard_ssh.sh) ---
 com.zaneschepke.wireguardautotunnel
 org.connectbot
+
+# --- Self-hosted cloud client (dufs; browse/upload media, see
+#     ~/dufs_client and setup_cloud_gallery.sh) ---
+com.kuhy.dufs_client
 "
 
 # ============================================================
