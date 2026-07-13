@@ -374,6 +374,7 @@ do_deploy() {
     adb_cmd push "$SCRIPT_DIR/dns_enforcer.sh"       "/data/local/tmp/focus_stage/dns_enforcer.sh"
     adb_cmd push "$SCRIPT_DIR/launcher_enforcer.sh"  "/data/local/tmp/focus_stage/launcher_enforcer.sh"
     adb_cmd push "$SCRIPT_DIR/curfew_enforcer.sh"    "/data/local/tmp/focus_stage/curfew_enforcer.sh"
+    adb_cmd push "$SCRIPT_DIR/tether_enforcer.sh"    "/data/local/tmp/focus_stage/tether_enforcer.sh"
     adb_cmd push "$SCRIPT_DIR/workout_detector.sh"   "/data/local/tmp/focus_stage/workout_detector.sh"
     adb_cmd push "$SCRIPT_DIR/magisk_service.sh"     "/data/local/tmp/focus_stage/99-focus-mode.sh"
 
@@ -486,6 +487,7 @@ do_deploy() {
     adb_root "cp /data/local/tmp/focus_stage/dns_enforcer.sh       $REMOTE_DIR/dns_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/launcher_enforcer.sh  $REMOTE_DIR/launcher_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/curfew_enforcer.sh    $REMOTE_DIR/curfew_enforcer.sh"
+    adb_root "cp /data/local/tmp/focus_stage/tether_enforcer.sh    $REMOTE_DIR/tether_enforcer.sh"
     adb_root "cp /data/local/tmp/focus_stage/workout_detector.sh   $REMOTE_DIR/workout_detector.sh"
     if adb_cmd shell "test -f /data/local/tmp/focus_stage/sqlite3" 2>/dev/null; then
         adb_root "cp /data/local/tmp/focus_stage/sqlite3 $REMOTE_DIR/sqlite3"
@@ -572,13 +574,13 @@ do_deploy() {
     done; true"
 
     echo "[5/7] Setting permissions..."
-    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh $REMOTE_DIR/curfew_enforcer.sh $REMOTE_DIR/workout_detector.sh" || true
+    adb_root "chmod 755 $REMOTE_DIR/config.sh $REMOTE_DIR/focus_daemon.sh $REMOTE_DIR/focus_ctl.sh $REMOTE_DIR/hosts_enforcer.sh $REMOTE_DIR/dns_enforcer.sh $REMOTE_DIR/launcher_enforcer.sh $REMOTE_DIR/curfew_enforcer.sh $REMOTE_DIR/tether_enforcer.sh $REMOTE_DIR/workout_detector.sh" || true
     if grep -q '^export FOCUS_BOOT_AUTOSTART=1' "$SCRIPT_DIR/config.sh"; then
         adb_root "chmod 755 /data/adb/service.d/99-focus-mode.sh"
     fi
-    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/workout_detector.log"
+    adb_root "touch $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/tether_enforcer.log $REMOTE_DIR/workout_detector.log"
     # State files need 666 so the daemons can write regardless of SELinux context drift
-    adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/workout_detector.log" || true
+    adb_root "chmod 666 $REMOTE_DIR/disabled_by_focus.txt $REMOTE_DIR/focus_mode.log $REMOTE_DIR/hosts_enforcer.log $REMOTE_DIR/dns_enforcer.log $REMOTE_DIR/launcher_enforcer.log $REMOTE_DIR/tether_enforcer.log $REMOTE_DIR/workout_detector.log" || true
 
     echo "[6/7] Starting daemons..."
     # Stop existing daemons, then start fresh
@@ -587,11 +589,13 @@ do_deploy() {
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/curfew_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/tether_enforcer.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/workout_detector.sh' 2>/dev/null); do kill \"\$p\" 2>/dev/null || true; done"
     adb_root "kill \$(cat $REMOTE_DIR/daemon.pid 2>/dev/null)            2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/hosts_enforcer.pid 2>/dev/null)    2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/dns_enforcer.pid 2>/dev/null)      2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/launcher_enforcer.pid 2>/dev/null) 2>/dev/null; true"
+    adb_root "kill \$(cat $REMOTE_DIR/tether_enforcer.pid 2>/dev/null)   2>/dev/null; true"
     adb_root "kill \$(cat $REMOTE_DIR/workout_detector.pid 2>/dev/null)  2>/dev/null; true"
     sleep 1
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/focus_daemon.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
@@ -599,9 +603,10 @@ do_deploy() {
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/dns_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/launcher_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/curfew_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
+    adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/tether_enforcer.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     adb_root "for p in \$(pgrep -f '/data/local/tmp/focus_mode/workout_detector.sh' 2>/dev/null); do kill -9 \"\$p\" 2>/dev/null || true; done"
     sleep 1
-    adb_root "rm -f $REMOTE_DIR/daemon.pid $REMOTE_DIR/hosts_enforcer.pid $REMOTE_DIR/dns_enforcer.pid $REMOTE_DIR/launcher_enforcer.pid $REMOTE_DIR/workout_detector.pid"
+    adb_root "rm -f $REMOTE_DIR/daemon.pid $REMOTE_DIR/hosts_enforcer.pid $REMOTE_DIR/dns_enforcer.pid $REMOTE_DIR/launcher_enforcer.pid $REMOTE_DIR/tether_enforcer.pid $REMOTE_DIR/workout_detector.pid"
     # Start hosts enforcer first so hosts are locked before user can react.
     # Use --mount-master so bind mounts propagate to the global namespace
     # (where app processes live). Without this, only our isolated `su` session
@@ -628,6 +633,10 @@ do_deploy() {
     # Start night-curfew enforcer (grayscale + DND + optional net allow-list).
     # Always on; self-gates on the clock + focus mode, no-op during the day.
     adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/curfew_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
+    # Start hotspot/tethering enforcer (blocks forwarded/tethered traffic so a
+    # second phone on our hotspot can't bypass focus mode). Always on; self-gates
+    # on focus mode, no-op while away from home.
+    adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/tether_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
     adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/focus_daemon.sh </dev/null >/dev/null 2>/dev/null &'
 
     # Wait for hosts_enforcer to apply the bind mount and restart netd.

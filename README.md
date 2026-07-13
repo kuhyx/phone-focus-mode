@@ -227,6 +227,79 @@ focus_ctl.sh curfew-test-off   # blocked apps come BACK (the reconcile path)
 The clock parser fails **open** (treated as daytime) on a malformed time, so a
 broken `date` can never trap you behind the strict list.
 
+## Hotspot / tethering block (closes the "second phone" bypass)
+
+Every other network layer only filters **this** phone's own traffic:
+`/system/etc/hosts` is consulted by the phone's system resolver, and both
+`dns_enforcer` and the curfew net layer only touch the **OUTPUT** chain. When
+the phone shares its mobile data as a WiFi hotspot, a tethered second phone's
+packets are **FORWARDed + NAT'd** through this phone on a path none of that
+covers — so the second phone browses freely and defeats focus mode.
+
+`tether_enforcer.sh` closes that hole. It is always-on but **only acts while
+focus mode is ON** (i.e. you are at home, `current_mode.txt == focus`), and
+converges three levers every `TETHER_CHECK_INTERVAL` seconds:
+
+1. **Disable tether offload** — sets `settings global tether_offload_disabled 1`
+   so forwarded traffic is actually seen by netfilter instead of being shunted
+   around it by the hardware/BPF fast path. Snapshotted on entry, restored on
+   exit.
+2. **FORWARD blanket REJECT** — an `iptables`/`ip6tables` chain
+   (`FOCUS_TETHER_BLOCK`) pinned at position 1 of `FORWARD`, rejecting all
+   forwarded packets. This is the version-independent catch-all and covers
+   **WiFi, USB and Bluetooth** tethering. The phone's own traffic uses
+   OUTPUT/INPUT, never FORWARD, so normal connectivity is untouched. Rebuilt
+   only when tampered (chain-intact gate), so it does not fork an `iptables -L`
+   every second (that pegged netd and overheated the phone during curfew-net
+   tuning).
+3. **Stop the softAP** (best-effort, WiFi only, Android 11+) — `cmd wifi
+   stop-softap` each tick so the hotspot toggle visibly flips back off.
+
+On the transition away from home it restores the offload snapshot and tears the
+FORWARD chain down, leaving tethering usable.
+
+### Configuration (`config.sh`)
+
+```sh
+TETHER_ENFORCER_ENABLED=1     # master switch
+TETHER_CHECK_INTERVAL=5       # re-assert cadence (seconds)
+TETHER_STOP_SOFTAP_ENABLED=1  # also actively kill a running softAP
+```
+
+### Control
+
+```bash
+focus_ctl.sh tether-status     # enforcer state, offload flag, FORWARD chain
+focus_ctl.sh tether-test-on    # FORCE the block now (daytime validation)
+focus_ctl.sh tether-test-off   # clear the force
+focus_ctl.sh tether-stop       # escape hatch: stop it, restore tethering
+focus_ctl.sh tether-start      # (re)start the enforcer
+focus_ctl.sh tether-log        # enforcer log
+```
+
+The escape hatch is `tether-stop` over ADB (or a fresh `deploy.sh`), consistent
+with `dns_enforcer`/`launcher_enforcer` — there is no companion-app button.
+`tether_override` (created manually) suspends the block without stopping the
+daemon.
+
+### Validating before you trust it
+
+Because Android's tether offload can silently skip the FORWARD rule on some
+ROMs, validate on-device with a **real second phone** — do not trust rule
+counts:
+
+```bash
+focus_ctl.sh tether-test-on    # hotspot on + second phone browsing → it loses
+                               # internet within one interval; this phone stays
+                               # online. Watch: focus_ctl.sh tether-log
+focus_ctl.sh tether-test-off   # forwarding restored, second phone browses again
+```
+
+If the second phone keeps browsing with the block applied, offload is being
+bypassed: confirm the exact global key with
+`adb shell su -c 'settings list global | grep -i offload'` and update
+`TETHER_OFFLOAD_KEY` in `config.sh`.
+
 ## Updating
 
 After editing `config.sh` (e.g. changing whitelist):

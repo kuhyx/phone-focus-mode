@@ -18,6 +18,7 @@ chmod +x "$SCRIPT_DIR/hosts_enforcer.sh"
 chmod +x "$SCRIPT_DIR/dns_enforcer.sh"
 chmod +x "$SCRIPT_DIR/launcher_enforcer.sh"
 chmod +x "$SCRIPT_DIR/curfew_enforcer.sh" 2>/dev/null
+chmod +x "$SCRIPT_DIR/tether_enforcer.sh" 2>/dev/null
 chmod +x "$SCRIPT_DIR/workout_detector.sh" 2>/dev/null
 chmod +x "$SCRIPT_DIR/sqlite3" 2>/dev/null
 
@@ -46,6 +47,11 @@ setsid sh "$SCRIPT_DIR/launcher_enforcer.sh" </dev/null >/dev/null 2>&1 &
 # network allow-list) while the curfew window is open at home. Always on; it
 # self-gates on the clock + focus mode and is a no-op during the day.
 setsid sh "$SCRIPT_DIR/curfew_enforcer.sh" </dev/null >/dev/null 2>&1 &
+
+# Start hotspot/tethering enforcer - blocks forwarded (tethered) traffic so a
+# second phone on our hotspot can't bypass focus mode. Always on; it self-gates
+# on focus mode and is a no-op while away from home.
+setsid sh "$SCRIPT_DIR/tether_enforcer.sh" </dev/null >/dev/null 2>&1 &
 
 # Start focus daemon in a new session (detached from any controlling terminal)
 setsid sh "$SCRIPT_DIR/focus_daemon.sh" </dev/null >/dev/null 2>&1 &
