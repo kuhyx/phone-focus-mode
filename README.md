@@ -109,15 +109,15 @@ script doesn't need this flag because `post-fs-data` already runs there.
 
 ## File layout
 
-| File                | Purpose                                                |
-| ------------------- | ------------------------------------------------------ |
-| `config.sh`         | Coordinates, radius, whitelist, constants              |
-| `focus_daemon.sh`   | Main daemon — runs on device, loops every 60s          |
-| `focus_ctl.sh`      | Control utility — runs on device                       |
-| `curfew_enforcer.sh`| Night-curfew enforcer — grayscale + DND + optional net |
-| `hosts_enforcer.sh` | Bind-mounts `hosts.canonical` over `/system/etc/hosts` |
-| `magisk_service.sh` | Magisk boot hook → auto-starts both daemons            |
-| `deploy.sh`         | PC-side ADB deployment and control script              |
+| File                 | Purpose                                                |
+| -------------------- | ------------------------------------------------------ |
+| `config.sh`          | Coordinates, radius, whitelist, constants              |
+| `focus_daemon.sh`    | Main daemon — runs on device, loops every 60s          |
+| `focus_ctl.sh`       | Control utility — runs on device                       |
+| `curfew_enforcer.sh` | Night-curfew enforcer — grayscale + DND + optional net |
+| `hosts_enforcer.sh`  | Bind-mounts `hosts.canonical` over `/system/etc/hosts` |
+| `magisk_service.sh`  | Magisk boot hook → auto-starts both daemons            |
+| `deploy.sh`          | PC-side ADB deployment and control script              |
 
 ## Hosts hardening
 
@@ -159,8 +159,8 @@ scrolling. It activates only when focus mode is already ON (i.e. you are at
 home) **and** the local clock is inside the curfew window (default 23:00–05:00).
 Out of that window, or away from home, nothing changes.
 
-While the curfew is active it applies three allow-list layers — *block
-everything except a short essential list*:
+While the curfew is active it applies three allow-list layers — _block
+everything except a short essential list_:
 
 1. **Apps.** The daemon swaps the permissive `WHITELIST` for the strict
    `NIGHT_WHITELIST` (banking, maps, calendar, clock, authenticators, gov ID,
@@ -191,7 +191,7 @@ Edit `NIGHT_WHITELIST` (right below `WHITELIST`) to choose what stays usable at
 night. Allow-list by design: when in doubt, leave it out. The active keyboard
 and the core dialer/SMS/home apps are always protected automatically (a 1am
 reboot can never strand you without a keyboard), and the default browser is
-intentionally *not* protected at night so it can be disabled.
+intentionally _not_ protected at night so it can be disabled.
 
 ### Control
 
@@ -253,7 +253,7 @@ converges three levers every `TETHER_CHECK_INTERVAL` seconds:
    every second (that pegged netd and overheated the phone during curfew-net
    tuning).
 3. **Stop the softAP** (best-effort, WiFi only, Android 11+) — `cmd wifi
-   stop-softap` each tick so the hotspot toggle visibly flips back off.
+stop-softap` each tick so the hotspot toggle visibly flips back off.
 
 On the transition away from home it restores the offload snapshot and tears the
 FORWARD chain down, leaving tethering usable.
