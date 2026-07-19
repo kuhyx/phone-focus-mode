@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup EXIT
 
 WORKTREE="$TMP_DIR/worktree"
-mkdir -p "$WORKTREE/scripts/single_use/utils/android_guardian"
+mkdir -p "$WORKTREE/scripts/periodic_background/utils/android_guardian"
 cp "$TARGET_SCRIPT" "$WORKTREE/scripts/periodic_background/utils/android_guardian/service.sh"
 
 printf 'Checking skip-main avoids boot side effects...\n'
