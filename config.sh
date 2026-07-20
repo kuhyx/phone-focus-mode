@@ -338,6 +338,7 @@ com.kuhy.focusstatus
 com.stronglifts.app
 com.kuhy.workout_app
 com.kuhy.diet_guard_app
+com.kuhy.habit_stack
 com.shazam.android
 com.ichi2.anki
 com.metrolist.music
@@ -536,6 +537,9 @@ dev.kuhy.todo
 
 # --- Diet guard companion (log meals; health tool, not a scroll trap) ---
 com.kuhy.diet_guard_app
+
+# --- Habit Stack companion (habit tracking; health tool, not a scroll trap) ---
+com.kuhy.habit_stack
 
 # --- Good-for-you apps (not scroll traps; kept per your request) ---
 # Remove any of these if you want a stricter night.
