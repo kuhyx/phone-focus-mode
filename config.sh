@@ -466,6 +466,7 @@ com.Splitwise.SplitwiseMobile
 
 # --- Smart home ---
 com.xiaomi.smarthome
+com.tplink.iot
 
 # --- Remote SSH access via WireGuard (self-hosted, see
 #     linux_configuration/scripts/single_use/features/setup_wireguard_ssh.sh) ---
@@ -526,8 +527,10 @@ com.beemdevelopment.aegis
 com.azure.authenticator
 oracle.idm.mobile.authenticator
 com.kunzisoft.keepass.libre
-# Smart home (control lights before sleep)
+# Smart home (control lights before sleep; Tapo plug used for overnight
+# power-draw measurement, must be checkable during the curfew window)
 com.xiaomi.smarthome
+com.tplink.iot
 
 # --- Wake alarm sync (must work at night to set tomorrow's alarm) ---
 com.kuhy.wake_alarm_sync
