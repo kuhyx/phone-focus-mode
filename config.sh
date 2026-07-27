@@ -339,6 +339,7 @@ com.stronglifts.app
 com.kuhy.workout_app
 com.kuhy.diet_guard_app
 com.kuhy.habit_stack
+com.kuhy.home_inventory
 com.shazam.android
 com.ichi2.anki
 com.metrolist.music
