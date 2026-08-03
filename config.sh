@@ -15,6 +15,11 @@ SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 if [ ! -f "$SCRIPT_DIR/config_secrets.sh" ] && [ -f "/data/local/tmp/focus_mode/config_secrets.sh" ]; then
 	SCRIPT_DIR="/data/local/tmp/focus_mode"
 fi
+# config_secrets.sh is deliberately untracked (it holds secrets, see
+# .gitignore) and is created per-machine / pushed to the phone at deploy
+# time. It does not exist in a clean checkout, so the linter cannot follow
+# it there -- which is exactly what CI lints.
+# shellcheck disable=SC1091
 . "$SCRIPT_DIR/config_secrets.sh"
 
 # --- Radius in meters ---
