@@ -13,7 +13,7 @@ SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 # $0 points to the wrapper path rather than this file's directory. Fall back
 # to the canonical runtime location if config_secrets is not alongside $0.
 if [ ! -f "$SCRIPT_DIR/config_secrets.sh" ] && [ -f "/data/local/tmp/focus_mode/config_secrets.sh" ]; then
-    SCRIPT_DIR="/data/local/tmp/focus_mode"
+	SCRIPT_DIR="/data/local/tmp/focus_mode"
 fi
 . "$SCRIPT_DIR/config_secrets.sh"
 
@@ -340,6 +340,7 @@ com.kuhy.workout_app
 com.kuhy.diet_guard_app
 com.kuhy.habit_stack
 com.kuhy.home_inventory
+com.kuhy.epopeja_karta
 com.shazam.android
 com.ichi2.anki
 com.metrolist.music
