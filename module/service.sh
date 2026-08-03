@@ -100,7 +100,11 @@ $installed_packages
 package:$package
 "*)
 			log "Blocked app detected: $package - Uninstalling..."
-			pm uninstall "$package" 2>/dev/null && log "Uninstalled: $package" || log "Failed to uninstall: $package"
+			if pm uninstall "$package" 2>/dev/null; then
+				log "Uninstalled: $package"
+			else
+				log "Failed to uninstall: $package"
+			fi
 			;;
 		esac
 	done <"$BLOCKED_APPS_FILE"
