@@ -68,7 +68,12 @@ _auto_repair_minor_drift() {
         fi
     fi
 
-    [[ ${repaired} -gt 0 ]] && _info "Minor repairs applied: ${repaired}" || true
+    # `|| true` retained from the original `&& ... || true`: this is the last
+    # statement of the function under `set -e`, so a failed write to stderr
+    # would otherwise abort the caller.
+    if [[ ${repaired} -gt 0 ]]; then
+        _info "Minor repairs applied: ${repaired}" || true
+    fi
 }
 
 cmd_auto() {

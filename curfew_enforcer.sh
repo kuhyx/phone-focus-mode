@@ -137,7 +137,9 @@ restore_grayscale() {
     case "$en" in ''|null) en=0 ;; esac
     case "$lv" in ''|null) lv=-1 ;; esac
     settings put secure accessibility_display_daltonizer_enabled "$en" 2>/dev/null || true
-    [ "$lv" != "-1" ] && settings put secure accessibility_display_daltonizer "$lv" 2>/dev/null || true
+    if [ "$lv" != "-1" ]; then
+        settings put secure accessibility_display_daltonizer "$lv" 2>/dev/null || true
+    fi
 }
 
 # ---- Layer 2: Do-Not-Disturb (alarms only) ----
@@ -232,8 +234,9 @@ NET_BUILT=""
 # Refresh the cached UID list (one `pm list packages -U` fork). Called once per
 # main tick so the fast watchdog can rebuild from the cache without forking.
 refresh_uid_cache() {
-    night_uids > "$CURFEW_NET_UID_CACHE.tmp" 2>/dev/null \
-        && mv "$CURFEW_NET_UID_CACHE.tmp" "$CURFEW_NET_UID_CACHE" 2>/dev/null || true
+    if night_uids > "$CURFEW_NET_UID_CACHE.tmp" 2>/dev/null; then
+        mv "$CURFEW_NET_UID_CACHE.tmp" "$CURFEW_NET_UID_CACHE" 2>/dev/null || true
+    fi
 }
 
 # Rebuild the chain from cache for whichever iptables variants exist. No pm fork.

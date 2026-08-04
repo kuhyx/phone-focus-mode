@@ -55,7 +55,7 @@ acquire_lock() {
         old_pid="$(cat "$PIDFILE")"
         if kill -0 "$old_pid" 2>/dev/null; then
             local cmdline
-            cmdline="$(cat "/proc/$old_pid/cmdline" 2>/dev/null | tr '\0' ' ')"
+            cmdline="$(tr '\0' ' ' < "/proc/$old_pid/cmdline" 2>/dev/null)"
             if echo "$cmdline" | grep -q "hosts_enforcer"; then
                 echo "hosts_enforcer already running (PID $old_pid)"
                 exit 0
@@ -82,7 +82,7 @@ sha256_of() {
 workout_active() {
     [ -f "$WORKOUT_ACTIVE_FILE" ] || return 1
     local v
-    v="$(cat "$WORKOUT_ACTIVE_FILE" 2>/dev/null | tr -d '[:space:]')"
+    v="$(tr -d '[:space:]' < "$WORKOUT_ACTIVE_FILE" 2>/dev/null)"
     [ "$v" = "1" ]
 }
 

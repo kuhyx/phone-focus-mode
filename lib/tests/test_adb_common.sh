@@ -172,7 +172,8 @@ TRUSTED_MODEL='Pixel 7rm -rf /dangerline2'
 TRUSTED_FINGERPRINT='google/pixel:14/UP1A.231005.007/evilcmd'
 EOF
 
-	if (adb_select_device >/dev/null 2>&1); then
+	# Empty arg = no requested serial, which is what this case exercises.
+	if (adb_select_device "" >/dev/null 2>&1); then
 		return 1
 	fi
 
