@@ -1,0 +1,8 @@
+boot_a
+boot_b
+init_boot_a
+init_boot_b
+vbmeta_a
+vbmeta_b
+super
+userdata

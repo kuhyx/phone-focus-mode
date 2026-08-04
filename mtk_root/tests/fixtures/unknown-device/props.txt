@@ -1,0 +1,4 @@
+ro.product.manufacturer=Xiaomi
+ro.product.model=Redmi Note 12
+ro.board.platform=sm6225
+ro.hardware=qcom
