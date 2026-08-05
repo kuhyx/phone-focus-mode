@@ -90,3 +90,50 @@ class TestMain:
         result = dest.read_text(encoding="utf-8")
         assert "www.youtube.com" not in result
         assert "keepme.com" in result
+
+
+class TestSubdomainMatching:
+    """Regression tests for the exact-match bug fixed on 2026-08-05.
+
+    The original implementation tested ``name.lower() in unblock``, i.e. exact
+    set membership. YouTube streams video from dynamically named CDN hosts, so
+    an allowlist entry of ``googlevideo.com`` released nothing that actually
+    carried video and playback stayed blocked during workouts.
+    """
+
+    def test_releases_dynamic_cdn_subdomains(self, tmp_path: Path) -> None:
+        """A parent domain releases the CDN hosts beneath it."""
+        src = tmp_path / "hosts"
+        src.write_text(
+            "0.0.0.0 googlevideo.com\n"
+            "0.0.0.0 r1---sn-4g5e6nls.googlevideo.com\n"
+            "0.0.0.0 r1---sn-4g5lne7s.googlevideo.com\n"
+            "0.0.0.0 keepme.com\n",
+            encoding="utf-8",
+        )
+        dest = tmp_path / "out"
+        _strip(src, dest, frozenset({"googlevideo.com"}))
+        result = dest.read_text(encoding="utf-8")
+        assert "googlevideo.com" not in result
+        assert "keepme.com" in result
+
+    def test_does_not_release_lookalike_domains(self, tmp_path: Path) -> None:
+        """Suffix matching must not be fooled by substring similarity."""
+        src = tmp_path / "hosts"
+        src.write_text(
+            "0.0.0.0 notgooglevideo.com\n0.0.0.0 googlevideo.com.evil.net\n",
+            encoding="utf-8",
+        )
+        dest = tmp_path / "out"
+        _strip(src, dest, frozenset({"googlevideo.com"}))
+        result = dest.read_text(encoding="utf-8")
+        assert "notgooglevideo.com" in result
+        assert "googlevideo.com.evil.net" in result
+
+    def test_case_and_trailing_dot_are_normalised(self, tmp_path: Path) -> None:
+        """Host names are compared case-insensitively and without the root dot."""
+        src = tmp_path / "hosts"
+        src.write_text("0.0.0.0 WWW.YouTube.COM.\n", encoding="utf-8")
+        dest = tmp_path / "out"
+        _strip(src, dest, frozenset({"youtube.com"}))
+        assert dest.read_text(encoding="utf-8") == ""

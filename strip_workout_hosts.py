@@ -20,6 +20,21 @@ import sys
 _MIN_HOSTS_FIELDS = 2
 
 
+def _matches_unblock(name: str, unblock: frozenset[str]) -> bool:
+    """Return whether ``name`` is an unblocked domain or a subdomain of one.
+
+    Suffix matching, not equality. YouTube serves video from dynamically named
+    CDN hosts such as ``r1---sn-4g5e6nls.googlevideo.com``; testing those for
+    exact membership against ``googlevideo.com`` never matches, so playback
+    stayed blocked during workouts even though the domain was allowlisted.
+    """
+    candidate = name.lower().rstrip(".")
+    return any(
+        candidate == domain or candidate.endswith(f".{domain}")
+        for domain in (entry.lower().rstrip(".") for entry in unblock)
+    )
+
+
 def _strip(source: Path, dest: Path, unblock: frozenset[str]) -> None:
     """Write ``source`` to ``dest`` minus lines that map an unblocked domain."""
     text = source.read_text(encoding="utf-8", errors="replace")
@@ -32,7 +47,7 @@ def _strip(source: Path, dest: Path, unblock: frozenset[str]) -> None:
         parts = stripped.split()
         names = parts[1:]
         if len(parts) >= _MIN_HOSTS_FIELDS and any(
-            name.lower() in unblock for name in names
+            _matches_unblock(name, unblock) for name in names
         ):
             continue
         kept.append(line)
