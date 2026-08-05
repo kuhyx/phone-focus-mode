@@ -71,6 +71,21 @@ acquire_lock() {
 # ---- Private DNS ----
 
 ensure_private_dns_off() {
+	# Two modes, selected by DNS_TRUSTED_DOT_HOST:
+	#
+	#   empty  - the original behaviour. DoT is a bypass channel, so Private
+	#            DNS is forced off and every 853 connection is rejected.
+	#   set    - DoT is the *enforcement* channel. Private DNS is pinned to
+	#            our own filtering resolver, and pinning it is what stops the
+	#            user picking an unfiltered one from Settings.
+	#
+	# The pinned case is what an unrooted phone needs, since it has no hosts
+	# file to fall back to.
+	if [ -n "${DNS_TRUSTED_DOT_HOST:-}" ]; then
+		ensure_private_dns_pinned
+		return
+	fi
+
 	local mode
 	mode="$(settings get global private_dns_mode 2>/dev/null)"
 	# Possible values: "off", "opportunistic", "hostname", null (default=opportunistic)
@@ -85,6 +100,25 @@ ensure_private_dns_off() {
 	if [ -n "$spec" ] && [ "$spec" != "null" ]; then
 		settings delete global private_dns_specifier 2>/dev/null
 		log "Cleared private_dns_specifier (was '$spec')"
+	fi
+}
+
+ensure_private_dns_pinned() {
+	# Hold Private DNS on our own resolver. Re-asserted every check, so a
+	# change made in Settings is reverted within DNS_CHECK_INTERVAL.
+	local mode spec
+	spec="$(settings get global private_dns_specifier 2>/dev/null)"
+	if [ "$spec" != "$DNS_TRUSTED_DOT_HOST" ]; then
+		settings put global private_dns_specifier "$DNS_TRUSTED_DOT_HOST" 2>/dev/null
+		log "private_dns_specifier was '$spec' - pinned to '$DNS_TRUSTED_DOT_HOST'"
+	fi
+	# Set the specifier before the mode: switching to "hostname" while the
+	# specifier still names someone else would briefly route lookups through
+	# that other resolver.
+	mode="$(settings get global private_dns_mode 2>/dev/null)"
+	if [ "$mode" != "hostname" ]; then
+		settings put global private_dns_mode hostname 2>/dev/null
+		log "Private DNS was '$mode' - forced to 'hostname'"
 	fi
 }
 
@@ -117,10 +151,35 @@ ensure_chain() {
 	fi
 }
 
+trusted_dot_ips() {
+	# Echo the trusted resolver's addresses of the given family, one per line.
+	# $1 is "4" or "6". Literals come from DNS_TRUSTED_DOT_IPS; anything else
+	# is ignored, because resolving the resolver's own name here would be
+	# circular once Private DNS is pinned to it.
+	local want="$1" ip
+	[ -z "${DNS_TRUSTED_DOT_HOST:-}" ] && return 0
+	for ip in ${DNS_TRUSTED_DOT_IPS:-}; do
+		[ -z "$ip" ] && continue
+		[ "${ip#\#}" != "$ip" ] && continue
+		case "$ip" in
+		*:*) [ "$want" = "6" ] && printf '%s\n' "$ip" ;;
+		*) [ "$want" = "4" ] && printf '%s\n' "$ip" ;;
+		esac
+	done
+}
+
 fill_chain_v4() {
 	# Flush and refill so we always converge to the intended rule set.
 	iptables -F "$DNS_IPT_CHAIN" 2>/dev/null || return 1
-	# Drop DoT everywhere. This is a narrow port rule - there's no legit
+	# Allow the one DoT resolver we trust, BEFORE the blanket reject below.
+	# Order matters: iptables takes the first match, so an ACCEPT appended
+	# after the REJECT would never be reached.
+	local trusted
+	for trusted in $(trusted_dot_ips 4); do
+		iptables -A "$DNS_IPT_CHAIN" -d "$trusted" -p tcp --dport 853 \
+			-j ACCEPT 2>/dev/null || true
+	done
+	# Drop DoT everywhere else. This is a narrow port rule - there's no legit
 	# reason for arbitrary apps to talk 853/tcp on Android.
 	iptables -A "$DNS_IPT_CHAIN" -p tcp --dport 853 -j REJECT \
 		--reject-with tcp-reset 2>/dev/null || true
@@ -147,6 +206,11 @@ fill_chain_v4() {
 
 fill_chain_v6() {
 	ip6tables -F "$DNS_IPT_CHAIN" 2>/dev/null || return 1
+	local trusted
+	for trusted in $(trusted_dot_ips 6); do
+		ip6tables -A "$DNS_IPT_CHAIN" -d "$trusted" -p tcp --dport 853 \
+			-j ACCEPT 2>/dev/null || true
+	done
 	ip6tables -A "$DNS_IPT_CHAIN" -p tcp --dport 853 -j REJECT \
 		--reject-with tcp-reset 2>/dev/null || true
 	ip6tables -A "$DNS_IPT_CHAIN" -p udp --dport 853 -j REJECT \
@@ -179,12 +243,24 @@ fill_chain_v6() {
 # redundant identical rebuilds are skipped.
 
 expected_rule_count() {
-	# 2 fixed DoT rules (tcp+udp/853) + 4 rules per configured DoH/DNS IP.
+	# 2 fixed DoT rules (tcp+udp/853) + 4 rules per configured DoH/DNS IP,
+	# plus 1 ACCEPT per trusted-resolver address of this family. $1 is the
+	# family ("4"/"6"); the remaining arguments are the DoH/DNS IPs.
+	#
+	# This has to match fill_chain_* exactly. chain_intact() compares the
+	# live rule count against this number and rebuilds on any mismatch, so
+	# an undercount here means a rebuild every DNS_CHECK_INTERVAL seconds --
+	# a silent fork storm that also drops the connection each time.
+	local family="$1"
+	shift
 	local n=2 ip
 	for ip in "$@"; do
 		[ -z "$ip" ] && continue
 		[ "${ip#\#}" != "$ip" ] && continue
 		n=$((n + 4))
+	done
+	for ip in $(trusted_dot_ips "$family"); do
+		n=$((n + 1))
 	done
 	echo "$n"
 }
@@ -202,7 +278,7 @@ enforce_iptables() {
 		# configured IP list. This runs under /system/bin/sh on the phone, where
 		# arrays do not exist, so an unquoted expansion is the POSIX way to do it.
 		# shellcheck disable=SC2086
-		if chain_intact iptables "$(expected_rule_count $DNS_DOH_IPV4)"; then
+		if chain_intact iptables "$(expected_rule_count 4 $DNS_DOH_IPV4)"; then
 			:
 		elif ensure_chain iptables && fill_chain_v4; then
 			log "iptables (v4) DNS chain rebuilt (was missing/tampered)"
@@ -211,7 +287,7 @@ enforce_iptables() {
 	if command -v ip6tables >/dev/null 2>&1; then
 		# Intentional word split, as above.
 		# shellcheck disable=SC2086
-		if chain_intact ip6tables "$(expected_rule_count $DNS_DOH_IPV6)"; then
+		if chain_intact ip6tables "$(expected_rule_count 6 $DNS_DOH_IPV6)"; then
 			:
 		elif ensure_chain ip6tables && fill_chain_v6; then
 			log "ip6tables (v6) DNS chain rebuilt (was missing/tampered)"

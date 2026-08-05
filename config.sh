@@ -231,6 +231,22 @@ i9.ytimg.com
 # endpoints so lookups fall back to the system resolver -> hosts file.
 export DNS_CHECK_INTERVAL=20
 export DNS_LOG="$STATE_DIR/dns_enforcer.log"
+# --- Trusted DoT resolver (opt-in, empty = old behaviour) ---
+# Set this to the hostname of a DoT resolver you control, and the enforcer
+# switches from "no DoT at all" to "only YOUR DoT". Two things change:
+#   1. an ACCEPT for that resolver's IPs is inserted BEFORE the blanket
+#      853 REJECT, so the connection survives;
+#   2. private_dns_mode is pinned to "hostname" with this specifier, instead
+#      of being forced off -- so the phone cannot silently fall back to a
+#      resolver that does not filter.
+# Leave EMPTY to keep the original behaviour (Private DNS forced off, all
+# 853 rejected). Do not point this at a public resolver: the whole point is
+# that the resolver applies your blocklist. See python_pkg/focus_policy.
+export DNS_TRUSTED_DOT_HOST="dns.kuhy.duckdns.org"
+# Where to resolve DNS_TRUSTED_DOT_HOST when Private DNS is pinned to it.
+# Chicken-and-egg: the resolver's own name must resolve without using it.
+# Space-separated IPv4/IPv6 literals; leave empty to resolve at runtime.
+export DNS_TRUSTED_DOT_IPS="10.8.0.1"
 # iptables chain used exclusively by us; we flush+refill it every check.
 export DNS_IPT_CHAIN="FOCUS_DNS_BLOCK"
 # DoH/DoT endpoints to DROP. Well-known public resolvers used by browsers
