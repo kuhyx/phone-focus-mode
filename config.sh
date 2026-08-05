@@ -242,11 +242,11 @@ export DNS_LOG="$STATE_DIR/dns_enforcer.log"
 # Leave EMPTY to keep the original behaviour (Private DNS forced off, all
 # 853 rejected). Do not point this at a public resolver: the whole point is
 # that the resolver applies your blocklist. See python_pkg/focus_policy.
-export DNS_TRUSTED_DOT_HOST="dns.kuhy.duckdns.org"
+export DNS_TRUSTED_DOT_HOST=""
 # Where to resolve DNS_TRUSTED_DOT_HOST when Private DNS is pinned to it.
 # Chicken-and-egg: the resolver's own name must resolve without using it.
 # Space-separated IPv4/IPv6 literals; leave empty to resolve at runtime.
-export DNS_TRUSTED_DOT_IPS="10.8.0.1"
+export DNS_TRUSTED_DOT_IPS=""
 # iptables chain used exclusively by us; we flush+refill it every check.
 export DNS_IPT_CHAIN="FOCUS_DNS_BLOCK"
 # DoH/DoT endpoints to DROP. Well-known public resolvers used by browsers
