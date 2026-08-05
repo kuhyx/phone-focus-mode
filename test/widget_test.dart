@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/main.dart';
+import 'package:focus_owner/policy.dart';
 
 /// Builds a channel whose handler answers from [responses], recording calls.
 ({MethodChannel channel, List<MethodCall> calls}) _fakeChannel(
@@ -28,6 +29,24 @@ Map<String, Object?> _statusMap({bool isDeviceOwner = false}) => {
       'sdkInt': 36,
       'restrictionsApplied': false,
     };
+
+/// Minimal policy so widget tests never touch the (empty) test rootBundle.
+Future<FocusPolicy> _stubPolicy() async => FocusPolicy.fromJson({
+      'schema_version': kSupportedSchemaVersion,
+      'home': {
+        'latitude': null,
+        'longitude': null,
+        'radius_m': 150.0,
+        'hysteresis_m': 30.0,
+      },
+      'curfew': {'start': '23:00', 'end': '05:00'},
+      'launcher_package': 'com.launcher',
+      'allowed_packages': ['com.good'],
+      'night_allowed_packages': <String>[],
+      'never_disable_prefixes': <String>[],
+      'workout_unblock_domains': ['youtube.com'],
+      'browser_packages': <String>[],
+    });
 
 void main() {
   group('DevicePolicyStatus', () {
@@ -80,7 +99,12 @@ void main() {
         (tester) async {
       final fake = _fakeChannel({'status': _statusMap()});
       await tester.pumpWidget(
-        MaterialApp(home: StatusPage(policy: DevicePolicy(fake.channel))),
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -91,7 +115,12 @@ void main() {
     testWidgets('shows the release button when device owner', (tester) async {
       final fake = _fakeChannel({'status': _statusMap(isDeviceOwner: true)});
       await tester.pumpWidget(
-        MaterialApp(home: StatusPage(policy: DevicePolicy(fake.channel))),
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -105,7 +134,12 @@ void main() {
         'releaseDeviceOwner': true,
       });
       await tester.pumpWidget(
-        MaterialApp(home: StatusPage(policy: DevicePolicy(fake.channel))),
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -128,7 +162,12 @@ void main() {
         'releaseDeviceOwner': true,
       });
       await tester.pumpWidget(
-        MaterialApp(home: StatusPage(policy: DevicePolicy(fake.channel))),
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:focus_owner/device_policy.dart';
+import 'package:focus_owner/policy.dart';
 
 void main() => runApp(const FocusOwnerApp());
 
@@ -43,9 +44,16 @@ class FocusOwnerApp extends StatelessWidget {
 /// Shows provisioning state and offers the one action this build supports:
 /// giving up device ownership.
 class StatusPage extends StatefulWidget {
-  const StatusPage({super.key, this.policy = const DevicePolicy()});
+  const StatusPage({
+    super.key,
+    this.policy = const DevicePolicy(),
+    this.loadFocusPolicy = FocusPolicy.load,
+  });
 
   final DevicePolicy policy;
+
+  /// Injectable so tests can supply a policy without a rootBundle asset.
+  final Future<FocusPolicy> Function() loadFocusPolicy;
 
   @override
   State<StatusPage> createState() => _StatusPageState();
@@ -53,6 +61,8 @@ class StatusPage extends StatefulWidget {
 
 class _StatusPageState extends State<StatusPage> {
   DevicePolicyStatus? _status;
+  FocusPolicy? _focusPolicy;
+  String? _policyError;
   String? _error;
   bool _busy = false;
 
@@ -64,6 +74,11 @@ class _StatusPageState extends State<StatusPage> {
 
   Future<void> _refresh() async {
     setState(() => _busy = true);
+    await Future.wait([_loadDeviceStatus(), _loadPolicy()]);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _loadDeviceStatus() async {
     try {
       final status = await widget.policy.status();
       if (!mounted) return;
@@ -74,8 +89,25 @@ class _StatusPageState extends State<StatusPage> {
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message ?? 'Could not read device policy state');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _loadPolicy() async {
+    try {
+      final policy = await widget.loadFocusPolicy();
+      if (!mounted) return;
+      setState(() {
+        _focusPolicy = policy;
+        _policyError = null;
+      });
+    } on PolicyFormatException catch (e) {
+      // A policy that cannot be parsed must be reported, never silently
+      // treated as an empty allowlist - that would block everything.
+      if (!mounted) return;
+      setState(() => _policyError = e.message);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _policyError = '$e');
     }
   }
 
@@ -126,7 +158,13 @@ class _StatusPageState extends State<StatusPage> {
     if (error != null) {
       body = const _Message(text: 'Could not read state', color: _kDanger);
     } else if (status != null) {
-      body = _StatusBody(status: status, busy: _busy, onRelease: _release);
+      body = _StatusBody(
+        status: status,
+        focusPolicy: _focusPolicy,
+        policyError: _policyError,
+        busy: _busy,
+        onRelease: _release,
+      );
     } else {
       body = const Center(child: CircularProgressIndicator());
     }
@@ -152,16 +190,21 @@ class _StatusPageState extends State<StatusPage> {
 class _StatusBody extends StatelessWidget {
   const _StatusBody({
     required this.status,
+    required this.focusPolicy,
+    required this.policyError,
     required this.busy,
     required this.onRelease,
   });
 
   final DevicePolicyStatus status;
+  final FocusPolicy? focusPolicy;
+  final String? policyError;
   final bool busy;
   final Future<void> Function() onRelease;
 
   @override
   Widget build(BuildContext context) {
+    final policy = focusPolicy;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -173,6 +216,37 @@ class _StatusBody extends StatelessWidget {
           label: 'Restrictions',
           value: status.restrictionsApplied ? 'applied' : 'none (inert build)',
         ),
+        const SizedBox(height: _kGap),
+        const Divider(color: _kMuted),
+        const SizedBox(height: _kGap / 2),
+        if (policyError != null)
+          _Message(text: 'Policy: $policyError', color: _kDanger)
+        else if (policy == null)
+          const _Message(text: 'Policy: loading...', color: _kMuted)
+        else ...[
+          _Row(
+            label: 'Allowed apps',
+            value: '${policy.allowedPackages.length}'
+                ' (${policy.nightAllowedPackages.length} at night)',
+          ),
+          _Row(
+            label: 'Curfew',
+            value: policy.curfew == null
+                ? 'disabled'
+                : '${_hhmm(policy.curfew!.startMinutes)}'
+                    '-${_hhmm(policy.curfew!.endMinutes)}',
+          ),
+          _Row(
+            label: 'Home radius',
+            value: policy.home.hasCoordinates
+                ? '${policy.home.radiusM.round()} m'
+                : '${policy.home.radiusM.round()} m (coords redacted)',
+          ),
+          _Row(
+            label: 'Workout domains',
+            value: '${policy.workoutUnblockDomains.length}',
+          ),
+        ],
         const SizedBox(height: _kGap * 2),
         if (status.isDeviceOwner)
           FilledButton(
@@ -188,6 +262,13 @@ class _StatusBody extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Formats minutes-since-midnight as HH:MM.
+String _hhmm(int minutes) {
+  final h = (minutes ~/ 60).toString().padLeft(2, '0');
+  final m = (minutes % 60).toString().padLeft(2, '0');
+  return '$h:$m';
 }
 
 class _Row extends StatelessWidget {
