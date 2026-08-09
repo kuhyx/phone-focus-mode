@@ -362,6 +362,7 @@ com.kuhy.diet_guard_app
 com.kuhy.habit_stack
 com.kuhy.home_inventory
 com.kuhy.epopeja_karta
+com.kuhy.untools
 com.shazam.android
 com.ichi2.anki
 com.metrolist.music
