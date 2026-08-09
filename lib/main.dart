@@ -111,6 +111,22 @@ class _StatusPageState extends State<StatusPage> {
     }
   }
 
+  Future<void> _runNow() async {
+    setState(() => _busy = true);
+    final started = await widget.policy.runEnforcementNow();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          started
+              ? 'Enforcement run started; schedule armed'
+              : 'Could not start enforcement',
+        ),
+      ),
+    );
+  }
+
   Future<void> _release() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -164,6 +180,7 @@ class _StatusPageState extends State<StatusPage> {
         policyError: _policyError,
         busy: _busy,
         onRelease: _release,
+        onRunNow: _runNow,
       );
     } else {
       body = const Center(child: CircularProgressIndicator());
@@ -194,6 +211,7 @@ class _StatusBody extends StatelessWidget {
     required this.policyError,
     required this.busy,
     required this.onRelease,
+    required this.onRunNow,
   });
 
   final DevicePolicyStatus status;
@@ -201,6 +219,7 @@ class _StatusBody extends StatelessWidget {
   final String? policyError;
   final bool busy;
   final Future<void> Function() onRelease;
+  final Future<void> Function() onRunNow;
 
   @override
   Widget build(BuildContext context) {
@@ -248,6 +267,11 @@ class _StatusBody extends StatelessWidget {
           ),
         ],
         const SizedBox(height: _kGap * 2),
+        OutlinedButton(
+          onPressed: busy ? null : onRunNow,
+          child: const Text('Run enforcement now'),
+        ),
+        const SizedBox(height: _kGap),
         if (status.isDeviceOwner)
           FilledButton(
             onPressed: busy ? null : onRelease,

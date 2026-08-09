@@ -31,6 +31,17 @@ class MainActivity : FlutterActivity() {
                             result.success(bridge.isApplicationHidden(pkg))
                         }
                     }
+                    "runEnforcementNow" -> {
+                        // Also the only way to arm the schedule on a device
+                        // that has not rebooted since install: the service
+                        // schedules the next run at the end of each pass.
+                        EnforcementService.start(applicationContext)
+                        result.success(true)
+                    }
+                    "cancelEnforcement" -> {
+                        EnforcementScheduler(applicationContext).cancel()
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }

@@ -1,4 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- USE_EXACT_ALARM rather than SCHEDULE_EXACT_ALARM: the latter is
+         user-revocable and was observed denied by default on Android 16,
+         which turned a curfew boundary into a +26 minute window. This app's
+         whole function is acting at specific times, which is the documented
+         qualifying use, and it is granted at install with no runtime prompt. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Coarse is enough for a 150 m geofence and is the cheaper grant to ask
+         for; background access is what makes the gate work while the screen is
+         off, and is requested separately at runtime. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Needed to enumerate installed packages for the allowlist sweep. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application
         android:label="focus_owner"
         android:name="${applicationName}"
@@ -38,6 +55,35 @@
                 android:resource="@xml/device_admin" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Applies one enforcement pass, then schedules the next. Not
+             resident: the alarm brings it back. -->
+        <service
+            android:name=".EnforcementService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Applies the device-owner focus policy at scheduled times" />
+        </service>
+
+        <receiver
+            android:name=".EnforcementAlarmReceiver"
+            android:exported="false" />
+
+        <!-- directBootAware so LOCKED_BOOT_COMPLETED can re-arm the schedule
+             before the user unlocks; BOOT_COMPLETED alone does not arrive
+             until first unlock. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:directBootAware="true"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

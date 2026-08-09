@@ -49,6 +49,18 @@ class DevicePolicy {
     return DevicePolicyStatus.fromMap(result!);
   }
 
+  /// Runs one enforcement pass now and arms the schedule.
+  ///
+  /// The service schedules the following run at the end of each pass, so this
+  /// is also how the chain is started on a device that has not rebooted since
+  /// the app was installed.
+  Future<bool> runEnforcementNow() async =>
+      await channel.invokeMethod<bool>('runEnforcementNow') ?? false;
+
+  /// Cancels any pending scheduled evaluation.
+  Future<bool> cancelEnforcement() async =>
+      await channel.invokeMethod<bool>('cancelEnforcement') ?? false;
+
   /// Relinquishes device ownership without wiping the device.
   ///
   /// This is the escape hatch. It is deliberately reachable from the app's
