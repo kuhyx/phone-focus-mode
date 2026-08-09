@@ -41,6 +41,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- ADB-driveable hook for the app-hiding persistence test. Not
+             exported: only the shell user and this app can broadcast to it. -->
+        <receiver
+            android:name=".HideTestReceiver"
+            android:exported="true"
+            android:permission="android.permission.MANAGE_DEVICE_ADMINS">
+            <intent-filter>
+                <action android:name="com.kuhy.focus_owner.HIDE" />
+                <action android:name="com.kuhy.focus_owner.QUERY" />
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

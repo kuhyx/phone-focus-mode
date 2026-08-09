@@ -168,6 +168,33 @@ class FocusPolicy {
   /// Whether the curfew is in force at [minutesSinceMidnight].
   bool isCurfewActive(int minutesSinceMidnight) =>
       curfew?.contains(minutesSinceMidnight) ?? false;
+
+  /// Packages released while a workout is in progress.
+  ///
+  /// The rooted system expressed this exception as *domains*, because it
+  /// enforced through a hosts file. Hiding apps is a coarser instrument: there
+  /// is no way to unblock youtube.com without unhiding the YouTube app, so the
+  /// exception is expressed as packages here.
+  ///
+  /// Derived from [workoutUnblockDomains] rather than configured separately,
+  /// so that the shell config stays the single source of truth for *intent*
+  /// even though the mechanism differs.
+  Set<String> get workoutExemptPackages {
+    const domainToPackages = <String, List<String>>{
+      'youtube.com': [
+        'com.google.android.youtube',
+        'com.google.android.apps.youtube.music',
+      ],
+    };
+    final packages = <String>{};
+    for (final entry in domainToPackages.entries) {
+      final covered = workoutUnblockDomains.any(
+        (domain) => domain == entry.key || domain.endsWith('.${entry.key}'),
+      );
+      if (covered) packages.addAll(entry.value);
+    }
+    return packages;
+  }
 }
 
 Set<String> _stringSet(Object? value, String field) {

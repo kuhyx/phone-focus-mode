@@ -14,6 +14,23 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "status" -> result.success(bridge.status())
                     "releaseDeviceOwner" -> result.success(bridge.releaseDeviceOwner())
+                    "setApplicationHidden" -> {
+                        val pkg = call.argument<String>("package")
+                        val hidden = call.argument<Boolean>("hidden")
+                        if (pkg == null || hidden == null) {
+                            result.error("bad_args", "package and hidden required", null)
+                        } else {
+                            result.success(bridge.setApplicationHidden(pkg, hidden))
+                        }
+                    }
+                    "isApplicationHidden" -> {
+                        val pkg = call.argument<String>("package")
+                        if (pkg == null) {
+                            result.error("bad_args", "package required", null)
+                        } else {
+                            result.success(bridge.isApplicationHidden(pkg))
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

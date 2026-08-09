@@ -25,6 +25,42 @@ class DevicePolicyBridge(private val context: Context) {
     /** Whether this package currently holds device owner. */
     fun isDeviceOwner(): Boolean = dpm.isDeviceOwnerApp(context.packageName)
 
+    /** Whether this package is profile owner (a work profile, not the device). */
+    fun isProfileOwner(): Boolean = dpm.isProfileOwnerApp(context.packageName)
+
+    /**
+     * Hides or unhides a package, the DPM equivalent of `pm disable-user`.
+     *
+     * This is the mechanism the whole Device Owner design rests on, and unlike
+     * `pm suspend` and `pm disable-user` — both measured to be cleared by a
+     * reboot on this device — it is expected to persist. That expectation is
+     * the thing worth testing before a factory reset is spent on it.
+     *
+     * Requires device owner or profile owner; returns false when held by
+     * neither, rather than throwing.
+     */
+    fun setApplicationHidden(packageName: String, hidden: Boolean): Boolean {
+        if (!isDeviceOwner() && !isProfileOwner()) {
+            Log.w(FocusDeviceAdminReceiver.TAG, "not DO/PO; cannot hide $packageName")
+            return false
+        }
+        return runCatching {
+            val applied = dpm.setApplicationHidden(admin, packageName, hidden)
+            Log.i(FocusDeviceAdminReceiver.TAG, "setApplicationHidden($packageName,$hidden)=$applied")
+            applied
+        }.getOrElse { error ->
+            Log.e(FocusDeviceAdminReceiver.TAG, "setApplicationHidden failed", error)
+            false
+        }
+    }
+
+    /** Whether a package is currently hidden by this admin. */
+    fun isApplicationHidden(packageName: String): Boolean {
+        if (!isDeviceOwner() && !isProfileOwner()) return false
+        return runCatching { dpm.isApplicationHidden(admin, packageName) }
+            .getOrDefault(false)
+    }
+
     /** Whether the admin component is active (a weaker state than ownership). */
     fun isAdminActive(): Boolean = dpm.isAdminActive(admin)
 
