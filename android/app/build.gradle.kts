@@ -43,3 +43,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // org.json is an Android stub on the JVM classpath, so unit tests need a
+    // real implementation to parse the policy asset.
+    testImplementation("org.json:json:20240303")
+    testImplementation("junit:junit:4.13.2")
+}

@@ -42,16 +42,26 @@ class EnforcementService : Service() {
     }
 
     private fun applyAndReschedule() {
-        val bridge = DevicePolicyBridge(applicationContext)
-        if (!bridge.isDeviceOwner() && !bridge.isProfileOwner()) {
-            // Not provisioned: there is nothing this build may enforce, and
-            // saying so once is more useful than failing silently every tick.
-            Log.i(FocusDeviceAdminReceiver.TAG, "not DO/PO - no enforcement applied")
-            EnforcementScheduler(applicationContext).scheduleNext()
-            return
+        val context = applicationContext
+        // Scheduled first, in a finally, so that no failure below can end the
+        // chain: an enforcement bug should cost one tick, not stop the system.
+        try {
+            val bridge = DevicePolicyBridge(context)
+            if (!bridge.isDeviceOwner() && !bridge.isProfileOwner()) {
+                // Not provisioned: there is nothing this build may enforce, and
+                // saying so is more useful than failing silently every tick.
+                Log.i(FocusDeviceAdminReceiver.TAG, "not DO/PO - no enforcement applied")
+                return
+            }
+            val decision = EnforcementRunner(context).decide()
+            if (decision == null) {
+                Log.w(FocusDeviceAdminReceiver.TAG, "no decision - policy unreadable")
+                return
+            }
+            EnforcementRunner(context).apply(decision, bridge)
+        } finally {
+            EnforcementScheduler(context).scheduleNext()
         }
-        Log.i(FocusDeviceAdminReceiver.TAG, "enforcement tick")
-        EnforcementScheduler(applicationContext).scheduleNext()
     }
 
     private fun buildNotification(): Notification {
