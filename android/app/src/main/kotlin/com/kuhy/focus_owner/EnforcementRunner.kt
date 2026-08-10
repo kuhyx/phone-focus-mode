@@ -67,6 +67,23 @@ class EnforcementRunner(private val context: Context) {
      * that restores access rather than the half that removes it.
      */
     fun apply(decision: EnforcementDecision, bridge: DevicePolicyBridge) {
+        // Re-read rather than threaded through from decide(): an unreadable
+        // policy must not stop a pass that is otherwise ready to apply, and
+        // the VPN pin is the one step that should survive a policy problem.
+        val policy = runCatching { FocusPolicy.load(context) }.getOrNull()
+
+        // Re-pinned every pass, unconditionally rather than tracking the
+        // decision: the network filter is the layer that reaches youtube.com
+        // in Firefox, in a webview, and in clients nobody has enumerated, so
+        // it must not lift when the geofence says AWAY. DISALLOW_CONFIG_VPN is
+        // deliberately NOT applied here -- it is a separate, later step, so a
+        // misconfigured VPN stays repairable from the device.
+        policy?.alwaysOnVpnPackage?.let { vpn ->
+            bridge.setAlwaysOnVpn(vpn)?.let { failure ->
+                Log.w(FocusDeviceAdminReceiver.TAG, "always-on VPN not pinned: $failure")
+            }
+        }
+
         // Re-asserted every pass rather than set once at provisioning time, so
         // the protection self-heals: `adb uninstall` while enforcing is the one
         // route that strands device ownership with no holder, and a factory

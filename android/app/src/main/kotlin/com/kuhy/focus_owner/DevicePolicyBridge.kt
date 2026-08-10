@@ -99,6 +99,66 @@ class DevicePolicyBridge(private val context: Context) {
     }
 
     /**
+     * Pins [vpnPackage] as the always-on VPN, the network-level block.
+     *
+     * This is the DPM call, not `settings put secure always_on_vpn_app` --
+     * that one writes successfully, survives a reboot, and does nothing,
+     * because VpnManager ignores adb-written values. Measured on this device.
+     *
+     * `lockdownEnabled` is false deliberately. Lockdown drops all traffic
+     * whenever the tunnel is down, and the wipe checklist names it, together
+     * with the DISALLOW_* restrictions, as the combination most likely to
+     * leave an unrecoverable device. The filter being bypassable during a
+     * VPN outage is the lesser problem.
+     *
+     * @return null on success, or a message describing why it failed.
+     */
+    fun setAlwaysOnVpn(vpnPackage: String): String? {
+        if (!isDeviceOwner()) return "not device owner"
+        return runCatching {
+            dpm.setAlwaysOnVpnPackage(admin, vpnPackage, false)
+            val active = dpm.getAlwaysOnVpnPackage(admin)
+            Log.i(FocusDeviceAdminReceiver.TAG, "alwaysOnVpn -> $active")
+            if (active == vpnPackage) null else "pinned $active, expected $vpnPackage"
+        }.getOrElse { error ->
+            // UnsupportedOperationException is the documented signal that the
+            // package does not declare a VPN service, or does not opt in to
+            // always-on. Report it rather than leaving a silent no-op.
+            Log.e(FocusDeviceAdminReceiver.TAG, "setAlwaysOnVpnPackage failed", error)
+            error.message ?: error::class.java.simpleName
+        }
+    }
+
+    /** The package currently pinned as always-on VPN, or null. */
+    fun alwaysOnVpnPackage(): String? {
+        if (!isDeviceOwner()) return null
+        return runCatching { dpm.getAlwaysOnVpnPackage(admin) }.getOrNull()
+    }
+
+    /**
+     * Prevents the user from changing VPN configuration.
+     *
+     * Applied separately from [setAlwaysOnVpn] and only after it is confirmed
+     * working: pinning the restriction first would make a failed VPN setup
+     * harder to repair from the device.
+     */
+    fun setVpnConfigBlocked(blocked: Boolean): Boolean {
+        if (!isDeviceOwner()) return false
+        return runCatching {
+            if (blocked) {
+                dpm.addUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_VPN)
+            } else {
+                dpm.clearUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_VPN)
+            }
+            Log.i(FocusDeviceAdminReceiver.TAG, "DISALLOW_CONFIG_VPN=$blocked")
+            true
+        }.getOrElse { error ->
+            Log.e(FocusDeviceAdminReceiver.TAG, "DISALLOW_CONFIG_VPN failed", error)
+            false
+        }
+    }
+
+    /**
      * Describes provisioning state for the UI, so the escape hatch can be found
      * without a PC attached.
      */
@@ -109,6 +169,7 @@ class DevicePolicyBridge(private val context: Context) {
         "sdkInt" to Build.VERSION.SDK_INT,
         "restrictionsApplied" to false,
         "uninstallBlocked" to isSelfUninstallBlocked(),
+        "alwaysOnVpn" to (alwaysOnVpnPackage() ?: ""),
     )
 
     /**
@@ -131,11 +192,17 @@ class DevicePolicyBridge(private val context: Context) {
             return true
         }
         return runCatching {
-            // Order matters and is not interchangeable: uninstall blocking is a
-            // device-owner power, so clearing ownership first would leave the
-            // block in place with nothing privileged left to lift it — an app
-            // that owns nothing and cannot be removed. Unblock, then release.
+            // Order matters and is not interchangeable: every one of these is a
+            // device-owner power, so clearing ownership first would leave them
+            // in place with nothing privileged left to lift them — an app that
+            // owns nothing and cannot be removed, and a pinned VPN nobody can
+            // reconfigure. Undo the restrictions, then release.
             setSelfUninstallBlocked(false)
+            setVpnConfigBlocked(false)
+            runCatching { dpm.setAlwaysOnVpnPackage(admin, null, false) }
+                .onFailure {
+                    Log.w(FocusDeviceAdminReceiver.TAG, "could not unpin VPN", it)
+                }
             dpm.clearDeviceOwnerApp(context.packageName)
             val released = !isDeviceOwner()
             Log.i(FocusDeviceAdminReceiver.TAG, "clearDeviceOwnerApp -> released=$released")

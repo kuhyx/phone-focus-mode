@@ -93,6 +93,7 @@
     "com.google.android.apps.youtube.music",
     "com.google.android.youtube"
   ],
+  "always_on_vpn_package": "com.celzero.bravedns",
   "blockable_system_packages": [
     "com.android.chrome",
     "com.android.vending",
@@ -145,6 +146,7 @@
     "com.android.systemui",
     "com.android.vpndialogs",
     "com.android.wifi",
+    "com.celzero.bravedns",
     "com.google.android.apps.messaging",
     "com.google.android.contacts",
     "com.google.android.deskclock",

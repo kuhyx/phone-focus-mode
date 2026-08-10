@@ -81,6 +81,13 @@ data class FocusPolicy(
      * `packagesToShow`.
      */
     val alwaysBlockedPackages: Set<String> = emptySet(),
+    /**
+     * Package pinned as the always-on VPN, or null when none is configured.
+     *
+     * The exporter emits this only when the package is also protected from
+     * the sweep, so the enforcer can never hide the app it has pinned.
+     */
+    val alwaysOnVpnPackage: String? = null,
 ) {
     /**
      * Whether a package must never be hidden.
@@ -165,6 +172,10 @@ data class FocusPolicy(
                 workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
                 blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
                 alwaysBlockedPackages = json.optionalStringSet("always_blocked_packages"),
+                // Empty string means "not configured", which is what the
+                // exporter writes when the provider is not sweep-protected.
+                alwaysOnVpnPackage = json.optString("always_on_vpn_package")
+                    .takeIf { it.isNotEmpty() },
                 curfew = curfewJson?.let {
                     CurfewWindow(
                         startMinutes = parseHhMm(it.getString("start"), "curfew.start"),

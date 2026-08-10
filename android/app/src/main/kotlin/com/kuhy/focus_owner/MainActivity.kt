@@ -14,6 +14,24 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "status" -> result.success(bridge.status())
                     "releaseDeviceOwner" -> result.success(bridge.releaseDeviceOwner())
+                    "setAlwaysOnVpn" -> {
+                        val pkg = call.argument<String>("package")
+                        if (pkg == null) {
+                            result.error("bad_args", "package required", null)
+                        } else {
+                            // Returns the failure message, or null on success,
+                            // so the UI can say why rather than just "failed".
+                            result.success(bridge.setAlwaysOnVpn(pkg))
+                        }
+                    }
+                    "setVpnConfigBlocked" -> {
+                        val blocked = call.argument<Boolean>("blocked")
+                        if (blocked == null) {
+                            result.error("bad_args", "blocked required", null)
+                        } else {
+                            result.success(bridge.setVpnConfigBlocked(blocked))
+                        }
+                    }
                     "setSelfUninstallBlocked" -> {
                         val blocked = call.argument<Boolean>("blocked")
                         if (blocked == null) {
