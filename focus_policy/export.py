@@ -72,10 +72,6 @@ ALWAYS_BLOCKED_PACKAGES = frozenset(
     },
 )
 
-# Every always-blocked package here is preinstalled, so it only ever reaches
-# the sweep by also being opted in above. Listing one without the other would
-# not error -- it would silently never be hidden, because the runner filters it
-# out of installedPackages before the decision layer sees it.
 # The always-on VPN provider, pinned by the device owner on every pass.
 #
 # This is the network-level block: package hiding stops the YouTube app, but
@@ -84,6 +80,20 @@ ALWAYS_BLOCKED_PACKAGES = frozenset(
 # the asset stays the single description of the policy.
 ALWAYS_ON_VPN_PACKAGE = "com.celzero.bravedns"
 
+# Whether the pinned VPN runs in lockdown mode: no traffic at all leaves the
+# device unless it goes through the tunnel.
+#
+# This is what closes "turn the VPN off and browse freely" -- without it the
+# filter is advisory. The cost is real and is accepted deliberately: if the
+# VPN app breaks, the phone has no connectivity until device ownership is
+# released. That is survivable only because the release path lives in the
+# enforcer app itself and needs no network.
+VPN_LOCKDOWN = True
+
+# Every always-blocked package here is preinstalled, so it only ever reaches
+# the sweep by also being opted in above. Listing one without the other would
+# not error -- it would silently never be hidden, because the runner filters it
+# out of installedPackages before the decision layer sees it.
 _UNSWEEPABLE = ALWAYS_BLOCKED_PACKAGES - BLOCKABLE_SYSTEM_PACKAGES
 if _UNSWEEPABLE:  # pragma: no cover - guards a constant, not a code path
     msg = (
@@ -132,6 +142,7 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         "always_blocked_packages": sorted(
             ALWAYS_BLOCKED_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
         ),
+        "vpn_lockdown": VPN_LOCKDOWN,
         # Emitted only when the provider is protected from the sweep. Pinning a
         # package the enforcer can hide is the worst case: DISALLOW_CONFIG_VPN
         # points at a hidden app and the device loses connectivity rather than
