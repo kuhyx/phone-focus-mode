@@ -61,6 +61,17 @@ data class FocusPolicy(
     val workoutUnblockDomains: Set<String>,
     val curfew: CurfewWindow?,
     val launcherPackage: String?,
+    /**
+     * System apps the sweep may hide, named individually.
+     *
+     * The sweep is default-deny for `FLAG_SYSTEM` packages, because most of
+     * them are platform components: on this device 243 of 320 match no
+     * allowlist entry and no prefix, including the emergency-alert receiver.
+     * Only packages named here are eligible, and an asset that predates this
+     * field parses to the empty set, preserving the old never-touch-system
+     * behaviour.
+     */
+    val blockableSystemPackages: Set<String> = emptySet(),
 ) {
     /**
      * Whether a package must never be hidden.
@@ -143,6 +154,7 @@ data class FocusPolicy(
                 nightAllowedPackages = json.stringSet("night_allowed_packages"),
                 neverDisablePrefixes = json.stringSet("never_disable_prefixes"),
                 workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
+                blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
                 curfew = curfewJson?.let {
                     CurfewWindow(
                         startMinutes = parseHhMm(it.getString("start"), "curfew.start"),
@@ -161,6 +173,20 @@ data class FocusPolicy(
             val array = optJSONArray(field)
                 ?: throw PolicyFormatException("\"$field\" must be a list")
             return (0 until array.length()).mapTo(mutableSetOf()) { array.getString(it) }
+        }
+
+        /**
+         * A list that may be absent, read as empty.
+         *
+         * Used for fields added after assets were already shipped. The strict
+         * [stringSet] would throw, and an unparsable policy makes the runner
+         * skip the pass entirely — safe, but it silently disables enforcement
+         * rather than degrading to the previous behaviour. A present-but-wrong
+         * type is still an error, since that is a real mistake.
+         */
+        private fun JSONObject.optionalStringSet(field: String): Set<String> {
+            if (!has(field)) return emptySet()
+            return stringSet(field)
         }
 
         private fun parseHhMm(value: String, field: String): Int {

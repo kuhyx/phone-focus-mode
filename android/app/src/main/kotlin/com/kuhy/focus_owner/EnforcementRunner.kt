@@ -49,7 +49,7 @@ class EnforcementRunner(private val context: Context) {
         return EnforcementDecision.evaluate(
             effective,
             EnforcementInputs(
-                installedPackages = installedThirdPartyPackages(),
+                installedPackages = sweepablePackages(effective),
                 minutesSinceMidnight = minutes,
                 latitude = fix?.first,
                 longitude = fix?.second,
@@ -94,7 +94,18 @@ class EnforcementRunner(private val context: Context) {
     }
 
     /**
-     * Third-party packages, the only ones the allowlist sweep considers.
+     * Packages the allowlist sweep considers: every third-party app, plus the
+     * system apps the policy names in `blockable_system_packages`.
+     *
+     * System apps are default-deny rather than filtered out entirely, because
+     * the apps most worth blocking are preinstalled — YouTube ships at
+     * `/product/app/YouTube` with `FLAG_SYSTEM`, and so does Chrome — while
+     * most of the rest are platform components. Measured on this device: 320
+     * system packages, of which 243 match no allowlist entry and no
+     * `never_disable_prefix`, including `com.android.cellbroadcastreceiver`
+     * (emergency alerts) and `com.android.devicelockcontroller`. Sweeping
+     * those under Device Owner risks an unrecoverable phone, so eligibility is
+     * opt-in per package.
      *
      * [PackageManager.MATCH_UNINSTALLED_PACKAGES] is required, not optional: a
      * package hidden by `setApplicationHidden` is dropped from the default
@@ -105,10 +116,14 @@ class EnforcementRunner(private val context: Context) {
      * on device: after a pass hid three apps, the following pass reported
      * `hid 0, restored 0` and left them hidden permanently.
      */
-    private fun installedThirdPartyPackages(): Set<String> {
+    private fun sweepablePackages(policy: FocusPolicy): Set<String> {
         val pm = context.packageManager
         return pm.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES)
-            .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
+            .filter { info ->
+                val isSystem =
+                    (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                !isSystem || info.packageName in policy.blockableSystemPackages
+            }
             .map { it.packageName }
             .toSet()
     }

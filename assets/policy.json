@@ -87,6 +87,13 @@
     "pl.plksa.portalpasazera",
     "ws.xsoh.etar"
   ],
+  "blockable_system_packages": [
+    "com.android.chrome",
+    "com.android.vending",
+    "com.google.android.apps.youtube.music",
+    "com.google.android.videos",
+    "com.google.android.youtube"
+  ],
   "browser_packages": [
     "com.android.chrome",
     "org.mozilla.fenix"
