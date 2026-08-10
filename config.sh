@@ -421,6 +421,9 @@ com.kolejeslaskie.mss
 pl.mbank
 pl.pkobp.iko
 com.revolut.revolut
+# Accounting, but device-paired to a bank and re-paired over SMS, so losing
+# access to it strands the same re-authentication chain the banks do.
+pl.infakt.infakt
 
 # --- Government / digital ID (Polish mObywatel — must always work) ---
 pl.nask.mobywatel
@@ -537,6 +540,7 @@ com.kuhy.vaultkitbypass
 pl.mbank
 pl.pkobp.iko
 com.revolut.revolut
+pl.infakt.infakt
 # Maps / navigation home
 com.google.android.apps.maps
 # Calendar
