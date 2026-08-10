@@ -8,12 +8,12 @@ No root, no Device Owner, no factory reset.
 Unregisters a package for one user while leaving the APK on the read-only
 system image.
 
-| Mechanism | Survives reboot? |
-| --- | --- |
-| `pm suspend` | No — measured |
-| `pm disable-user` | No — measured |
-| `dpm setApplicationHidden` | Yes — but needs Device Owner, i.e. a wipe |
-| **`pm uninstall --user 0`** | **Yes — measured, twice** |
+| Mechanism                   | Survives reboot?                          |
+| --------------------------- | ----------------------------------------- |
+| `pm suspend`                | No — measured                             |
+| `pm disable-user`           | No — measured                             |
+| `dpm setApplicationHidden`  | Yes — but needs Device Owner, i.e. a wipe |
+| **`pm uninstall --user 0`** | **Yes — measured, twice**                 |
 
 Reversible with `pm install-existing --user 0 <pkg>`: no download, no data
 loss, because the APK never left the device.
@@ -44,9 +44,9 @@ silent no-op.
 
 Independent of the VPN, and that is the point: stopping RethinkDNS does
 **not** restore YouTube in Firefox. Verified by force-stopping
-`com.celzero.bravedns` and loading youtube.com, which produced *"uBlock
+`com.celzero.bravedns` and loading youtube.com, which produced _"uBlock
 Origin has prevented the following page from loading — `||youtube.com^` —
-found in: My filters"*.
+found in: My filters"_.
 
 The filters, in uBlock's dashboard → **My filters**:
 
@@ -100,11 +100,11 @@ account-linked session — most of the pull. It does not stop typing
 
 Previously rejected approaches, from `focus_owner/docs/`:
 
-- **Home-hosted DoT resolver.** Android's Private DNS fails *closed*, so PC
+- **Home-hosted DoT resolver.** Android's Private DNS fails _closed_, so PC
   off = phone has no internet at all. Rejected: the phone must work with the
   PC off.
 - **Hosted DNS (NextDNS, AdGuard, ControlD).** No provider ingests the 185k
-  domain blocklist; free tiers fail *open* past ~300k queries/month.
+  domain blocklist; free tiers fail _open_ past ~300k queries/month.
 
 The remaining candidate is a **local-VPN content blocker** — an on-device
 `VpnService` that filters without any network dependency, so it works with the
@@ -116,11 +116,11 @@ one active VPN at a time, so this would conflict with any real VPN.
 
 Measured, not assumed:
 
-| Layer | Undo cost |
-| --- | --- |
-| App removal | **One tap.** Google Play shows a live **Install** button for YouTube (checked on device 2026-08-09; not installed). |
-| RethinkDNS rules | A few taps — the VPN toggle in Settings or the quick-settings tile. |
-| uBlock filters | **Proceed** on the block page, or disabling the extension. |
+| Layer            | Undo cost                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| App removal      | **One tap.** Google Play shows a live **Install** button for YouTube (checked on device 2026-08-09; not installed). |
+| RethinkDNS rules | A few taps — the VPN toggle in Settings or the quick-settings tile.                                                 |
+| uBlock filters   | **Proceed** on the block page, or disabling the extension.                                                          |
 
 Nothing here is tamper-resistant, and nothing here can be: on an
 unrooted device without Device Owner, no app can prevent the user
@@ -137,6 +137,28 @@ Owner could touch YouTube at all.
 Also note nothing re-asserts the purge automatically.
 `phone-auto-sync.timer` is inactive and its `ExecStart` points at a path
 that does not exist, so `distraction_purge.sh` is manual today.
+
+## infakt, before any factory reset
+
+Checked 2026-08-09 in the web panel and on the device, because infakt was
+the one app whose loss would have blocked the Device Owner wipe.
+
+- **2FA is SMS-only.** "Aplikacja weryfikacyjna" reads _Skonfiguruj_, i.e.
+  not configured, so **no TOTP seed exists** and a wipe cannot destroy
+  one. The registered number survives on the SIM.
+- **"Logowanie" is unchecked** under _Akcje objęte weryfikacją_ — only
+  _Wrażliwe_ actions prompt. Plain login needs the password alone.
+- The app uses Firebase push (`FirebaseInstanceIdReceiver`) for the
+  browser-login approval tap. Push tokens are per-install, so a reinstall
+  re-registers and prompts arrive at the new install.
+
+So login is safe: reinstall, sign in with the password.
+
+What does **not** survive: the banking pairing (_Usuń powiązanie z
+telefonem_) and the local app PIN. Re-pair via SMS after the wipe.
+
+Do not save anything on that settings page casually — it warns that
+changing it logs out all current mobile sessions.
 
 ## Redoing this after a factory reset
 
