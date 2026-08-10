@@ -218,7 +218,13 @@ class TestExport:
         payload = policy_to_dict(load_policy(config_dir / "config.sh"))
         assert payload["schema_version"] == 1
         assert payload["curfew"] == {"start": "23:00", "end": "05:00"}
-        assert payload["allowed_packages"] == ["com.good", "com.launcher", "pl.mbank"]
+        # The exporter injects the enforcer itself; see ENFORCER_PACKAGE.
+        assert payload["allowed_packages"] == [
+            "com.good",
+            "com.kuhy.focus_owner",
+            "com.launcher",
+            "pl.mbank",
+        ]
         assert payload["home"]["latitude"] == pytest.approx(52.2297)
 
     def test_absent_curfew_serialises_as_null(self, config_dir: Path) -> None:

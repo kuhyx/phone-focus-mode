@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 
 SCHEMA_VERSION = 1
 
+# The enforcing app itself, which must never appear in the hide set. Hiding it
+# removes both the escape hatch and the control that triggers the next pass,
+# leaving no way back short of a factory reset. The Kotlin runner does check
+# this at the point of use, but that check is the *only* protection unless the
+# package is also allowed here -- so it is injected into the exported allowlists
+# rather than left to a hand-edit of the rendered asset.
+ENFORCER_PACKAGE = "com.kuhy.focus_owner"
+
 
 def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
     """Return a JSON-serialisable representation of ``policy``."""
@@ -39,8 +47,10 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         },
         "curfew": curfew,
         "launcher_package": policy.launcher_package,
-        "allowed_packages": sorted(policy.allowed_packages),
-        "night_allowed_packages": sorted(policy.night_allowed_packages),
+        "allowed_packages": sorted({*policy.allowed_packages, ENFORCER_PACKAGE}),
+        "night_allowed_packages": sorted(
+            {*policy.night_allowed_packages, ENFORCER_PACKAGE},
+        ),
         "never_disable_prefixes": sorted(policy.never_disable_prefixes),
         "workout_unblock_domains": sorted(policy.workout_unblock_domains),
         "browser_packages": sorted(policy.browser_packages),
