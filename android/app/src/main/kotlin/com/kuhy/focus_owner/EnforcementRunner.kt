@@ -75,9 +75,12 @@ class EnforcementRunner(private val context: Context) {
             }
         }
         for (pkg in decision.packagesToHide) {
-            // Defence in depth: the policy already refuses to hide these, but
-            // hiding the launcher or the dialer would be unrecoverable from
-            // the device itself, so it is checked again at the point of use.
+            // The exporter injects this package into both allowlists, so the
+            // decision layer should never propose it. Kept as a belt-and-braces
+            // check because it guards the unrecoverable case: hiding the
+            // enforcer takes the escape hatch and the trigger with it, and a
+            // policy asset rendered before that fix -- or hand-edited -- would
+            // otherwise hide the app on the first enforcing pass.
             if (pkg == context.packageName) continue
             if (!bridge.isApplicationHidden(pkg)) {
                 if (bridge.setApplicationHidden(pkg, true)) hidden++
@@ -90,10 +93,21 @@ class EnforcementRunner(private val context: Context) {
         )
     }
 
-    /** Third-party packages, the only ones the allowlist sweep considers. */
+    /**
+     * Third-party packages, the only ones the allowlist sweep considers.
+     *
+     * [PackageManager.MATCH_UNINSTALLED_PACKAGES] is required, not optional: a
+     * package hidden by `setApplicationHidden` is dropped from the default
+     * enumeration entirely, even though it remains `installed=true`. Querying
+     * with flags `0` therefore returns a set that can never contain anything
+     * this app has already hidden — so [EnforcementDecision.packagesToShow]
+     * would come back empty and nothing could ever be unhidden again. Measured
+     * on device: after a pass hid three apps, the following pass reported
+     * `hid 0, restored 0` and left them hidden permanently.
+     */
     private fun installedThirdPartyPackages(): Set<String> {
         val pm = context.packageManager
-        return pm.getInstalledApplications(0)
+        return pm.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES)
             .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
             .map { it.packageName }
             .toSet()
