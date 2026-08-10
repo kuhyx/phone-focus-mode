@@ -27,6 +27,30 @@ SCHEMA_VERSION = 1
 # rather than left to a hand-edit of the rendered asset.
 ENFORCER_PACKAGE = "com.kuhy.focus_owner"
 
+# System apps the sweep is allowed to hide, named one by one.
+#
+# The Kotlin runner skips every package with FLAG_SYSTEM, which means the
+# Device Owner path cannot touch the apps most worth blocking: YouTube ships
+# at /product/app/YouTube as a system app, and so does Chrome. Simply dropping
+# that filter is not the fix -- measured on the Pixel 6a, it would expose 320
+# system packages of which 243 match no allowlist entry and no
+# never_disable_prefix, including com.android.cellbroadcastreceiver (emergency
+# alerts), com.android.credentialmanager and com.android.devicelockcontroller.
+# Hiding those under Device Owner risks an unrecoverable device.
+#
+# So the sweep stays default-deny for system apps and this is the opt-in.
+# com.android.vending is included deliberately: leaving Play reachable makes
+# every other removal a one-tap undo.
+BLOCKABLE_SYSTEM_PACKAGES = frozenset(
+    {
+        "com.android.chrome",
+        "com.android.vending",
+        "com.google.android.apps.youtube.music",
+        "com.google.android.videos",
+        "com.google.android.youtube",
+    },
+)
+
 
 def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
     """Return a JSON-serialisable representation of ``policy``."""
@@ -54,6 +78,12 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         "never_disable_prefixes": sorted(policy.never_disable_prefixes),
         "workout_unblock_domains": sorted(policy.workout_unblock_domains),
         "browser_packages": sorted(policy.browser_packages),
+        # Absent from an older asset, so the Kotlin loader must treat a
+        # missing key as the empty set -- i.e. keep today's behaviour of
+        # never touching a system app.
+        "blockable_system_packages": sorted(
+            BLOCKABLE_SYSTEM_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
+        ),
     }
 
 

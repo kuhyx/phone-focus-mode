@@ -71,6 +71,38 @@ def test_enforcer_is_not_duplicated_when_already_present() -> None:
     assert payload["night_allowed_packages"].count(ENFORCER_PACKAGE) == 1
 
 
+def test_blockable_system_packages_names_the_distraction_apps() -> None:
+    """The sweep is default-deny for system apps; this is the opt-in.
+
+    YouTube and Chrome ship with FLAG_SYSTEM, so without this list the Device
+    Owner sweep skips exactly the apps it exists to block. Play is included
+    because leaving it reachable makes every other removal a one-tap undo.
+    """
+    blockable = policy_to_dict(_policy())["blockable_system_packages"]
+
+    assert "com.google.android.youtube" in blockable
+    assert "com.android.chrome" in blockable
+    assert "com.android.vending" in blockable
+
+
+def test_blockable_system_packages_never_contradicts_the_allowlist() -> None:
+    """An allowed package must not also be listed as blockable.
+
+    Otherwise the asset would state both at once and the outcome would depend
+    on which check the runner happened to apply first.
+    """
+    payload = policy_to_dict(
+        _policy(
+            allowed_packages=frozenset(
+                {"pl.mbank", "com.launcher", "com.android.chrome"},
+            ),
+        ),
+    )
+
+    assert "com.android.chrome" not in payload["blockable_system_packages"]
+    assert "com.android.chrome" in payload["allowed_packages"]
+
+
 def test_lists_are_sorted_for_stable_diffs() -> None:
     """Sorted output keeps a committed asset's diff meaningful."""
     payload = policy_to_dict(_policy())
