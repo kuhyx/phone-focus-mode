@@ -208,6 +208,7 @@
     "ws.xsoh.etar"
   ],
   "schema_version": 1,
+  "vpn_lockdown": true,
   "workout_unblock_domains": [
     "googlevideo.com",
     "i.ytimg.com",

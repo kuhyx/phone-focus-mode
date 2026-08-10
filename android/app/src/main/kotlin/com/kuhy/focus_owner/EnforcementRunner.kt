@@ -79,9 +79,13 @@ class EnforcementRunner(private val context: Context) {
         // deliberately NOT applied here -- it is a separate, later step, so a
         // misconfigured VPN stays repairable from the device.
         policy?.alwaysOnVpnPackage?.let { vpn ->
-            bridge.setAlwaysOnVpn(vpn)?.let { failure ->
+            bridge.setAlwaysOnVpn(vpn, lockdown = policy.vpnLockdown)?.let { failure ->
                 Log.w(FocusDeviceAdminReceiver.TAG, "always-on VPN not pinned: $failure")
             }
+            // Measured hole: `pm uninstall --user 0` removed the provider
+            // while it was pinned, taking the network filter with it and
+            // leaving the pin aimed at a package that no longer existed.
+            bridge.setPackageUninstallBlocked(vpn, true)
         }
 
         // Re-asserted every pass rather than set once at provisioning time, so

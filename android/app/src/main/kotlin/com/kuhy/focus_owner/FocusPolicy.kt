@@ -88,6 +88,14 @@ data class FocusPolicy(
      * the sweep, so the enforcer can never hide the app it has pinned.
      */
     val alwaysOnVpnPackage: String? = null,
+    /**
+     * Whether the pinned VPN runs in lockdown mode.
+     *
+     * Lockdown drops every packet not going through the tunnel, which is what
+     * stops "turn the VPN off and browse freely". Defaults false so an asset
+     * predating the field cannot silently cut the device off.
+     */
+    val vpnLockdown: Boolean = false,
 ) {
     /**
      * Whether a package must never be hidden.
@@ -176,6 +184,7 @@ data class FocusPolicy(
                 // exporter writes when the provider is not sweep-protected.
                 alwaysOnVpnPackage = json.optString("always_on_vpn_package")
                     .takeIf { it.isNotEmpty() },
+                vpnLockdown = json.optBoolean("vpn_lockdown", false),
                 curfew = curfewJson?.let {
                     CurfewWindow(
                         startMinutes = parseHhMm(it.getString("start"), "curfew.start"),
