@@ -40,6 +40,42 @@ than trusting the `pm` exit code, and exits non-zero if anything is still
 installed — so a Play Store reinstall surfaces as a failure instead of a
 silent no-op.
 
+## Layer 2: uBlock Origin in Firefox
+
+Independent of the VPN, and that is the point: stopping RethinkDNS does
+**not** restore YouTube in Firefox. Verified by force-stopping
+`com.celzero.bravedns` and loading youtube.com, which produced *"uBlock
+Origin has prevented the following page from loading — `||youtube.com^` —
+found in: My filters"*.
+
+The filters, in uBlock's dashboard → **My filters**:
+
+```
+! YouTube block
+||youtube.com^
+||youtu.be^
+||googlevideo.com^
+||ytimg.com^
+||youtube-nocookie.com^
+||ggpht.com^
+||yt3.ggpht.com^
+||m.youtube.com^
+```
+
+Add them by writing that list to a file, pushing it to
+`/sdcard/Download/`, triggering a media scan (`am broadcast -a
+android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/...`,
+or the picker will not see it), then using uBlock's **import** button.
+Do NOT type them with `adb shell input text`: it silently strips `|` and
+`^`, leaving bare domains that do not block. Press the checkmark to
+apply, and confirm it greys out.
+
+These live in the Firefox profile, so they are **not** captured by
+`phone_backup.sh` and must be re-added by hand after a wipe.
+
+The block page has a **Proceed** button — one tap. This layer raises the
+cost of bypassing; it does not remove the bypass.
+
 ## What is NOT blocked
 
 **Firefox (`org.mozilla.fenix`) is still installed and still reaches
@@ -75,6 +111,32 @@ The remaining candidate is a **local-VPN content blocker** — an on-device
 PC off and does not fail closed on network loss. Not yet scoped; the VPN slot
 was going to be checked when the device disconnected. Note Android allows only
 one active VPN at a time, so this would conflict with any real VPN.
+
+## How strong this actually is
+
+Measured, not assumed:
+
+| Layer | Undo cost |
+| --- | --- |
+| App removal | **One tap.** Google Play shows a live **Install** button for YouTube (checked on device 2026-08-09; not installed). |
+| RethinkDNS rules | A few taps — the VPN toggle in Settings or the quick-settings tile. |
+| uBlock filters | **Proceed** on the block page, or disabling the extension. |
+
+Nothing here is tamper-resistant, and nothing here can be: on an
+unrooted device without Device Owner, no app can prevent the user
+disabling a VPN or reinstalling from Play. The layers are independent —
+undoing one does not undo the others — so the cost is "three separate
+places" rather than one. That is the honest ceiling.
+
+`DISALLOW_CONFIG_VPN` plus `setAlwaysOnVpnPackage(..., lockdown)` under
+Device Owner is the only tier that removes the off switch, and it needs
+the factory reset in `docs/device-owner-wipe-checklist.md`. See also the
+FLAG_SYSTEM note above: `focus_owner` would need fixing before Device
+Owner could touch YouTube at all.
+
+Also note nothing re-asserts the purge automatically.
+`phone-auto-sync.timer` is inactive and its `ExecStart` points at a path
+that does not exist, so `distraction_purge.sh` is manual today.
 
 ## Redoing this after a factory reset
 
