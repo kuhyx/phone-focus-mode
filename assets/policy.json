@@ -88,6 +88,11 @@
     "pl.plksa.portalpasazera",
     "ws.xsoh.etar"
   ],
+  "always_blocked_packages": [
+    "com.android.chrome",
+    "com.google.android.apps.youtube.music",
+    "com.google.android.youtube"
+  ],
   "blockable_system_packages": [
     "com.android.chrome",
     "com.android.vending",
@@ -154,7 +159,8 @@
     "com.google.android.trichromelibrary",
     "com.google.android.webview",
     "com.mediatek",
-    "com.qualcomm"
+    "com.qualcomm",
+    "pl.infakt.infakt"
   ],
   "night_allowed_packages": [
     "com.azure.authenticator",

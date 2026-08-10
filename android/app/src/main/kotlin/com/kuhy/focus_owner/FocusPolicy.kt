@@ -72,6 +72,15 @@ data class FocusPolicy(
      * behaviour.
      */
     val blockableSystemPackages: Set<String> = emptySet(),
+    /**
+     * Packages hidden everywhere, exempt from the geofence.
+     *
+     * The geofence makes leaving home an off switch, which is what device
+     * owner exists to remove. These stay hidden under AWAY, CURFEW, AT_HOME
+     * and WORKOUT alike; [EnforcementDecision] never places them in
+     * `packagesToShow`.
+     */
+    val alwaysBlockedPackages: Set<String> = emptySet(),
 ) {
     /**
      * Whether a package must never be hidden.
@@ -155,6 +164,7 @@ data class FocusPolicy(
                 neverDisablePrefixes = json.stringSet("never_disable_prefixes"),
                 workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
                 blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
+                alwaysBlockedPackages = json.optionalStringSet("always_blocked_packages"),
                 curfew = curfewJson?.let {
                     CurfewWindow(
                         startMinutes = parseHhMm(it.getString("start"), "curfew.start"),

@@ -36,6 +36,16 @@ data class EnforcementDecision(
     val packagesToHide: Set<String>,
     val packagesToShow: Set<String>,
 ) {
+    /**
+     * Whether this pass leaves anything hidden.
+     *
+     * Derived rather than stored, which matters for the always-blocked set:
+     * AWAY still hides those, so it still counts as enforcing, and the
+     * uninstall block keyed off this stays on away from home. Were this tied
+     * to the reason instead, leaving the house would lift the block while
+     * YouTube stayed hidden -- making `adb uninstall` the off switch for the
+     * one thing that is meant not to have one.
+     */
     val isEnforcing: Boolean get() = packagesToHide.isNotEmpty()
 
     companion object {
@@ -59,11 +69,19 @@ data class EnforcementDecision(
             val hasFix = lat != null && lon != null
             val atHome = hasFix && isInside(policy, lat, lon, inputs.currentlyEnforcing)
 
+            // Exempt from every branch below, including AWAY and WORKOUT.
+            // Restricted to packages actually present, so the sets stay a
+            // description of this device rather than of the policy.
+            val alwaysBlocked = inputs.installedPackages
+                .intersect(policy.alwaysBlockedPackages)
+                .filterNot { policy.isProtected(it) }
+                .toSet()
+
             if (hasFix && !atHome) {
                 return EnforcementDecision(
                     reason = EnforcementReason.AWAY,
-                    packagesToHide = emptySet(),
-                    packagesToShow = inputs.installedPackages,
+                    packagesToHide = alwaysBlocked,
+                    packagesToShow = inputs.installedPackages - alwaysBlocked,
                 )
             }
 
@@ -77,11 +95,20 @@ data class EnforcementDecision(
             val hide = mutableSetOf<String>()
             val show = mutableSetOf<String>()
             for (pkg in inputs.installedPackages) {
-                if (policy.isAllowed(pkg, duringCurfew)) show.add(pkg) else hide.add(pkg)
+                if (pkg in alwaysBlocked) {
+                    hide.add(pkg)
+                } else if (policy.isAllowed(pkg, duringCurfew)) {
+                    show.add(pkg)
+                } else {
+                    hide.add(pkg)
+                }
             }
 
             if (inputs.workoutActive) {
                 for (pkg in policy.workoutExemptPackages) {
+                    // A workout exemption must not become a way to reach the
+                    // always-blocked set, or "go for a run" is the off switch.
+                    if (pkg in alwaysBlocked) continue
                     if (hide.remove(pkg)) show.add(pkg)
                 }
                 return EnforcementDecision(EnforcementReason.WORKOUT, hide, show)

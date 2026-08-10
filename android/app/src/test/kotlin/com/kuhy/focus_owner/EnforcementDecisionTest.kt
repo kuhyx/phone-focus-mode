@@ -42,6 +42,34 @@ class EnforcementDecisionTest {
             """.trimIndent(),
         )
 
+    /**
+     * A policy that names YouTube as always-blocked and drops it from the
+     * allowlist, since the exporter guarantees those two never overlap.
+     */
+    private fun policyWithAlwaysBlocked() =
+        FocusPolicy.parse(
+            """
+            {
+              "schema_version": 1,
+              "home": {
+                "latitude": $homeLat,
+                "longitude": $homeLon,
+                "radius_m": 150.0,
+                "hysteresis_m": 30.0
+              },
+              "curfew": {"start":"23:00","end":"05:00"},
+              "launcher_package": "com.launcher",
+              "allowed_packages": ["com.launcher","pl.mbank","com.discord"],
+              "night_allowed_packages": ["com.launcher","pl.mbank"],
+              "never_disable_prefixes": ["com.android.settings"],
+              "workout_unblock_domains": ["youtube.com"],
+              "browser_packages": [],
+              "blockable_system_packages": ["com.google.android.youtube"],
+              "always_blocked_packages": ["com.google.android.youtube"]
+            }
+            """.trimIndent(),
+        )
+
     private val installed = setOf(
         "com.launcher",
         "pl.mbank",
@@ -54,14 +82,57 @@ class EnforcementDecisionTest {
     private fun latOffset(metres: Double) = homeLat + metres / metresPerDegreeLat
 
     @Test
-    fun `away from home hides nothing and shows everything`() {
+    fun `away from home restores everything except the always-blocked set`() {
         val decision = EnforcementDecision.evaluate(
             policy(),
             EnforcementInputs(installed, 12 * 60, latOffset(5000.0), homeLon),
         )
         assertEquals(EnforcementReason.AWAY, decision.reason)
+        // The base policy names nothing as always-blocked, so this is the
+        // original behaviour: leaving home restores the whole device.
         assertTrue(decision.packagesToHide.isEmpty())
         assertEquals(installed, decision.packagesToShow)
+    }
+
+    @Test
+    fun `always-blocked packages stay hidden away from home`() {
+        val decision = EnforcementDecision.evaluate(
+            policyWithAlwaysBlocked(),
+            EnforcementInputs(installed, 12 * 60, latOffset(5000.0), homeLon),
+        )
+        assertEquals(EnforcementReason.AWAY, decision.reason)
+        assertEquals(setOf("com.google.android.youtube"), decision.packagesToHide)
+        assertFalse(decision.packagesToShow.contains("com.google.android.youtube"))
+        // Everything else still comes back, which is the point of the geofence.
+        assertTrue(decision.packagesToShow.contains("com.discord"))
+    }
+
+    @Test
+    fun `always-blocked still counts as enforcing away from home`() {
+        val decision = EnforcementDecision.evaluate(
+            policyWithAlwaysBlocked(),
+            EnforcementInputs(installed, 12 * 60, latOffset(5000.0), homeLon),
+        )
+        // The uninstall block is keyed off isEnforcing. If AWAY reported false
+        // here, leaving the house would make `adb uninstall` an off switch for
+        // the one set that is meant not to have one.
+        assertTrue(decision.isEnforcing)
+    }
+
+    @Test
+    fun `a workout does not release an always-blocked package`() {
+        val decision = EnforcementDecision.evaluate(
+            policyWithAlwaysBlocked(),
+            EnforcementInputs(
+                installed,
+                12 * 60,
+                homeLat,
+                homeLon,
+                workoutActive = true,
+            ),
+        )
+        assertEquals(EnforcementReason.WORKOUT, decision.reason)
+        assertTrue(decision.packagesToHide.contains("com.google.android.youtube"))
     }
 
     @Test
