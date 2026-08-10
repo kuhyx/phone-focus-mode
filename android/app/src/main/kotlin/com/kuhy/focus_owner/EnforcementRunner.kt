@@ -153,6 +153,42 @@ class EnforcementRunner(private val context: Context) {
             .toSet()
     }
 
+    /**
+     * Writes the current location as home.
+     *
+     * The app has to do this itself. `push_home_location.sh` stages the file
+     * through `run-as`, which returns "package not debuggable" on the release
+     * build device owner requires -- and making the build debuggable to fix
+     * that would let anyone with adb edit this app's state, which is the
+     * bypass the whole design exists to close.
+     *
+     * Deliberately not an exported intent or receiver: anything that can set
+     * home from outside the app can set it to somewhere else, and the geofence
+     * would then report AWAY forever with enforcement off.
+     *
+     * @return null on success, or a message describing why it failed.
+     */
+    fun setHomeToCurrentLocation(): String? {
+        val fix = lastKnownLocation()
+            ?: return "no location fix available - open a maps app, then retry"
+        return try {
+            val json = JSONObject()
+                .put("latitude", fix.first)
+                .put("longitude", fix.second)
+            File(context.filesDir, "home_location.json").writeText(json.toString())
+            // Never log the coordinates: this is the user's home address and
+            // logcat is world-readable to anyone with adb.
+            Log.i(FocusDeviceAdminReceiver.TAG, "home location written")
+            null
+        } catch (e: Exception) {
+            Log.e(FocusDeviceAdminReceiver.TAG, "could not write home location", e)
+            e.message ?: e::class.java.simpleName
+        }
+    }
+
+    /** Whether home coordinates are provisioned, without revealing them. */
+    fun hasHomeLocation(): Boolean = readHomeLocation() != null
+
     /** Coordinates provisioned by `push_home_location.sh`, or null. */
     private fun readHomeLocation(): Pair<Double, Double>? {
         val file = File(context.filesDir, "home_location.json")

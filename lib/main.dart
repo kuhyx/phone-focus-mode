@@ -65,6 +65,7 @@ class _StatusPageState extends State<StatusPage> {
   String? _policyError;
   String? _error;
   bool _busy = false;
+  bool _hasHome = false;
 
   @override
   void initState() {
@@ -81,9 +82,11 @@ class _StatusPageState extends State<StatusPage> {
   Future<void> _loadDeviceStatus() async {
     try {
       final status = await widget.policy.status();
+      final hasHome = await widget.policy.hasHomeLocation();
       if (!mounted) return;
       setState(() {
         _status = status;
+        _hasHome = hasHome;
         _error = null;
       });
     } on PlatformException catch (e) {
@@ -125,6 +128,58 @@ class _StatusPageState extends State<StatusPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _setHome() async {
+    setState(() => _busy = true);
+    final failure = await widget.policy.setHomeToCurrentLocation();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failure ??
+              'Home set. Enforcement now applies here, not everywhere.',
+        ),
+      ),
+    );
+    await _refresh();
+  }
+
+  Future<void> _lockVpn() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _kSurface,
+        title: const Text('Lock VPN configuration?'),
+        content: const Text(
+          'The always-on VPN can no longer be turned off from Settings. '
+          'Releasing device owner lifts this.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Lock'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    final ok = await widget.policy.setVpnConfigBlocked(blocked: true);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'VPN configuration locked' : 'Could not lock - see logcat'),
+      ),
+    );
+    await _refresh();
   }
 
   Future<void> _release() async {
@@ -181,6 +236,9 @@ class _StatusPageState extends State<StatusPage> {
         busy: _busy,
         onRelease: _release,
         onRunNow: _runNow,
+        onSetHome: _setHome,
+        onLockVpn: _lockVpn,
+        hasHome: _hasHome,
       );
     } else {
       body = const Center(child: CircularProgressIndicator());
@@ -199,7 +257,13 @@ class _StatusPageState extends State<StatusPage> {
           ),
         ],
       ),
-      body: Padding(padding: const EdgeInsets.all(_kGap), child: body),
+      // Scrollable because the action list grew past a short screen: an
+      // unreachable "Release device owner" button is the one control that
+      // must never be clipped off the bottom.
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(_kGap),
+        child: body,
+      ),
     );
   }
 }
@@ -212,6 +276,9 @@ class _StatusBody extends StatelessWidget {
     required this.busy,
     required this.onRelease,
     required this.onRunNow,
+    required this.onSetHome,
+    required this.onLockVpn,
+    required this.hasHome,
   });
 
   final DevicePolicyStatus status;
@@ -220,6 +287,11 @@ class _StatusBody extends StatelessWidget {
   final bool busy;
   final Future<void> Function() onRelease;
   final Future<void> Function() onRunNow;
+  final Future<void> Function() onSetHome;
+  final Future<void> Function() onLockVpn;
+
+  /// Whether home coordinates exist; without them enforcement is permanent.
+  final bool hasHome;
 
   @override
   Widget build(BuildContext context) {
@@ -265,6 +337,12 @@ class _StatusBody extends StatelessWidget {
             label: 'Workout domains',
             value: '${policy.workoutUnblockDomains.length}',
           ),
+          // The distinction that decides whether enforcement is geofenced or
+          // permanent, so it belongs on screen rather than only in logcat.
+          _Row(
+            label: 'Geofence',
+            value: hasHome ? 'active' : 'no home set - enforcing everywhere',
+          ),
         ],
         const SizedBox(height: _kGap * 2),
         OutlinedButton(
@@ -272,6 +350,20 @@ class _StatusBody extends StatelessWidget {
           child: const Text('Run enforcement now'),
         ),
         const SizedBox(height: _kGap),
+        if (status.isDeviceOwner) ...[
+          OutlinedButton(
+            onPressed: busy ? null : onSetHome,
+            child: Text(
+              hasHome ? 'Update home to here' : 'Set home to current location',
+            ),
+          ),
+          const SizedBox(height: _kGap),
+          OutlinedButton(
+            onPressed: busy ? null : onLockVpn,
+            child: const Text('Lock VPN configuration'),
+          ),
+          const SizedBox(height: _kGap),
+        ],
         if (status.isDeviceOwner)
           FilledButton(
             onPressed: busy ? null : onRelease,

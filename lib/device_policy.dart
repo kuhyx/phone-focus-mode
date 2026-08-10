@@ -70,4 +70,30 @@ class DevicePolicy {
     final released = await channel.invokeMethod<bool>('releaseDeviceOwner');
     return released ?? false;
   }
+
+  /// Records the current location as home, enabling the geofence.
+  ///
+  /// Returns null on success, or a message explaining the failure. Lives in
+  /// the app rather than a script because `run-as` does not work on the
+  /// release build that device owner requires.
+  Future<String?> setHomeToCurrentLocation() async =>
+      channel.invokeMethod<String>('setHomeToCurrentLocation');
+
+  /// Whether home coordinates are provisioned.
+  ///
+  /// Without them every pass decides LOCATION_UNKNOWN and fails closed, so
+  /// enforcement applies everywhere rather than only at home.
+  Future<bool> hasHomeLocation() async =>
+      await channel.invokeMethod<bool>('hasHomeLocation') ?? false;
+
+  /// Prevents the user from turning the always-on VPN off in Settings.
+  ///
+  /// Applied only after the VPN filter is confirmed working: pinning it over
+  /// a broken configuration would lock the broken state in.
+  Future<bool> setVpnConfigBlocked({required bool blocked}) async =>
+      await channel.invokeMethod<bool>(
+        'setVpnConfigBlocked',
+        {'blocked': blocked},
+      ) ??
+      false;
 }

@@ -11,13 +11,17 @@ import 'package:focus_owner/policy.dart';
 ) {
   const channel = MethodChannel('test/device_policy');
   final calls = <MethodCall>[];
+  // hasHomeLocation is read on every status refresh, so it is defaulted here
+  // rather than restated in each widget test. An explicit stub still wins,
+  // which is what the geofence-state tests rely on.
+  final stubs = {'hasHomeLocation': false, ...responses};
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, (call) async {
     calls.add(call);
-    if (!responses.containsKey(call.method)) {
+    if (!stubs.containsKey(call.method)) {
       throw PlatformException(code: 'unimplemented', message: 'no stub');
     }
-    return responses[call.method];
+    return stubs[call.method];
   });
   return (channel: channel, calls: calls);
 }
@@ -128,6 +132,48 @@ void main() {
       expect(find.text('none (inert build)'), findsOneWidget);
     });
 
+    testWidgets('reports when no home is set, since that means everywhere',
+        (tester) async {
+      // Without coordinates every pass decides LOCATION_UNKNOWN and fails
+      // closed, so enforcement is permanent rather than geofenced. That is a
+      // large behavioural difference and must be visible on screen.
+      final fake = _fakeChannel({
+        'status': _statusMap(isDeviceOwner: true),
+        'hasHomeLocation': false,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('enforcing everywhere'), findsOneWidget);
+      expect(find.text('Set home to current location'), findsOneWidget);
+    });
+
+    testWidgets('offers to update home once one is set', (tester) async {
+      final fake = _fakeChannel({
+        'status': _statusMap(isDeviceOwner: true),
+        'hasHomeLocation': true,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(fake.channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('active'), findsOneWidget);
+      expect(find.text('Update home to here'), findsOneWidget);
+    });
+
     testWidgets('release is confirmed before it runs', (tester) async {
       final fake = _fakeChannel({
         'status': _statusMap(isDeviceOwner: true),
@@ -143,6 +189,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(find.text('Release device owner'), 100);
       await tester.tap(find.text('Release device owner'));
       await tester.pumpAndSettle();
       expect(find.text('Release device owner?'), findsOneWidget);
@@ -171,6 +218,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(find.text('Release device owner'), 100);
       await tester.tap(find.text('Release device owner'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Release'));

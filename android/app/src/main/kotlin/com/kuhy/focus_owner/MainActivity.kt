@@ -14,6 +14,15 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "status" -> result.success(bridge.status())
                     "releaseDeviceOwner" -> result.success(bridge.releaseDeviceOwner())
+                    "setHomeToCurrentLocation" ->
+                        result.success(
+                            EnforcementRunner(applicationContext)
+                                .setHomeToCurrentLocation(),
+                        )
+                    "hasHomeLocation" ->
+                        result.success(
+                            EnforcementRunner(applicationContext).hasHomeLocation(),
+                        )
                     "setAlwaysOnVpn" -> {
                         val pkg = call.argument<String>("package")
                         if (pkg == null) {
