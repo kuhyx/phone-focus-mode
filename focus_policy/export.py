@@ -51,6 +51,39 @@ BLOCKABLE_SYSTEM_PACKAGES = frozenset(
     },
 )
 
+# Packages hidden everywhere, regardless of location, curfew or workout.
+#
+# The geofence exists so the phone becomes usable again away from home, but
+# that makes leaving the house an off switch -- which is the specific thing
+# Device Owner was provisioned to remove. These are exempt from it: the
+# decision layer never puts them in packagesToShow, so the AWAY branch cannot
+# restore them.
+#
+# Chrome is here because it is a second route to the same content, not because
+# browsing is banned -- Firefox stays available and carries the uBlock filters.
+# com.android.vending is deliberately NOT here: Play stays geofenced so apps
+# can still be installed and updated away from home, and a hidden package
+# cannot be reinstalled from Play anyway.
+ALWAYS_BLOCKED_PACKAGES = frozenset(
+    {
+        "com.android.chrome",
+        "com.google.android.apps.youtube.music",
+        "com.google.android.youtube",
+    },
+)
+
+# Every always-blocked package here is preinstalled, so it only ever reaches
+# the sweep by also being opted in above. Listing one without the other would
+# not error -- it would silently never be hidden, because the runner filters it
+# out of installedPackages before the decision layer sees it.
+_UNSWEEPABLE = ALWAYS_BLOCKED_PACKAGES - BLOCKABLE_SYSTEM_PACKAGES
+if _UNSWEEPABLE:  # pragma: no cover - guards a constant, not a code path
+    msg = (
+        "always-blocked system packages must also be blockable, or the sweep "
+        f"never sees them: {sorted(_UNSWEEPABLE)}"
+    )
+    raise ValueError(msg)
+
 
 def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
     """Return a JSON-serialisable representation of ``policy``."""
@@ -83,6 +116,13 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         # never touching a system app.
         "blockable_system_packages": sorted(
             BLOCKABLE_SYSTEM_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
+        ),
+        # Same subtraction, for the same reason: an allowed package must never
+        # also be declared always-blocked, or the asset would state both at
+        # once. The enforcer itself can never appear here -- hiding it takes
+        # the escape hatch with it.
+        "always_blocked_packages": sorted(
+            ALWAYS_BLOCKED_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
         ),
     }
 

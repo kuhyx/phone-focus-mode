@@ -103,6 +103,53 @@ def test_blockable_system_packages_never_contradicts_the_allowlist() -> None:
     assert "com.android.chrome" in payload["allowed_packages"]
 
 
+def test_always_blocked_exempts_youtube_and_chrome_from_the_geofence() -> None:
+    """The geofence must not become an off switch for these.
+
+    Everything else is restored on the AWAY branch, which makes leaving the
+    house a way to switch enforcement off -- the specific thing Device Owner
+    was provisioned to remove. Play is deliberately absent: it stays geofenced
+    so apps can still be installed away from home.
+    """
+    always = policy_to_dict(_policy())["always_blocked_packages"]
+
+    assert "com.google.android.youtube" in always
+    assert "com.google.android.apps.youtube.music" in always
+    assert "com.android.chrome" in always
+    assert "com.android.vending" not in always
+
+
+def test_always_blocked_is_a_subset_of_blockable() -> None:
+    """An always-blocked system app the sweep cannot see would silently no-op.
+
+    The runner filters FLAG_SYSTEM packages out of ``installedPackages``
+    unless they are opted in, so the decision layer would never receive them.
+    """
+    payload = policy_to_dict(_policy())
+
+    assert set(payload["always_blocked_packages"]) <= set(
+        payload["blockable_system_packages"],
+    )
+
+
+def test_always_blocked_never_contradicts_the_allowlist() -> None:
+    """Allowing a package wins over always-blocking it.
+
+    The asset must not state both at once; the subtraction keeps the two
+    fields consistent no matter what config.sh says.
+    """
+    payload = policy_to_dict(
+        _policy(
+            allowed_packages=frozenset(
+                {"pl.mbank", "com.launcher", "com.android.chrome"},
+            ),
+        ),
+    )
+
+    assert "com.android.chrome" not in payload["always_blocked_packages"]
+    assert "com.android.chrome" in payload["allowed_packages"]
+
+
 def test_lists_are_sorted_for_stable_diffs() -> None:
     """Sorted output keeps a committed asset's diff meaningful."""
     payload = policy_to_dict(_policy())

@@ -605,7 +605,15 @@ export BLOCKED_SYSTEM_APPS="
 # --- System / essential packages that must NEVER be disabled ---
 # These are matched as prefixes (startswith).
 # You generally don't need to edit this list.
+#
+# pl.infakt.infakt is the one non-system entry. Allowlisting it is weaker:
+# that depends on it staying in BOTH the day and night lists, and dropping it
+# from either would silently make it hideable. It is device-paired to a bank
+# over SMS, so losing access to it strands the same re-authentication chain a
+# hidden Messages app would. isAllowed() checks this list first, before the
+# curfew split, so it holds under every condition.
 export SYSTEM_NEVER_DISABLE="
+pl.infakt.infakt
 com.android.launcher
 com.android.launcher3
 com.android.settings
