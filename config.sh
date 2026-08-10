@@ -614,6 +614,11 @@ export BLOCKED_SYSTEM_APPS="
 # curfew split, so it holds under every condition.
 export SYSTEM_NEVER_DISABLE="
 pl.infakt.infakt
+# The always-on VPN provider. Hiding it is self-defeating in the worst way:
+# it is the network-level YouTube block, and with DISALLOW_CONFIG_VPN pinned
+# to a hidden package the device can lose general connectivity rather than
+# just the filter. Must outrank every enforcement branch.
+com.celzero.bravedns
 com.android.launcher
 com.android.launcher3
 com.android.settings

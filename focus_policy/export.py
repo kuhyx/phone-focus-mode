@@ -76,6 +76,14 @@ ALWAYS_BLOCKED_PACKAGES = frozenset(
 # the sweep by also being opted in above. Listing one without the other would
 # not error -- it would silently never be hidden, because the runner filters it
 # out of installedPackages before the decision layer sees it.
+# The always-on VPN provider, pinned by the device owner on every pass.
+#
+# This is the network-level block: package hiding stops the YouTube app, but
+# only a VPN reaches youtube.com in Firefox, in a webview, or in any client
+# that has not been thought of. Named here rather than hardcoded in Kotlin so
+# the asset stays the single description of the policy.
+ALWAYS_ON_VPN_PACKAGE = "com.celzero.bravedns"
+
 _UNSWEEPABLE = ALWAYS_BLOCKED_PACKAGES - BLOCKABLE_SYSTEM_PACKAGES
 if _UNSWEEPABLE:  # pragma: no cover - guards a constant, not a code path
     msg = (
@@ -123,6 +131,13 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         # the escape hatch with it.
         "always_blocked_packages": sorted(
             ALWAYS_BLOCKED_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
+        ),
+        # Emitted only when the provider is protected from the sweep. Pinning a
+        # package the enforcer can hide is the worst case: DISALLOW_CONFIG_VPN
+        # points at a hidden app and the device loses connectivity rather than
+        # just the filter.
+        "always_on_vpn_package": (
+            ALWAYS_ON_VPN_PACKAGE if policy.is_protected(ALWAYS_ON_VPN_PACKAGE) else ""
         ),
     }
 

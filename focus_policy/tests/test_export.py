@@ -25,6 +25,7 @@ def _policy(
     allowed_packages: frozenset[str] = frozenset({"pl.mbank", "com.launcher"}),
     night_allowed_packages: frozenset[str] = frozenset({"pl.mbank", "com.launcher"}),
     curfew: CurfewWindow | None = _DEFAULT_CURFEW,
+    never_disable_prefixes: tuple[str, ...] = ("com.android.",),
 ) -> FocusPolicy:
     """Build a policy with the enforcer deliberately absent from both lists."""
     return FocusPolicy(
@@ -38,7 +39,7 @@ def _policy(
         launcher_package="com.launcher",
         allowed_packages=allowed_packages,
         night_allowed_packages=night_allowed_packages,
-        never_disable_prefixes=("com.android.",),
+        never_disable_prefixes=never_disable_prefixes,
         workout_unblock_domains=frozenset({"youtube.com"}),
         browser_packages=frozenset({"org.mozilla.firefox"}),
     )
@@ -117,6 +118,22 @@ def test_always_blocked_exempts_youtube_and_chrome_from_the_geofence() -> None:
     assert "com.google.android.apps.youtube.music" in always
     assert "com.android.chrome" in always
     assert "com.android.vending" not in always
+
+
+def test_always_on_vpn_requires_a_sweep_protected_provider() -> None:
+    """Pinning a package the enforcer can hide is the worst failure mode.
+
+    DISALLOW_CONFIG_VPN pointing at a hidden app costs general connectivity,
+    not just the filter, so the field is emitted only when the provider is
+    protected.
+    """
+    unprotected = policy_to_dict(_policy())["always_on_vpn_package"]
+    protected = policy_to_dict(
+        _policy(never_disable_prefixes=("com.celzero.bravedns",)),
+    )["always_on_vpn_package"]
+
+    assert unprotected == ""
+    assert protected == "com.celzero.bravedns"
 
 
 def test_always_blocked_is_a_subset_of_blockable() -> None:
