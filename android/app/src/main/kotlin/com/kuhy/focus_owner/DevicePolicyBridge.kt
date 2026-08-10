@@ -65,6 +65,40 @@ class DevicePolicyBridge(private val context: Context) {
     fun isAdminActive(): Boolean = dpm.isAdminActive(admin)
 
     /**
+     * Blocks or unblocks uninstalling this app.
+     *
+     * Device owner already hides Settings' uninstall button, but `adb uninstall`
+     * still works without this, and that path is the soft-brick: removing the
+     * app without releasing first strands ownership with no holder, and a
+     * factory reset becomes the only exit.
+     *
+     * Self-targeted deliberately. Blocking uninstall of *other* packages is a
+     * separate concern and is not what this protects.
+     */
+    fun setSelfUninstallBlocked(blocked: Boolean): Boolean {
+        if (!isDeviceOwner()) {
+            Log.w(FocusDeviceAdminReceiver.TAG, "not DO; cannot change uninstall block")
+            return false
+        }
+        return runCatching {
+            dpm.setUninstallBlocked(admin, context.packageName, blocked)
+            val applied = dpm.isUninstallBlocked(admin, context.packageName)
+            Log.i(FocusDeviceAdminReceiver.TAG, "setUninstallBlocked($blocked) -> $applied")
+            applied == blocked
+        }.getOrElse { error ->
+            Log.e(FocusDeviceAdminReceiver.TAG, "setUninstallBlocked failed", error)
+            false
+        }
+    }
+
+    /** Whether uninstalling this app is currently blocked. */
+    fun isSelfUninstallBlocked(): Boolean {
+        if (!isDeviceOwner()) return false
+        return runCatching { dpm.isUninstallBlocked(admin, context.packageName) }
+            .getOrDefault(false)
+    }
+
+    /**
      * Describes provisioning state for the UI, so the escape hatch can be found
      * without a PC attached.
      */
@@ -74,6 +108,7 @@ class DevicePolicyBridge(private val context: Context) {
         "isAdminActive" to isAdminActive(),
         "sdkInt" to Build.VERSION.SDK_INT,
         "restrictionsApplied" to false,
+        "uninstallBlocked" to isSelfUninstallBlocked(),
     )
 
     /**
@@ -96,6 +131,11 @@ class DevicePolicyBridge(private val context: Context) {
             return true
         }
         return runCatching {
+            // Order matters and is not interchangeable: uninstall blocking is a
+            // device-owner power, so clearing ownership first would leave the
+            // block in place with nothing privileged left to lift it — an app
+            // that owns nothing and cannot be removed. Unblock, then release.
+            setSelfUninstallBlocked(false)
             dpm.clearDeviceOwnerApp(context.packageName)
             val released = !isDeviceOwner()
             Log.i(FocusDeviceAdminReceiver.TAG, "clearDeviceOwnerApp -> released=$released")

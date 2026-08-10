@@ -67,6 +67,14 @@ class EnforcementRunner(private val context: Context) {
      * that restores access rather than the half that removes it.
      */
     fun apply(decision: EnforcementDecision, bridge: DevicePolicyBridge) {
+        // Re-asserted every pass rather than set once at provisioning time, so
+        // the protection self-heals: `adb uninstall` while enforcing is the one
+        // route that strands device ownership with no holder, and a factory
+        // reset is then the only exit. Tracking the decision means going away
+        // from home lifts it, which keeps the app removable in exactly the
+        // state where enforcement is already off.
+        bridge.setSelfUninstallBlocked(decision.isEnforcing)
+
         var shown = 0
         var hidden = 0
         for (pkg in decision.packagesToShow) {

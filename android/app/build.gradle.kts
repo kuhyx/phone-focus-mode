@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Release signing key, kept out of the repo, shared with the other apps.
+//
+// This matters more here than elsewhere: a device owner can only be replaced
+// by an APK with the same signature, and `dpm remove-active-admin` does not
+// work on one. Provisioning a debug-signed build would mean the app could
+// never be updated, and the only exit from a stale device owner that cannot
+// release itself is another factory reset.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -25,11 +39,27 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystoreProperties.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Falls back to the debug key only when key.properties is absent
+            // (a fresh clone), so `flutter run --release` still works.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
+            // Deliberately no minify/shrink. An untested ProGuard pass that
+            // strips a DevicePolicyManager callback would produce a device
+            // owner that cannot release itself, and that costs a factory
+            // reset to undo.
         }
     }
 }

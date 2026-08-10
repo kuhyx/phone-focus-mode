@@ -14,6 +14,14 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "status" -> result.success(bridge.status())
                     "releaseDeviceOwner" -> result.success(bridge.releaseDeviceOwner())
+                    "setSelfUninstallBlocked" -> {
+                        val blocked = call.argument<Boolean>("blocked")
+                        if (blocked == null) {
+                            result.error("bad_args", "blocked required", null)
+                        } else {
+                            result.success(bridge.setSelfUninstallBlocked(blocked))
+                        }
+                    }
                     "setApplicationHidden" -> {
                         val pkg = call.argument<String>("package")
                         val hidden = call.argument<Boolean>("hidden")
