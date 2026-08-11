@@ -163,6 +163,59 @@ class DevicePolicyBridge(private val context: Context) {
         }
     }
 
+    /**
+     * Pins Private DNS to [host] and forbids the user changing it.
+     *
+     * This is the layer that survives the bypass measured on 2026-08-11:
+     * RethinkDNS's blocklists can be switched off from inside that app in a
+     * few taps, and no device owner API can stop it. Private DNS is a system
+     * setting, so the rules move to a resolver the phone cannot edit at all.
+     *
+     * Fails loudly rather than silently: an unresolvable or unreachable host
+     * here means no DNS at all, so the caller must verify before locking.
+     *
+     * @return null on success, or a message describing why it failed.
+     */
+    fun setPrivateDns(host: String): String? {
+        if (!isDeviceOwner()) return "not device owner"
+        return runCatching {
+            val result = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, host)
+            val active = dpm.getGlobalPrivateDnsHost(admin)
+            Log.i(FocusDeviceAdminReceiver.TAG, "privateDns($host) -> code=$result now=$active")
+            if (result == DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR && active == host) {
+                null
+            } else {
+                "setGlobalPrivateDnsModeSpecifiedHost returned $result (host=$active)"
+            }
+        }.getOrElse { error ->
+            Log.e(FocusDeviceAdminReceiver.TAG, "setPrivateDns failed", error)
+            error.message ?: error::class.java.simpleName
+        }
+    }
+
+    /** The Private DNS host currently pinned, or null. */
+    fun privateDnsHost(): String? {
+        if (!isDeviceOwner()) return null
+        return runCatching { dpm.getGlobalPrivateDnsHost(admin) }.getOrNull()
+    }
+
+    /** Blocks or unblocks user changes to Private DNS. */
+    fun setPrivateDnsConfigBlocked(blocked: Boolean): Boolean {
+        if (!isDeviceOwner()) return false
+        return runCatching {
+            if (blocked) {
+                dpm.addUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
+            } else {
+                dpm.clearUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
+            }
+            Log.i(FocusDeviceAdminReceiver.TAG, "DISALLOW_CONFIG_PRIVATE_DNS=$blocked")
+            true
+        }.getOrElse { error ->
+            Log.e(FocusDeviceAdminReceiver.TAG, "DISALLOW_CONFIG_PRIVATE_DNS failed", error)
+            false
+        }
+    }
+
     /** The package currently pinned as always-on VPN, or null. */
     fun alwaysOnVpnPackage(): String? {
         if (!isDeviceOwner()) return null
@@ -233,6 +286,14 @@ class DevicePolicyBridge(private val context: Context) {
             // reconfigure. Undo the restrictions, then release.
             setSelfUninstallBlocked(false)
             setVpnConfigBlocked(false)
+            // Leaving Private DNS pinned to a resolver the user cannot change
+            // would outlive the ownership required to unpin it, and if that
+            // host ever stops answering the device has no DNS at all.
+            setPrivateDnsConfigBlocked(false)
+            runCatching { dpm.setGlobalPrivateDnsModeOpportunistic(admin) }
+                .onFailure {
+                    Log.w(FocusDeviceAdminReceiver.TAG, "could not reset Private DNS", it)
+                }
             // Read the pinned package BEFORE unpinning: afterwards the getter
             // returns null and the provider would stay permanently
             // unremovable, which is the exact trap this block exists to avoid.

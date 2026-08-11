@@ -88,6 +88,16 @@ class EnforcementRunner(private val context: Context) {
             bridge.setPackageUninstallBlocked(vpn, true)
         }
 
+        // Pinned every pass for the same reason as the VPN: this is where the
+        // domain rules actually live now, so it must not depend on anyone
+        // remembering to set it. DISALLOW_CONFIG_PRIVATE_DNS is applied
+        // separately, only once the host is confirmed answering.
+        policy?.privateDnsHost?.let { host ->
+            bridge.setPrivateDns(host)?.let { failure ->
+                Log.w(FocusDeviceAdminReceiver.TAG, "private DNS not pinned: $failure")
+            }
+        }
+
         // Re-asserted every pass rather than set once at provisioning time, so
         // the protection self-heals: `adb uninstall` while enforcing is the one
         // route that strands device ownership with no holder, and a factory

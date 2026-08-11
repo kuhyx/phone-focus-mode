@@ -96,6 +96,14 @@ data class FocusPolicy(
      * predating the field cannot silently cut the device off.
      */
     val vpnLockdown: Boolean = false,
+    /**
+     * Private DNS host to pin, or null to leave the setting alone.
+     *
+     * The domain rules live on this resolver rather than in the VPN app,
+     * because the VPN app's own blocklists can be switched off from inside it
+     * and no device owner API can stop that.
+     */
+    val privateDnsHost: String? = null,
 ) {
     /**
      * Whether a package must never be hidden.
@@ -185,6 +193,8 @@ data class FocusPolicy(
                 alwaysOnVpnPackage = json.optString("always_on_vpn_package")
                     .takeIf { it.isNotEmpty() },
                 vpnLockdown = json.optBoolean("vpn_lockdown", false),
+                privateDnsHost = json.optString("private_dns_host")
+                    .takeIf { it.isNotEmpty() },
                 curfew = curfewJson?.let {
                     CurfewWindow(
                         startMinutes = parseHhMm(it.getString("start"), "curfew.start"),
