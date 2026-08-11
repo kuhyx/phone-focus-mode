@@ -90,6 +90,26 @@ ALWAYS_ON_VPN_PACKAGE = "com.celzero.bravedns"
 # enforcer app itself and needs no network.
 VPN_LOCKDOWN = True
 
+# Private DNS host pinned by the device owner, or "" to leave it alone.
+#
+# This is where the domain rules actually live. RethinkDNS's blocklists were
+# measured to be switchable off from inside that app in a few taps, and no
+# device owner API can prevent it -- so the block moves to a resolver on the
+# PC that the phone has no way to edit. The VPN stays pinned alongside it,
+# because Private DNS does not stop a browser's built-in DoH.
+# Empty until the resolver is reachable from the phone. Measured 2026-08-11:
+# stunnel's log recorded zero connections from the handset during two pin
+# attempts, so setGlobalPrivateDnsModeSpecifiedHost returned
+# PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING -- the router does not forward 853.
+# Android's `nc -z` on the device reported the port OPEN three times and was
+# simply wrong; toybox nc does not implement -z, so the server-side log is the
+# only trustworthy evidence here.
+#
+# There is a second, deeper reason not to enable this yet: while a VPN with
+# lockdown holds the tunnel, app DNS goes to the VPN's own resolver rather
+# than the system Private DNS path, so a successful pin would carry no block.
+PRIVATE_DNS_HOST = ""
+
 # Every always-blocked package here is preinstalled, so it only ever reaches
 # the sweep by also being opted in above. Listing one without the other would
 # not error -- it would silently never be hidden, because the runner filters it
@@ -143,6 +163,7 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
             ALWAYS_BLOCKED_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
         ),
         "vpn_lockdown": VPN_LOCKDOWN,
+        "private_dns_host": PRIVATE_DNS_HOST,
         # Emitted only when the provider is protected from the sweep. Pinning a
         # package the enforcer can hide is the worst case: DISALLOW_CONFIG_VPN
         # points at a hidden app and the device loses connectivity rather than

@@ -311,7 +311,12 @@ com.android.chrome
 # Keeps Minimalist Phone installed and locked as the default HOME app.
 # The APK is snapshotted by `deploy.sh --snapshot-launcher` from the
 # currently-installed copy (user installs once via Aurora/Play).
-export LAUNCHER_PACKAGE="com.qqlabs.minimalistlauncher"
+# The Pixel 6a's stock launcher. The previous value named the rooted
+# Blackview's minimalist launcher, which is not installed here -- the exporter's
+# launcher check caught it, which is the whole reason that check exists: hiding
+# the launcher leaves the device with no home screen and no way back to the
+# enforcer app.
+export LAUNCHER_PACKAGE="com.google.android.apps.nexuslauncher"
 export LAUNCHER_APK="/data/adb/focus_mode/minimalist_launcher.apk"
 export LAUNCHER_SHA_FILE="/data/adb/focus_mode/minimalist_launcher.sha256"
 # Captured home-activity component (package/.Activity). Saved by
@@ -338,171 +343,48 @@ export LAUNCHER_LOG="$STATE_DIR/launcher_enforcer.log"
 # ============================================================
 
 export WHITELIST="
-# --- Protected launcher (MUST be whitelisted - see launcher_enforcer.sh) ---
-# The focus daemon disables every 3rd-party app not in this list. If the
-# launcher is not listed, focus mode will disable it and the home screen
-# becomes blank. Keep this in sync with LAUNCHER_PACKAGE above.
-com.qqlabs.minimalistlauncher
+# Rewritten 2026-08-11 for the unrooted Pixel 6a under Device Owner. The list
+# it replaced described the rooted Blackview and named apps this phone does not
+# have. Everything absent from this list is hidden while at home, including
+# every browser -- so no link opens at all until you leave the geofence.
 
-# --- Blackview Recents (MUST be whitelisted, do NOT remove) ---
-# RecentsActivity lives in this APK; removing it breaks swipe-up-for-recents.
-com.blackview.launcher
-com.blackview.launcher.overlay.framework
+# --- Launcher (MUST be listed: hiding it leaves no home screen) ---
+com.google.android.apps.nexuslauncher
 
-# --- Companion status-notification app (MUST be whitelisted) ---
-# Provides the persistent focus-mode notification + Re-check-now button.
-# If disabled, the status notification vanishes and the recheck action
-# stops working. See phone_focus_mode/focus_status_app/.
-com.kuhy.focusstatus
+# --- The enforcer and its VPN provider (hiding either is unrecoverable) ---
+com.kuhy.focus_owner
+com.celzero.bravedns
+com.zaneschepke.wireguardautotunnel
 
-# --- User-requested productive apps ---
-com.stronglifts.app
-com.kuhy.workout_app
-com.kuhy.diet_guard_app
-com.kuhy.habit_stack
-com.kuhy.home_inventory
-com.kuhy.epopeja_karta
-com.kuhy.untools
-com.shazam.android
-com.ichi2.anki
-com.metrolist.music
-org.mozilla.fenix
-# --- FOSS replacements for stock/Google apps (unhidden per request; hide the
-#     Google originals in the launcher, NOT via package-disable — see the
-#     BLOCKED_SYSTEM_APPS note about MTK bootloop/wipe risk on BL9000) ---
-# Clock You (replaces stock Clock), Camera, Teyin file manager (Google Files),
-# Rain weather, LibreFind (Google Search replacement)
-com.bnyro.clock
-com.vayunmathur.camera
-com.rama.teyin
-com.yoshi.rain
-com.jksalcedo.librefind
-ws.xsoh.etar
-com.fsck.k9
-com.kuhy.pomodoro_app
-com.kuhy.horatio
-
-# --- Default phone/contacts/messages handlers (NEVER disable - boot will
-#     fall back to the system FallbackHome shim and SystemUI gestures
-#     break). ---
+# --- Phone, messaging, contacts (Polish UI: telefon / wiadomosci) ---
 org.fossify.phone
-org.fossify.contacts
 org.fossify.messages
-
-# --- Active launcher (de.thomaskuenneth.benice). Must stay enabled or HOME
-#     resolves to the system FallbackHome shim. ---
-de.thomaskuenneth.benice
-
-# --- Google system packages that ship in /data/app (so they show up in
-#     pm-list-packages-3 output) but are required for system stability. ---
-com.google.android.safetycore
-com.google.android.contactkeys
-
-# --- User-allowed utilities and communication ---
-com.sosauce.cutecalc
-org.thoughtcrime.securesms
-com.discord
-com.anthropic.claude
-
-# --- Google system apps (add by name even though they show as system) ---
-com.google.android.apps.maps
-com.google.android.calendar
-
-# --- Notes & productivity ---
-net.cozic.joplin
-dev.kuhy.todo
-
-# --- Navigation & transit (needed when going out) ---
-net.osmand
-de.schildbach.oeffi
-com.kolejeslaskie.mss
-
-# --- Banking (must always work) ---
-pl.mbank
-pl.pkobp.iko
-com.revolut.revolut
-# Accounting, but device-paired to a bank and re-paired over SMS, so losing
-# access to it strands the same re-authentication chain the banks do.
-pl.infakt.infakt
-
-# --- Government / digital ID (Polish mObywatel — must always work) ---
-pl.nask.mobywatel
-
-# --- Security & root tools (must always work) ---
-com.topjohnwu.magisk
-com.kuhy.vaultkitbypass
-moe.shizuku.privileged.api
-me.phh.superuser
-com.beemdevelopment.aegis
-com.azure.authenticator
-oracle.idm.mobile.authenticator
-com.kunzisoft.keepass.libre
-
-# --- Email & communication ---
-net.thunderbird.android.beta
-com.microsoft.office.outlook
-com.google.android.gm
-ch.protonmail.android
-com.microsoft.teams
-com.facebook.katana
+org.fossify.contacts
 com.facebook.orca
 
-# --- App installation alternatives (must stay usable in focus mode) ---
-com.aurora.store
-com.machiav3lli.fdroid
-org.fdroid.fdroid
+# --- Banking and identity (all device-paired over SMS; see docs) ---
+pl.mbank
+com.revolut.revolut
+pl.infakt.infakt
+pl.nask.mobywatel
+com.kunzisoft.keepass.libre
 
-# --- Manga reader ---
-eu.kanade.tachiyomi.sy
-
-# --- Development ---
-com.github.android
-
-# --- Wake alarm sync (writes alarm time to GitHub Gist for PC sync) ---
+# --- kuhy's own apps ---
+com.kuhy.diet_guard_app
+com.kuhy.home_inventory
+com.kuhy.untools
 com.kuhy.wake_alarm_sync
+com.kuhy.workout_app
+dev.kuhy.todo
 
-# --- Media / podcasts ---
-ac.mdiq.podcini.X
-is.xyz.mpv
-
-# --- Bible study ---
-net.bible.android.activity
-com.schwegelbin.openbible
-
-# --- Transit (Polish public transport) ---
-pkp.ic.eicmobile
-pl.plksa.portalpasazera
-
-# --- Telco ---
-pl.orange.mojeorange
-
-# --- Fitness ---
-org.runnerup
-
-# --- Sports / football predictions ---
-de.kicktipp.mbookmark
-
-# --- Diet & calorie tracking ---
-com.fitatu.tracker
-com.waist.line
-com.maksimowiczm.foodyou
-
-# --- Bill splitting ---
-com.jwang123.splitbills
-com.Splitwise.SplitwiseMobile
-
-# --- Smart home ---
-com.xiaomi.smarthome
-com.tplink.iot
-
-# --- Remote SSH access via WireGuard (self-hosted, see
-#     linux_configuration/scripts/single_use/features/setup_wireguard_ssh.sh) ---
-com.zaneschepke.wireguardautotunnel
-org.connectbot
-
-# --- Self-hosted cloud client (dufs; browse/upload media, see
-#     github.com/kuhyx/dufs-cloud → app/) ---
-com.kuhy.dufs_client
+# --- Daily utility ---
+com.google.android.calendar
+com.google.android.deskclock
+com.google.android.apps.maps
+com.sosauce.cutecalc
+com.ichi2.anki
+com.metrolist.music
+eu.kanade.tachiyomi.sy
 "
 
 # ============================================================
@@ -519,69 +401,22 @@ com.kuhy.dufs_client
 # ============================================================
 
 export NIGHT_WHITELIST="
-# --- Infrastructure that MUST stay or the phone/enforcement breaks ---
-com.qqlabs.minimalistlauncher
-de.thomaskuenneth.benice
-com.blackview.launcher
-com.blackview.launcher.overlay.framework
-com.kuhy.focusstatus
+# Curfew (23:00-05:00 at home) is strictly tighter than the day list: only what
+# is needed to answer the phone, reach a bank, or handle an emergency. Rewritten
+# 2026-08-11 alongside the day list.
+com.kuhy.focus_owner
+com.celzero.bravedns
+com.google.android.apps.nexuslauncher
 org.fossify.phone
-org.fossify.contacts
 org.fossify.messages
-com.google.android.safetycore
-com.google.android.contactkeys
-com.topjohnwu.magisk
-moe.shizuku.privileged.api
-me.phh.superuser
-com.kuhy.vaultkitbypass
-
-# --- Essentials (must work at night) ---
-# Banking
+org.fossify.contacts
 pl.mbank
-pl.pkobp.iko
 com.revolut.revolut
 pl.infakt.infakt
-# Maps / navigation home
-com.google.android.apps.maps
-# Calendar
-com.google.android.calendar
-ws.xsoh.etar
-# Alarm clock (Clock You — the installed clock; org.fossify.clock is not present)
-com.bnyro.clock
-# Government / digital ID
 pl.nask.mobywatel
-# Authenticators / password vault (needed to log into banking)
-com.beemdevelopment.aegis
-com.azure.authenticator
-oracle.idm.mobile.authenticator
 com.kunzisoft.keepass.libre
-# Smart home (control lights before sleep; Tapo plug used for overnight
-# power-draw measurement, must be checkable during the curfew window)
-com.xiaomi.smarthome
-com.tplink.iot
-
-# --- Wake alarm sync (must work at night to set tomorrow's alarm) ---
 com.kuhy.wake_alarm_sync
-
-# --- Notes capture (offline-first; jot an idea before sleep, not a scroll trap) ---
-dev.kuhy.todo
-
-# --- Diet guard companion (log meals; health tool, not a scroll trap) ---
-com.kuhy.diet_guard_app
-
-# --- Habit Stack companion (habit tracking; health tool, not a scroll trap) ---
-com.kuhy.habit_stack
-
-# --- Good-for-you apps (not scroll traps; kept per your request) ---
-# Remove any of these if you want a stricter night.
-com.stronglifts.app
-com.kuhy.workout_app
-org.runnerup
-# Music player — kept so a night run has music in the background
-com.metrolist.music
-com.fitatu.tracker
-com.waist.line
-com.maksimowiczm.foodyou
+com.google.android.deskclock
 "
 
 # ============================================================

@@ -136,6 +136,22 @@ def test_always_on_vpn_requires_a_sweep_protected_provider() -> None:
     assert protected == "com.celzero.bravedns"
 
 
+def test_private_dns_host_is_exported_for_pinning() -> None:
+    """The domain rules live on this resolver, not in the VPN app.
+
+    Measured on 2026-08-11: RethinkDNS's blocklists can be switched off from
+    inside that app in a few taps, and no device owner API prevents it. A
+    pinned Private DNS host moves the rules somewhere the phone cannot edit.
+    """
+    payload = policy_to_dict(_policy())
+
+    # Empty until the resolver is reachable from the phone: pinning an
+    # unreachable host means no DNS at all, and Android refuses it anyway
+    # (PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING).
+    assert payload["private_dns_host"] == ""
+    assert payload["vpn_lockdown"] is True
+
+
 def test_always_blocked_is_a_subset_of_blockable() -> None:
     """An always-blocked system app the sweep cannot see would silently no-op.
 
