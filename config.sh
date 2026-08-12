@@ -385,6 +385,10 @@ com.sosauce.cutecalc
 com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
+
+# --- Workout tracking (always beneficial; must stay enabled to export runs) ---
+org.runnerup
+org.runnerup.free
 "
 
 # ============================================================
@@ -417,6 +421,8 @@ pl.nask.mobywatel
 com.kunzisoft.keepass.libre
 com.kuhy.wake_alarm_sync
 com.google.android.deskclock
+org.runnerup
+org.runnerup.free
 "
 
 # ============================================================
