@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Required to start the pass with foregroundServiceType="location".
+         Without it startForeground throws SecurityException and the whole
+         service crashes on every alarm; measured 2026-08-14. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- USE_EXACT_ALARM rather than SCHEDULE_EXACT_ALARM: the latter is
          user-revocable and was observed denied by default on Android 16,
@@ -9,9 +13,18 @@
          qualifying use, and it is granted at install with no runtime prompt. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Coarse is enough for a 150 m geofence and is the cheaper grant to ask
-         for; background access is what makes the gate work while the screen is
-         off, and is requested separately at runtime. -->
+    <!-- FINE is required, not a nicety. Coarse was assumed "enough for a 150 m
+         geofence"; it is not. Android 12+ fuzzes ACCESS_COARSE_LOCATION to a
+         ~1-2 km grid that is re-randomised periodically, so a coarse fix taken
+         at home routinely lands outside a 150 m fence, which reads as AWAY
+         and restores every app the geofence exists to hide. Measured 2026-08-14:
+         only COARSE was held, and the phone alternated between blocking nothing
+         at home and blocking everything at the office.
+         COARSE stays declared so a partial grant still yields a (fuzzed) fix
+         rather than none at all. Both are self-granted by the device owner in
+         DevicePolicyBridge.grantLocationPermissions(); background access is
+         what makes the gate work while the screen is off. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- Needed to enumerate installed packages for the allowlist sweep. -->
@@ -63,7 +76,13 @@
         <service
             android:name=".EnforcementService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|location">
+            <!-- "location" as well as "specialUse": the pass actively requests
+                 a fix, and background location delivery is throttled to a few
+                 times an hour unless it happens under a location-typed
+                 foreground service. Without it the request usually times out,
+                 which fails closed and blocks everything. -->
+
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Applies the device-owner focus policy at scheduled times" />
@@ -84,6 +103,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!-- Installing over the app cancels its pending alarms, so
+                     without this an `adb install -r` silently stops
+                     enforcement until someone opens the app. Measured
+                     2026-08-14: an install at 13:31 dropped the 13:34 alarm,
+                     and the chain only resumed because the app was launched.
+                     A deploy during curfew would otherwise leave the curfew
+                     allowlist applied indefinitely. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

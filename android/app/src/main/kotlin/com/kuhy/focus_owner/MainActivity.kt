@@ -6,6 +6,14 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
+    /** For channel calls that block; the platform thread must stay free. */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    override fun onDestroy() {
+        worker.shutdown()
+        super.onDestroy()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val bridge = DevicePolicyBridge(applicationContext)
@@ -14,11 +22,22 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "status" -> result.success(bridge.status())
                     "releaseDeviceOwner" -> result.success(bridge.releaseDeviceOwner())
-                    "setHomeToCurrentLocation" ->
-                        result.success(
-                            EnforcementRunner(applicationContext)
-                                .setHomeToCurrentLocation(),
-                        )
+                    // Off the platform thread: setting home now waits for a
+                    // genuinely fresh fix (up to ACQUIRE_TIMEOUT_MS), and
+                    // blocking the main thread for that long is an ANR on the
+                    // one button that provisions the geofence.
+                    "setHomeToCurrentLocation" -> worker.execute {
+                        val outcome = runCatching {
+                            EnforcementRunner(applicationContext).setHomeToCurrentLocation()
+                        }.getOrElse { it.message ?: it::class.java.simpleName }
+                        // The work outlives a shutdown() (it only stops new
+                        // submissions), so the activity can be gone by now.
+                        // Replying to a dead activity's channel throws, and
+                        // the home write has already happened either way.
+                        if (!isDestroyed && !isFinishing) {
+                            runOnUiThread { result.success(outcome) }
+                        }
+                    }
                     "hasHomeLocation" ->
                         result.success(
                             EnforcementRunner(applicationContext).hasHomeLocation(),
@@ -76,6 +95,16 @@ class MainActivity : FlutterActivity() {
                     "cancelEnforcement" -> {
                         EnforcementScheduler(applicationContext).cancel()
                         result.success(true)
+                    }
+                    // Returned as raw JSON strings rather than platform maps:
+                    // the channel codec stays trivial and the Dart side owns
+                    // one well-defined parse, so the record format and the UI
+                    // can be versioned together.
+                    "readEnforcementLog" -> {
+                        val limit = call.argument<Int>("limit") ?: 200
+                        result.success(
+                            EnforcementLog(applicationContext).readRecent(limit),
+                        )
                     }
                     else -> result.notImplemented()
                 }

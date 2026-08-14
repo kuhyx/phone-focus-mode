@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,8 +64,10 @@ void main() {
     });
 
     test('this build never reports restrictions as applied', () {
-      // The app is provisioning-capable but inert; enforcement ships only
-      // after the release path is verified on a device.
+      // Not a claim that nothing is enforced -- the app is live and hiding
+      // packages, and it does apply user restrictions once the VPN and DNS
+      // layers are locked. The native side simply never reads this back, so
+      // it is always false; the real state is the hidden-app count.
       expect(
         DevicePolicyStatus.fromMap(_statusMap()).restrictionsApplied,
         isFalse,
@@ -129,7 +133,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Release device owner'), findsOneWidget);
-      expect(find.text('none (inert build)'), findsOneWidget);
+      // The old "none (inert build)" label was a leftover from before this app
+      // enforced anything, and it stayed on screen for weeks while YouTube was
+      // in fact being hidden. With no pass recorded the honest answer is that
+      // nothing is known yet, not that nothing is applied.
+      expect(find.text('no pass recorded yet'), findsOneWidget);
     });
 
     testWidgets('reports when no home is set, since that means everywhere',
@@ -230,5 +238,114 @@ void main() {
       );
       expect(find.text('Device owner released'), findsOneWidget);
     });
+
+    testWidgets('running enforcement waits for the new record', (tester) async {
+      // The pass runs in a separate service process and now waits for a
+      // location fix, so re-reading immediately returns the PREVIOUS record.
+      // Measured: after re-anchoring home the card still showed the old
+      // distance, which reads as "the button did nothing".
+      var passRan = false;
+      const channel = MethodChannel('test/refresh');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        switch (call.method) {
+          case 'status':
+            return _statusMap(isDeviceOwner: true);
+          case 'hasHomeLocation':
+            return true;
+          case 'runEnforcementNow':
+            passRan = true;
+            return true;
+          case 'readEnforcementLog':
+            return [_logLine(passRan ? 'AT_HOME' : 'AWAY')];
+          default:
+            throw PlatformException(code: 'unimplemented');
+        }
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('AWAY'), findsOneWidget);
+
+      await tester.scrollUntilVisible(find.text('Run enforcement now'), 100);
+      await tester.tap(find.text('Run enforcement now'));
+      // Long enough for at least one poll interval to elapse.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AT HOME'), findsOneWidget);
+      expect(find.text('AWAY'), findsNothing);
+    });
+
+    testWidgets('a stuck pass stops polling instead of hanging',
+        (tester) async {
+      // If no new record ever lands the UI must still settle, not spin.
+      const channel = MethodChannel('test/stuck');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        switch (call.method) {
+          case 'status':
+            return _statusMap(isDeviceOwner: true);
+          case 'hasHomeLocation':
+            return true;
+          case 'runEnforcementNow':
+            return true;
+          case 'readEnforcementLog':
+            return [_logLine('AWAY')];
+          default:
+            throw PlatformException(code: 'unimplemented');
+        }
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatusPage(
+            policy: DevicePolicy(channel),
+            loadFocusPolicy: _stubPolicy,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Run enforcement now'), 100);
+      await tester.tap(find.text('Run enforcement now'));
+      // Past the polling budget (~30 s).
+      await tester.pump(const Duration(seconds: 40));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AWAY'), findsOneWidget);
+    });
   });
 }
+
+/// One JSON-lines record, as the platform channel returns them.
+String _logLine(String reason) => jsonEncode({
+      'ts': DateTime.now().millisecondsSinceEpoch,
+      'reason': reason,
+      'distance_m': reason == 'AWAY' ? 766.0 : 0.0,
+      'threshold_m': 150.0,
+      'inside_fence': reason != 'AWAY',
+      'home_configured': true,
+      'fix': {
+        'age_ms': 5000,
+        'provider': 'gps',
+        'accuracy_m': 11.0,
+        'outcome': 'ACTIVE_OK',
+      },
+      'curfew_active': false,
+      'curfew_window': '23:00-05:00',
+      'counts': {
+        'to_hide': 3,
+        'to_show': 58,
+        'hid_delta': 0,
+        'restored_delta': 0,
+      },
+      'hidden': const <Object?>[],
+      'failure': null,
+    });

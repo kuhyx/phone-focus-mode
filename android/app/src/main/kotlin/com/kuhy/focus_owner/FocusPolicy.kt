@@ -50,14 +50,33 @@ data class HomeLocation(
  * rather than a call into it. A background [android.app.Service] has no Flutter
  * engine, and starting one per alarm to answer a pure question would be both
  * slow and a new failure mode at exactly the moment enforcement must be
- * reliable. `PolicyParityTest` pins the two against shared fixtures so they
- * cannot drift.
+ * reliable.
+ *
+ * This side is the one that enforces. The Dart copy is used only to display
+ * the policy (allowlist sizes, the curfew window), never to decide anything --
+ * a `PolicyParityTest` was cited here for months and did not exist, and the
+ * two had drifted apart unnoticed. Keeping the Dart side out of the decision
+ * path means a drift can no longer produce a wrong answer, only a stale label.
  */
 data class FocusPolicy(
     val home: HomeLocation,
     val allowedPackages: Set<String>,
     val nightAllowedPackages: Set<String>,
     val neverDisablePrefixes: Set<String>,
+    /**
+     * Prefix-matched day allowlist, for apps shipping as a family of packages.
+     *
+     * Tachiyomi installs every source as its own apk, so an exact list goes
+     * stale the moment a new extension is installed -- which from the phone is
+     * indistinguishable from the enforcer being broken. Matched on whole
+     * labels like [neverDisablePrefixes], not as a bare string prefix.
+     *
+     * Weaker than the exact list by construction: it allows packages that do
+     * not exist yet, so entries must stay narrow and vendor-specific.
+     */
+    val allowedPrefixes: Set<String> = emptySet(),
+    /** Prefixes that survive the curfew. Subset of [allowedPrefixes]. */
+    val nightAllowedPrefixes: Set<String> = emptySet(),
     val workoutUnblockDomains: Set<String>,
     val curfew: CurfewWindow?,
     val launcherPackage: String?,
@@ -111,16 +130,17 @@ data class FocusPolicy(
      * Prefix-matched on whole labels, so `com.android.providers` covers
      * `com.android.providers.telephony` but not `com.android.providersomething`.
      */
-    fun isProtected(packageName: String): Boolean = neverDisablePrefixes.any {
-        packageName == it || packageName.startsWith("$it.")
-    }
+    fun isProtected(packageName: String): Boolean =
+        matchesPrefix(packageName, neverDisablePrefixes)
 
     /** Whether a package may run under the given conditions. */
     fun isAllowed(packageName: String, duringCurfew: Boolean): Boolean {
         if (isProtected(packageName)) return true
         if (packageName == launcherPackage) return true
         val allowed = if (duringCurfew) nightAllowedPackages else allowedPackages
-        return packageName in allowed
+        if (packageName in allowed) return true
+        val prefixes = if (duringCurfew) nightAllowedPrefixes else allowedPrefixes
+        return matchesPrefix(packageName, prefixes)
     }
 
     /** Whether the curfew is in force at [minutesSinceMidnight]. */
@@ -153,6 +173,17 @@ data class FocusPolicy(
         }
 
     companion object {
+        /**
+         * Whether [packageName] is covered by any entry of [prefixes].
+         *
+         * Matched on whole labels, so `com.android.providers` covers
+         * `com.android.providers.telephony` but not
+         * `com.android.providersomething`. Shared by every prefix list so the
+         * boundary rule cannot drift between them.
+         */
+        private fun matchesPrefix(packageName: String, prefixes: Set<String>): Boolean =
+            prefixes.any { packageName == it || packageName.startsWith("$it.") }
+
         /** Reads and parses the policy bundled as an asset. */
         fun load(context: Context, assetName: String = "flutter_assets/assets/policy.json"): FocusPolicy =
             context.assets.open(assetName).bufferedReader().use { parse(it.readText()) }
@@ -185,6 +216,8 @@ data class FocusPolicy(
                 allowedPackages = json.stringSet("allowed_packages"),
                 nightAllowedPackages = json.stringSet("night_allowed_packages"),
                 neverDisablePrefixes = json.stringSet("never_disable_prefixes"),
+                allowedPrefixes = json.optionalStringSet("allowed_prefixes"),
+                nightAllowedPrefixes = json.optionalStringSet("night_allowed_prefixes"),
                 workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
                 blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
                 alwaysBlockedPackages = json.optionalStringSet("always_blocked_packages"),

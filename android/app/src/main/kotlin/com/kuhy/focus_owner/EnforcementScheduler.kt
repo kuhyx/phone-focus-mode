@@ -61,8 +61,47 @@ class EnforcementScheduler(private val context: Context) {
         )?.let(alarms::cancel)
     }
 
-    private fun defaultNextRun(): Long =
-        System.currentTimeMillis() + FALLBACK_INTERVAL_MS
+    /**
+     * The sooner of the periodic fallback and the next curfew boundary.
+     *
+     * The class comment has always described exact alarms at the boundaries,
+     * but nothing ever computed one: both callers invoked `scheduleNext()`
+     * bare, so the default was only ever `now + 15 min` and 05:00 could be
+     * served up to fifteen minutes late -- exactly the "banking app still
+     * missing in the morning" failure the comment warns about.
+     */
+    private fun defaultNextRun(): Long {
+        val now = System.currentTimeMillis()
+        val fallback = now + FALLBACK_INTERVAL_MS
+        val boundary = nextCurfewBoundary(now) ?: return fallback
+        return minOf(fallback, boundary)
+    }
+
+    /** When the curfew next opens or closes, or null when it is disabled. */
+    private fun nextCurfewBoundary(now: Long): Long? {
+        val curfew = runCatching { FocusPolicy.load(context) }.getOrNull()?.curfew
+            ?: return null
+        return listOf(curfew.startMinutes, curfew.endMinutes)
+            .map { nextOccurrenceOf(it, now) }
+            .min()
+    }
+
+    /** The next wall-clock instant at [minutesSinceMidnight], strictly after [now]. */
+    private fun nextOccurrenceOf(minutesSinceMidnight: Int, now: Long): Long {
+        val calendar = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, minutesSinceMidnight / 60)
+            set(java.util.Calendar.MINUTE, minutesSinceMidnight % 60)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        // Rolled forward rather than clamped, so a boundary already passed
+        // today schedules for tomorrow instead of firing immediately.
+        if (calendar.timeInMillis <= now) {
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        return calendar.timeInMillis
+    }
 
     companion object {
         private const val REQUEST_CODE = 100

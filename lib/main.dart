@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:focus_owner/debug_log_page.dart';
 import 'package:focus_owner/device_policy.dart';
+import 'package:focus_owner/enforcement_record.dart';
+import 'package:focus_owner/enforcement_status_card.dart';
 import 'package:focus_owner/policy.dart';
 
 void main() => runApp(const FocusOwnerApp());
@@ -18,6 +21,13 @@ const Color _kMuted = Color(0xFF9AA0A6);
 const Color _kDanger = Color(0xFFD9776B);
 
 const double _kGap = 16;
+
+/// How often to re-read the log while waiting for a pass to land.
+const Duration _kRefreshInterval = Duration(seconds: 2);
+
+/// Gives up after this many polls, ~30 s — a little longer than the pass's own
+/// location timeout, so a slow fix is waited out rather than reported stale.
+const int _kRefreshAttempts = 15;
 
 class FocusOwnerApp extends StatelessWidget {
   const FocusOwnerApp({super.key});
@@ -66,6 +76,7 @@ class _StatusPageState extends State<StatusPage> {
   String? _error;
   bool _busy = false;
   bool _hasHome = false;
+  List<EnforcementRecord> _log = const [];
 
   @override
   void initState() {
@@ -75,8 +86,32 @@ class _StatusPageState extends State<StatusPage> {
 
   Future<void> _refresh() async {
     setState(() => _busy = true);
-    await Future.wait([_loadDeviceStatus(), _loadPolicy()]);
-    if (mounted) setState(() => _busy = false);
+    try {
+      await Future.wait([_loadDeviceStatus(), _loadPolicy(), _loadLog()]);
+    } finally {
+      // In a finally because _busy gates the release-device-owner button. If
+      // any loader throws -- a malformed log record used to be enough -- the
+      // flag would stay true for the life of the process, and since _refresh
+      // runs from initState that means the escape hatch is dead on every
+      // launch. Diagnostics failing must never disable the way out.
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Reads the durable record of past passes.
+  ///
+  /// Failing to read it must not blank the rest of the screen: the log is
+  /// diagnostics, while the provisioning state above it is what the user needs
+  /// to reach the escape hatch.
+  Future<void> _loadLog() async {
+    try {
+      final lines = await widget.policy.readEnforcementLog();
+      if (!mounted) return;
+      setState(() => _log = EnforcementRecord.parseLines(lines));
+    } on PlatformException {
+      if (!mounted) return;
+      setState(() => _log = const []);
+    }
   }
 
   Future<void> _loadDeviceStatus() async {
@@ -117,17 +152,43 @@ class _StatusPageState extends State<StatusPage> {
   Future<void> _runNow() async {
     setState(() => _busy = true);
     final started = await widget.policy.runEnforcementNow();
+    if (started) await _awaitNewRecord();
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           started
-              ? 'Enforcement run started; schedule armed'
+              ? 'Enforcement run finished'
               : 'Could not start enforcement',
         ),
       ),
     );
+  }
+
+  /// Waits for the pass to append a record, then shows it.
+  ///
+  /// `runEnforcementNow` only *starts* the service, and a pass now waits up to
+  /// [EnforcementRunner.ACQUIRE_TIMEOUT_MS] for a location fix, so re-reading
+  /// immediately returns the record from the PREVIOUS pass. That is not a
+  /// cosmetic lag: after re-anchoring home the screen kept showing the old
+  /// distance, which reads as "the button did nothing" at exactly the moment
+  /// the user is checking whether it worked.
+  ///
+  /// Polls rather than waits for a callback because the pass runs in a
+  /// separate service process with no channel back to the UI.
+  Future<void> _awaitNewRecord() async {
+    final before = _log.isEmpty ? null : _log.first.timestamp;
+    for (var attempt = 0; attempt < _kRefreshAttempts; attempt++) {
+      await Future<void>.delayed(_kRefreshInterval);
+      if (!mounted) return;
+      await _loadLog();
+      if (!mounted) return;
+      final latest = _log.isEmpty ? null : _log.first.timestamp;
+      if (latest != null && latest != before) break;
+    }
+    // Provisioning rows (home set / hidden counts) move with the pass too.
+    await _loadDeviceStatus();
   }
 
   Future<void> _setHome() async {
@@ -143,6 +204,19 @@ class _StatusPageState extends State<StatusPage> {
         ),
       ),
     );
+    if (failure != null) {
+      await _refresh();
+      return;
+    }
+    // Re-evaluate rather than only re-reading. The stored record still
+    // describes the OLD home, so refreshing alone leaves the previous
+    // distance on screen -- measured: after re-anchoring home the card still
+    // read "AWAY, 766 m" until a pass ran, which looks like the button
+    // failed. A new home is exactly when the geofence answer changes.
+    setState(() => _busy = true);
+    if (await widget.policy.runEnforcementNow()) await _awaitNewRecord();
+    if (!mounted) return;
+    setState(() => _busy = false);
     await _refresh();
   }
 
@@ -188,9 +262,26 @@ class _StatusPageState extends State<StatusPage> {
       builder: (context) => AlertDialog(
         backgroundColor: _kSurface,
         title: const Text('Release device owner?'),
-        content: const Text(
-          'The app will give up device ownership. Enforcement stops and '
-          'ownership can only be restored by a factory reset.',
+        // Deliberately concrete, and honest in both directions. "Restored only
+        // by a factory reset" is true but abstract, and this dialog is read in
+        // the moment the block is most inconvenient -- the price has to be
+        // legible right then, not inferred. While no account exists the price
+        // really is low, and overstating it there would teach the user to
+        // ignore the warning that matters later.
+        content: Text(
+          _status?.hasAccounts ?? true
+              ? 'Enforcement stops. YouTube comes back.\n\n'
+                  'Accounts exist on this device, so device owner can NEVER '
+                  'be set again without a factory reset. That means '
+                  're-pairing mBank, Revolut and inFakt over SMS, '
+                  're-activating mObywatel, signing in to every account '
+                  'again, and losing Signal history.\n\n'
+                  'This is the way out if something is broken. It is a bad '
+                  'trade for wanting to watch a video.'
+              : 'Enforcement stops and YouTube comes back.\n\n'
+                  'No account exists yet, so device owner can be set again '
+                  'straight afterwards without a wipe. This is the moment to '
+                  'test the release path, before signing in.',
         ),
         actions: [
           TextButton(
@@ -221,6 +312,16 @@ class _StatusPageState extends State<StatusPage> {
     await _refresh();
   }
 
+  void _openLog() {
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => DebugLogPage(records: _log),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -239,6 +340,8 @@ class _StatusPageState extends State<StatusPage> {
         onSetHome: _setHome,
         onLockVpn: _lockVpn,
         hasHome: _hasHome,
+        log: _log,
+        onOpenLog: _openLog,
       );
     } else {
       body = const Center(child: CircularProgressIndicator());
@@ -279,6 +382,8 @@ class _StatusBody extends StatelessWidget {
     required this.onSetHome,
     required this.onLockVpn,
     required this.hasHome,
+    this.log = const [],
+    this.onOpenLog,
   });
 
   final DevicePolicyStatus status;
@@ -293,19 +398,38 @@ class _StatusBody extends StatelessWidget {
   /// Whether home coordinates exist; without them enforcement is permanent.
   final bool hasHome;
 
+  /// Recorded passes, newest first.
+  final List<EnforcementRecord> log;
+  final VoidCallback? onOpenLog;
+
   @override
   Widget build(BuildContext context) {
     final policy = focusPolicy;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // First, and largest: what the enforcer is doing right now and why.
+        // Everything below is provisioning detail that only matters once this
+        // question is answered.
+        EnforcementStatusCard(
+          record: log.isEmpty ? null : log.first,
+          onOpenLog: onOpenLog ?? () {},
+        ),
+        const SizedBox(height: _kGap),
         _Row(label: 'Package', value: status.packageName),
         _Row(label: 'Device owner', value: status.isDeviceOwner ? 'yes' : 'no'),
         _Row(label: 'Admin active', value: status.isAdminActive ? 'yes' : 'no'),
         _Row(label: 'Android SDK', value: '${status.sdkInt}'),
+        // "none (inert build)" was a leftover from when this app really did
+        // apply nothing. It has been enforcing for weeks, so the honest value
+        // is whether the last recorded pass hid anything.
         _Row(
-          label: 'Restrictions',
-          value: status.restrictionsApplied ? 'applied' : 'none (inert build)',
+          label: 'Enforcing',
+          value: switch (log.isEmpty ? null : log.first.hideCount) {
+            null => 'no pass recorded yet',
+            0 => 'nothing hidden',
+            final int n => '$n apps hidden',
+          },
         ),
         const SizedBox(height: _kGap),
         const Divider(color: _kMuted),

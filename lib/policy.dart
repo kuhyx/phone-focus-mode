@@ -92,6 +92,8 @@ class FocusPolicy {
     required this.workoutUnblockDomains,
     required this.curfew,
     required this.launcherPackage,
+    this.allowedPrefixes = const {},
+    this.nightAllowedPrefixes = const {},
   });
 
   /// Parses a rendered policy document.
@@ -125,6 +127,17 @@ class FocusPolicy {
           ? null
           : CurfewWindow.fromJson(curfew as Map<String, Object?>),
       launcherPackage: json['launcher_package'] as String?,
+      // Optional: absent from an asset rendered before prefixes existed, and
+      // reading a missing key as empty restores exactly the old exact-match
+      // behaviour rather than failing to parse the whole policy.
+      allowedPrefixes: _optionalStringSet(
+        json,
+        'allowed_prefixes',
+      ),
+      nightAllowedPrefixes: _optionalStringSet(
+        json,
+        'night_allowed_prefixes',
+      ),
     );
   }
 
@@ -149,20 +162,39 @@ class FocusPolicy {
   final CurfewWindow? curfew;
   final String? launcherPackage;
 
-  /// Whether a package must never be disabled.
+  /// Prefix-matched day allowlist, for apps shipping as a package family.
   ///
-  /// Prefix-matched on whole labels, so `com.android.providers` covers
+  /// Tachiyomi installs every source as its own apk, so an exact list goes
+  /// stale the moment a new extension is installed.
+  final Set<String> allowedPrefixes;
+
+  /// Prefixes that survive the curfew. Subset of [allowedPrefixes].
+  final Set<String> nightAllowedPrefixes;
+
+  /// Whether [package] is covered by any entry of [prefixes].
+  ///
+  /// Matched on whole labels, so `com.android.providers` covers
   /// `com.android.providers.telephony` but not `com.android.providersomething`.
-  bool isProtected(String package) => neverDisablePrefixes.any(
+  /// Shared by every prefix list so the boundary rule cannot drift.
+  static bool _matchesPrefix(String package, Set<String> prefixes) =>
+      prefixes.any(
         (prefix) => package == prefix || package.startsWith('$prefix.'),
       );
+
+  /// Whether a package must never be disabled.
+  bool isProtected(String package) =>
+      _matchesPrefix(package, neverDisablePrefixes);
 
   /// Whether a package may run under the given conditions.
   bool isAllowed(String package, {bool duringCurfew = false}) {
     if (isProtected(package)) return true;
-    return duringCurfew
-        ? nightAllowedPackages.contains(package)
-        : allowedPackages.contains(package);
+    // Hiding the launcher leaves no home screen, so it outranks the lists --
+    // matching FocusPolicy.kt, which has always had this check.
+    if (package == launcherPackage) return true;
+    final allowed = duringCurfew ? nightAllowedPackages : allowedPackages;
+    if (allowed.contains(package)) return true;
+    final prefixes = duringCurfew ? nightAllowedPrefixes : allowedPrefixes;
+    return _matchesPrefix(package, prefixes);
   }
 
   /// Whether the curfew is in force at [minutesSinceMidnight].
@@ -202,6 +234,18 @@ Set<String> _stringSet(Object? value, String field) {
     throw PolicyFormatException('"$field" must be a list');
   }
   return value.map((e) => e! as String).toSet();
+}
+
+/// A list that may be absent, read as empty.
+///
+/// Used for fields added after assets were already shipped. The strict
+/// [_stringSet] would throw, and an unparsable policy is worse than a missing
+/// field: it disables the feature entirely rather than degrading to the
+/// previous behaviour. A present-but-wrong type is still an error, since that
+/// is a real mistake. Mirrors `optionalStringSet` in `FocusPolicy.kt`.
+Set<String> _optionalStringSet(Map<String, Object?> json, String field) {
+  if (!json.containsKey(field)) return const {};
+  return _stringSet(json[field], field);
 }
 
 double _requireNum(Object? value, String field) {

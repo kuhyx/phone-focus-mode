@@ -65,6 +65,60 @@ class DevicePolicyBridge(private val context: Context) {
         }
     }
 
+    /**
+     * Self-grants the location permissions the geofence needs.
+     *
+     * A device owner can grant its own runtime permissions with no user
+     * prompt, which matters here for two reasons. First, FINE is required:
+     * COARSE is fuzzed to a ~1-2 km grid on Android 12+, against a 150 m
+     * fence, so a coarse-only build misclassifies home as AWAY and restores
+     * everything the geofence exists to hide. Second, background location was
+     * previously granted by hand over adb, which is invisible state that a
+     * reinstall silently loses -- and losing it fails closed, blocking
+     * everything with no on-screen explanation.
+     *
+     * Re-asserted on every pass rather than once at provisioning, matching the
+     * VPN and private-DNS pins: the protection then self-heals instead of
+     * depending on anyone remembering.
+     *
+     * @return the permissions that are granted after this call.
+     */
+    fun grantLocationPermissions(): Set<String> {
+        if (!isDeviceOwner() && !isProfileOwner()) return emptySet()
+        return LOCATION_PERMISSIONS.filterTo(mutableSetOf()) { permission ->
+            runCatching {
+                dpm.setPermissionGrantState(
+                    admin,
+                    context.packageName,
+                    permission,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
+                )
+                // Read back rather than trusting the setter: setPermissionGrantState
+                // returns false for a permission the platform refuses to
+                // auto-grant, and ACCESS_BACKGROUND_LOCATION is exactly the
+                // kind of permission that can be refused.
+                dpm.getPermissionGrantState(admin, context.packageName, permission) ==
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+            }.getOrElse { error ->
+                Log.w(FocusDeviceAdminReceiver.TAG, "could not grant $permission", error)
+                false
+            }
+        }
+    }
+
+    /** Turns location services on, so a fix is obtainable at all. */
+    fun enableLocation(): Boolean {
+        if (!isDeviceOwner()) return false
+        return runCatching {
+            dpm.setLocationEnabled(admin, true)
+            true
+        }.getOrElse { error ->
+            // Not fatal: the pass still runs and fails closed without a fix.
+            Log.w(FocusDeviceAdminReceiver.TAG, "could not enable location", error)
+            false
+        }
+    }
+
     /** Whether a package is currently hidden by this admin. */
     fun isApplicationHidden(packageName: String): Boolean {
         if (!isDeviceOwner() && !isProfileOwner()) return false
@@ -74,6 +128,32 @@ class DevicePolicyBridge(private val context: Context) {
 
     /** Whether the admin component is active (a weaker state than ownership). */
     fun isAdminActive(): Boolean = dpm.isAdminActive(admin)
+
+    /**
+     * Whether any account exists, which decides if releasing is reversible.
+     *
+     * `dpm set-device-owner` refuses to run while the device has accounts, so
+     * once one is added, releasing ownership can only be undone by a factory
+     * reset. The release dialog says so, and it must say so truthfully rather
+     * than assume: during provisioning the count is zero and releasing is
+     * cheap, which is exactly when the escape hatch should be exercised.
+     */
+    fun hasAccounts(): Boolean = runCatching {
+        // Measured on device rather than assumed: with GET_ACCOUNTS undeclared
+        // this returned 5 accounts while dumpsys reported 6, so the call works
+        // without the runtime permission but does not necessarily see every
+        // account. Only "any account at all" is needed here, so the visibility
+        // gap does not matter -- and a permission prompt would be a heavy
+        // price for one warning string.
+        android.accounts.AccountManager.get(context)
+            .getAccountsByType(null)
+            .isNotEmpty()
+    }.getOrElse { error ->
+        // Fail toward the scarier message: claiming a release is cheap when it
+        // is not is the more damaging of the two possible wrong answers.
+        Log.w(FocusDeviceAdminReceiver.TAG, "could not read accounts", error)
+        true
+    }
 
     /**
      * Blocks or unblocks uninstalling this app.
@@ -257,6 +337,7 @@ class DevicePolicyBridge(private val context: Context) {
         "restrictionsApplied" to false,
         "uninstallBlocked" to isSelfUninstallBlocked(),
         "alwaysOnVpn" to (alwaysOnVpnPackage() ?: ""),
+        "hasAccounts" to hasAccounts(),
     )
 
     /**
@@ -315,5 +396,20 @@ class DevicePolicyBridge(private val context: Context) {
             Log.e(FocusDeviceAdminReceiver.TAG, "clearDeviceOwnerApp failed", error)
             false
         }
+    }
+
+    private companion object {
+        /**
+         * Location permissions self-granted every pass.
+         *
+         * Ordered coarse-then-fine-then-background because that is the order
+         * the platform expects them to be escalated in; granting background
+         * without a foreground grant in place is refused.
+         */
+        val LOCATION_PERMISSIONS = listOf(
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+        )
     }
 }

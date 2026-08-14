@@ -1,5 +1,6 @@
 {
   "allowed_packages": [
+    "com.android.vending",
     "com.celzero.bravedns",
     "com.facebook.orca",
     "com.google.android.apps.maps",
@@ -28,6 +29,9 @@
     "pl.infakt.infakt",
     "pl.mbank",
     "pl.nask.mobywatel"
+  ],
+  "allowed_prefixes": [
+    "eu.kanade.tachiyomi"
   ],
   "always_blocked_packages": [
     "com.android.chrome",
@@ -121,6 +125,9 @@
     "pl.infakt.infakt",
     "pl.mbank",
     "pl.nask.mobywatel"
+  ],
+  "night_allowed_prefixes": [
+    "eu.kanade.tachiyomi"
   ],
   "private_dns_host": "",
   "schema_version": 1,

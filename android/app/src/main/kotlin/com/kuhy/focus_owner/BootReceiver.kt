@@ -25,7 +25,14 @@ class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED -> {
+            // MY_PACKAGE_REPLACED for the same reason as the boot actions:
+            // installing over the app cancels its pending alarms, so without
+            // it the chain stays dead until someone opens the app. It arrives
+            // only for this package and only after the install completes.
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            -> {
                 val unlocked = context.getSystemService(UserManager::class.java)
                     ?.isUserUnlocked ?: false
                 Log.i(

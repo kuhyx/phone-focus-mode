@@ -8,6 +8,7 @@ class DevicePolicyStatus {
     required this.isAdminActive,
     required this.sdkInt,
     required this.restrictionsApplied,
+    this.hasAccounts = true,
   });
 
   /// Builds a status from the raw platform-channel map.
@@ -18,6 +19,8 @@ class DevicePolicyStatus {
       isAdminActive: map['isAdminActive']! as bool,
       sdkInt: map['sdkInt']! as int,
       restrictionsApplied: map['restrictionsApplied']! as bool,
+      // Absent from an older native side; default to the scarier reading.
+      hasAccounts: map['hasAccounts'] as bool? ?? true,
     );
   }
 
@@ -28,9 +31,20 @@ class DevicePolicyStatus {
 
   /// Whether any user restriction is currently enforced.
   ///
-  /// Always false in this build: the app is provisioning-capable but inert
-  /// until the release path has been verified on a real device.
+  /// Hardcoded false by the native side and NOT a statement about enforcement
+  /// — the app is live and hiding packages, and it does apply user
+  /// restrictions (`DISALLOW_CONFIG_VPN`, `DISALLOW_CONFIG_PRIVATE_DNS`) once
+  /// those layers are locked. Nothing reads this back from the system yet, so
+  /// treat it as "not reported" rather than "nothing applied"; the honest
+  /// enforcement state is the hidden-app count in the latest
+  /// [EnforcementRecord], which is what the status screen shows.
   final bool restrictionsApplied;
+
+  /// Whether any account exists, which decides if releasing is reversible.
+  ///
+  /// `dpm set-device-owner` refuses while accounts exist, so once one is
+  /// added, releasing can only be undone by a factory reset.
+  final bool hasAccounts;
 }
 
 /// Dart side of the device-policy platform channel.
@@ -60,6 +74,20 @@ class DevicePolicy {
   /// Cancels any pending scheduled evaluation.
   Future<bool> cancelEnforcement() async =>
       await channel.invokeMethod<bool>('cancelEnforcement') ?? false;
+
+  /// Reads the durable enforcement log, newest first.
+  ///
+  /// This is the only way to see what the enforcer has been doing: logcat
+  /// rotates (measured empty while 82 alarms had fired) and `run-as` is
+  /// refused on the release build device owner requires, so neither adb route
+  /// works. Returns raw JSON lines for [EnforcementRecord.parseLines].
+  Future<List<String>> readEnforcementLog({int limit = 200}) async {
+    final lines = await channel.invokeMethod<List<Object?>>(
+      'readEnforcementLog',
+      {'limit': limit},
+    );
+    return lines?.whereType<String>().toList() ?? const [];
+  }
 
   /// Relinquishes device ownership without wiping the device.
   ///
