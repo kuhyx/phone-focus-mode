@@ -26,6 +26,7 @@ def _policy(
     night_allowed_packages: frozenset[str] = frozenset({"pl.mbank", "com.launcher"}),
     curfew: CurfewWindow | None = _DEFAULT_CURFEW,
     never_disable_prefixes: tuple[str, ...] = ("com.android.",),
+    allowed_prefixes: tuple[str, ...] = (),
 ) -> FocusPolicy:
     """Build a policy with the enforcer deliberately absent from both lists."""
     return FocusPolicy(
@@ -38,6 +39,7 @@ def _policy(
         curfew=curfew,
         launcher_package="com.launcher",
         allowed_packages=allowed_packages,
+        allowed_prefixes=allowed_prefixes,
         night_allowed_packages=night_allowed_packages,
         never_disable_prefixes=never_disable_prefixes,
         workout_unblock_domains=frozenset({"youtube.com"}),
@@ -86,22 +88,29 @@ def test_blockable_system_packages_names_the_distraction_apps() -> None:
     assert "com.android.vending" in blockable
 
 
-def test_blockable_system_packages_never_contradicts_the_allowlist() -> None:
-    """An allowed package must not also be listed as blockable.
+def test_an_allowed_system_package_stays_sweepable() -> None:
+    """An allowed system package must stay in the sweep, or it freezes.
 
-    Otherwise the asset would state both at once and the outcome would depend
-    on which check the runner happened to apply first.
+    Sweepable is not the same as hideable. This list decides which FLAG_SYSTEM
+    packages are *eligible for a decision*; ``is_allowed`` is what then
+    protects them. ``sweepablePackages`` in the Kotlin runner drops any system
+    package absent from here, so an allowed-but-unsweepable package appears in
+    neither ``packagesToHide`` nor ``packagesToShow`` and keeps whatever state
+    it was last left in.
+
+    Measured on device: Play was hidden, so subtracting the allowlist here
+    would have stranded it hidden permanently the moment it was allowlisted.
     """
     payload = policy_to_dict(
         _policy(
             allowed_packages=frozenset(
-                {"pl.mbank", "com.launcher", "com.android.chrome"},
+                {"pl.mbank", "com.launcher", "com.android.vending"},
             ),
         ),
     )
 
-    assert "com.android.chrome" not in payload["blockable_system_packages"]
-    assert "com.android.chrome" in payload["allowed_packages"]
+    assert "com.android.vending" in payload["blockable_system_packages"]
+    assert "com.android.vending" in payload["allowed_packages"]
 
 
 def test_always_blocked_exempts_youtube_and_chrome_from_the_geofence() -> None:
@@ -181,6 +190,31 @@ def test_always_blocked_never_contradicts_the_allowlist() -> None:
 
     assert "com.android.chrome" not in payload["always_blocked_packages"]
     assert "com.android.chrome" in payload["allowed_packages"]
+
+
+def test_a_prefix_allowance_also_wins_over_always_blocking() -> None:
+    """Allowance is no longer exact-only, so the check must not be either.
+
+    Subtracting just ``allowed_packages`` left a package allowed by prefix
+    still emitted as always-blocked, so the asset stated both at once and the
+    runner's behaviour depended on which check it applied first.
+    """
+    payload = policy_to_dict(
+        _policy(
+            allowed_packages=frozenset({"pl.mbank", "com.launcher"}),
+            allowed_prefixes=("com.android.chrome",),
+        ),
+    )
+
+    assert "com.android.chrome" not in payload["always_blocked_packages"]
+
+
+def test_the_real_distraction_apps_stay_always_blocked() -> None:
+    """The filter must not quietly un-block what the app exists to block."""
+    payload = policy_to_dict(_policy())
+
+    assert "com.google.android.youtube" in payload["always_blocked_packages"]
+    assert "com.android.chrome" in payload["always_blocked_packages"]
 
 
 def test_lists_are_sorted_for_stable_diffs() -> None:

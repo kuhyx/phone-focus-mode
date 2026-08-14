@@ -14,6 +14,7 @@ import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import time
 
 
@@ -119,6 +120,11 @@ class FocusPolicy:
     curfew: CurfewWindow | None = None
     launcher_package: str | None = None
     browser_packages: frozenset[str] = field(default_factory=frozenset)
+    # Prefix-matched allowlists, for apps that ship as a family of packages.
+    # Tachiyomi installs every source as its own apk, so an exact list goes
+    # stale the moment a new extension is installed.
+    allowed_prefixes: tuple[str, ...] = ()
+    night_allowed_prefixes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject policies that would lock the user out of the device."""
@@ -135,6 +141,29 @@ class FocusPolicy:
                 f"unknown at day level: {sorted(orphans)}"
             )
             raise PolicyError(msg)
+        # Same subset rule as the package lists: the curfew is meant to be a
+        # tightening of the day policy, so a prefix allowed only at night would
+        # invert that and be easy to miss in review.
+        prefix_orphans = set(self.night_allowed_prefixes) - set(self.allowed_prefixes)
+        if prefix_orphans:
+            msg = (
+                "night_allowed_prefixes must be a subset of allowed_prefixes; "
+                f"unknown at day level: {sorted(prefix_orphans)}"
+            )
+            raise PolicyError(msg)
+
+    @staticmethod
+    def _matches_prefix(package: str, prefixes: Sequence[str]) -> bool:
+        """Return whether ``package`` is covered by any entry of ``prefixes``.
+
+        Matched on whole labels, so ``com.android.providers`` covers
+        ``com.android.providers.telephony`` but not
+        ``com.android.providersomething``. Shared by every prefix list so the
+        boundary rule cannot drift between them.
+        """
+        return any(
+            package == prefix or package.startswith(f"{prefix}.") for prefix in prefixes
+        )
 
     def is_protected(self, package: str) -> bool:
         """Return whether a package must never be disabled.
@@ -144,23 +173,26 @@ class FocusPolicy:
         implementation, so that ``com.android.providers.telephony`` is covered
         by the ``com.android.providers`` entry.
         """
-        return any(
-            package == prefix or package.startswith(f"{prefix}.")
-            for prefix in self.never_disable_prefixes
-        )
+        return self._matches_prefix(package, self.never_disable_prefixes)
 
     def is_allowed(self, package: str, *, during_curfew: bool = False) -> bool:
         """Return whether a package may run under the given conditions.
 
         Protected system packages are always allowed. During curfew the much
-        smaller ``night_allowed_packages`` set applies instead of the day list.
+        smaller ``night_allowed_packages`` set applies instead of the day list,
+        and likewise for the prefix lists.
         """
         if self.is_protected(package):
             return True
-        allowed = (
-            self.night_allowed_packages if during_curfew else self.allowed_packages
+        if during_curfew:
+            return package in self.night_allowed_packages or self._matches_prefix(
+                package,
+                self.night_allowed_prefixes,
+            )
+        return package in self.allowed_packages or self._matches_prefix(
+            package,
+            self.allowed_prefixes,
         )
-        return package in allowed
 
     def is_curfew_active(self, moment: time) -> bool:
         """Return whether the night curfew is in force at ``moment``."""

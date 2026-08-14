@@ -386,17 +386,66 @@ com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
 
+# --- App store (day only; deliberately absent from $NIGHT_WHITELIST) ---
+# infakt cannot be installed or updated without Play, and it is device-paired
+# to a bank, so losing the ability to update it strands a re-authentication
+# chain. This does NOT reopen YouTube: the sweep is default-deny for
+# third-party packages, so anything installed from Play is hidden on the next
+# at-home pass, and $ALWAYS_BLOCKED (YouTube, Chrome) is never restored by the
+# AWAY branch either. Reinstalling YouTube from Play is UNTESTED as a bypass:
+# the sweep would re-hide it within one pass regardless, but treat the claim
+# that Play cannot resurrect a blocked app as unverified until someone tries.
+# NOTE: never use a double-quote character anywhere inside these export
+# blocks, not even in a comment. The policy loader matches a quoted value up
+# to the next quote, so one stray quote terminates the string early and
+# silently truncates the allowlist -- which drops apps with no error at all.
+com.android.vending
+
 # --- Workout tracking (always beneficial; must stay enabled to export runs) ---
 org.runnerup
 org.runnerup.free
 "
 
 # ============================================================
+# ALLOWED PACKAGE PREFIXES
+# Matched as prefixes on whole labels, exactly like $SYSTEM_NEVER_DISABLE:
+# "eu.kanade.tachiyomi" covers "eu.kanade.tachiyomi.sy" and
+# "eu.kanade.tachiyomi.extension.all.mangadex", but not
+# "eu.kanade.tachiyomisomething".
+#
+# This exists because Tachiyomi installs every source as its OWN apk. Listing
+# them individually means each newly installed extension is invisible until
+# this file is edited and the policy regenerated -- a recurring chore that
+# looks exactly like a bug from the phone.
+#
+# Weaker than the exact list by construction: a prefix allows packages that do
+# not exist yet. Keep the prefixes narrow and vendor-specific for that reason.
+# ============================================================
+
+export ALLOWED_PREFIXES="
+# Manga reader + its per-source extension apks.
+eu.kanade.tachiyomi
+"
+
+# Prefixes that survive the curfew as well. Must be a subset of
+# $ALLOWED_PREFIXES, mirroring the NIGHT_WHITELIST/WHITELIST subset rule.
+export NIGHT_ALLOWED_PREFIXES="
+eu.kanade.tachiyomi
+"
+
+# ============================================================
 # NIGHT CURFEW WHITELIST
 # These are the ONLY third-party apps that stay enabled during the curfew
 # window (see NIGHT_CURFEW_* above). Everything else in $WHITELIST — browsers,
-# social, messaging, email, media, manga, stores, transit — is disabled.
+# social, messaging, email, stores, transit — is disabled.
 # Allow-list by design: when in doubt, leave it OUT.
+#
+# EXCEPTION: $NIGHT_ALLOWED_PREFIXES is applied on top of this list, and it
+# currently carries "eu.kanade.tachiyomi" — so manga IS available during the
+# curfew, deliberately (chosen 2026-08-14). This paragraph used to say manga
+# was disabled at night; it was true until that change. Do not "restore" it
+# without also emptying $NIGHT_ALLOWED_PREFIXES, or the comment and the
+# behaviour disagree again.
 #
 # Parsed exactly like $WHITELIST (one package per line, '#' comments ignored).
 # The sysprotect prefixes ($SYSTEM_NEVER_DISABLE) and the default-handler guard

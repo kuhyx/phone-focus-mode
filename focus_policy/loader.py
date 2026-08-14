@@ -174,4 +174,10 @@ def load_policy(
         curfew=curfew,
         launcher_package=launcher,
         browser_packages=parse_package_list(values.get("BROWSER_PACKAGES", "")),
+        allowed_prefixes=tuple(
+            sorted(parse_package_list(values.get("ALLOWED_PREFIXES", "")))
+        ),
+        night_allowed_prefixes=tuple(
+            sorted(parse_package_list(values.get("NIGHT_ALLOWED_PREFIXES", "")))
+        ),
     )

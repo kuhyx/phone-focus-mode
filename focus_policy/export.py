@@ -147,20 +147,44 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
             {*policy.night_allowed_packages, ENFORCER_PACKAGE},
         ),
         "never_disable_prefixes": sorted(policy.never_disable_prefixes),
+        # Prefix-matched allowlists. Absent from an older asset, so both
+        # parsers must read a missing key as the empty tuple -- which restores
+        # exactly the previous exact-match-only behaviour.
+        "allowed_prefixes": sorted(policy.allowed_prefixes),
+        "night_allowed_prefixes": sorted(policy.night_allowed_prefixes),
         "workout_unblock_domains": sorted(policy.workout_unblock_domains),
         "browser_packages": sorted(policy.browser_packages),
         # Absent from an older asset, so the Kotlin loader must treat a
         # missing key as the empty set -- i.e. keep today's behaviour of
         # never touching a system app.
+        #
+        # Only the enforcer is subtracted. The allowlist is deliberately NOT,
+        # because sweepable != hideable: being in this list makes a package
+        # *eligible for a decision*, and `isAllowed` is what then protects it.
+        # Removing an allowed system package from the sweep does not protect
+        # it, it freezes it -- `sweepablePackages` drops any FLAG_SYSTEM
+        # package absent from here, so it lands in neither `packagesToHide`
+        # nor `packagesToShow` and keeps whatever state it was last left in.
+        # Measured: com.android.vending is hidden today, so allowlisting it
+        # while subtracting here would have left Play hidden permanently, with
+        # no in-app way to notice. Same failure as the MATCH_UNINSTALLED_PACKAGES
+        # note in EnforcementRunner, reached by a different route.
         "blockable_system_packages": sorted(
-            BLOCKABLE_SYSTEM_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
+            BLOCKABLE_SYSTEM_PACKAGES - {ENFORCER_PACKAGE},
         ),
-        # Same subtraction, for the same reason: an allowed package must never
-        # also be declared always-blocked, or the asset would state both at
-        # once. The enforcer itself can never appear here -- hiding it takes
-        # the escape hatch with it.
+        # An allowed package must never also be declared always-blocked, or the
+        # asset would state both at once and the outcome would depend on which
+        # check the runner happened to apply first. The enforcer itself can
+        # never appear here -- hiding it takes the escape hatch with it.
+        #
+        # Filtered through `is_allowed` rather than subtracting the exact
+        # allowlist, because allowance is no longer exact-only: a prefix that
+        # happened to cover an always-blocked package would otherwise satisfy
+        # `is_allowed` while still being emitted as always-blocked.
         "always_blocked_packages": sorted(
-            ALWAYS_BLOCKED_PACKAGES - {*policy.allowed_packages, ENFORCER_PACKAGE},
+            pkg
+            for pkg in ALWAYS_BLOCKED_PACKAGES - {ENFORCER_PACKAGE}
+            if not policy.is_allowed(pkg)
         ),
         "vpn_lockdown": VPN_LOCKDOWN,
         "private_dns_host": PRIVATE_DNS_HOST,

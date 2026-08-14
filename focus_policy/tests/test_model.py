@@ -23,6 +23,8 @@ def _policy(
     night_allowed_packages: frozenset[str] | None = None,
     curfew: CurfewWindow | None = None,
     launcher_package: str | None = None,
+    allowed_prefixes: tuple[str, ...] = (),
+    night_allowed_prefixes: tuple[str, ...] = (),
 ) -> FocusPolicy:
     """Build a small policy, overriding individual fields per test."""
     return FocusPolicy(
@@ -40,6 +42,8 @@ def _policy(
         never_disable_prefixes=("com.android.providers", "com.android.settings"),
         curfew=curfew,
         launcher_package=launcher_package,
+        allowed_prefixes=allowed_prefixes,
+        night_allowed_prefixes=night_allowed_prefixes,
     )
 
 
@@ -200,6 +204,45 @@ class TestFocusPolicy:
     def test_unknown_package_is_blocked(self) -> None:
         """Anything not explicitly allowed is denied."""
         assert not _policy().is_allowed("com.evil")
+
+    def test_allowed_prefix_covers_a_family_of_packages(self) -> None:
+        """Tachiyomi ships every source as its own apk.
+
+        An exact list goes stale the moment a new extension is installed, which
+        looks exactly like a bug from the phone.
+        """
+        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
+        assert policy.is_allowed("eu.kanade.tachiyomi")
+        assert policy.is_allowed("eu.kanade.tachiyomi.sy")
+        assert policy.is_allowed("eu.kanade.tachiyomi.extension.all.mangadex")
+
+    def test_allowed_prefix_matches_whole_labels_only(self) -> None:
+        """A bare string prefix would allow an unrelated package."""
+        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
+        assert not policy.is_allowed("eu.kanade.tachiyomisomething")
+
+    def test_a_day_only_prefix_is_blocked_during_curfew(self) -> None:
+        """The night list narrows the prefixes too, not just the packages."""
+        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
+        assert policy.is_allowed("eu.kanade.tachiyomi.sy")
+        assert not policy.is_allowed("eu.kanade.tachiyomi.sy", during_curfew=True)
+
+    def test_a_night_prefix_survives_the_curfew(self) -> None:
+        """Manga is deliberately available at night (chosen 2026-08-14)."""
+        policy = _policy(
+            allowed_prefixes=("eu.kanade.tachiyomi",),
+            night_allowed_prefixes=("eu.kanade.tachiyomi",),
+        )
+        assert policy.is_allowed("eu.kanade.tachiyomi.sy", during_curfew=True)
+        assert policy.is_allowed(
+            "eu.kanade.tachiyomi.extension.all.mangadex",
+            during_curfew=True,
+        )
+
+    def test_night_prefixes_must_be_a_subset_of_day_prefixes(self) -> None:
+        """The curfew tightens the day policy; it must never widen it."""
+        with pytest.raises(PolicyError, match="night_allowed_prefixes"):
+            _policy(night_allowed_prefixes=("eu.kanade.tachiyomi",))
 
     def test_is_curfew_active_without_window_is_false(self) -> None:
         """A policy with no curfew is never in curfew."""
