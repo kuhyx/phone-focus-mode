@@ -386,13 +386,20 @@ com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
 
-# --- App store (day only; deliberately absent from $NIGHT_WHITELIST) ---
+# --- App store (day only; deliberately absent from the night list) ---
+# NB: never write a dollar-sign variable reference inside this list. WHITELIST
+# is a double-quoted string, so even a comment line expands, and deploy.sh
+# runs under set -u, where an undefined name aborts the whole deploy. A
+# reference to the night list sat here and did exactly that (it is defined
+# below this point, so it was still unset), blocking every focus-mode deploy.
+# Same rule for double quotes: one in a comment ends the string early.
 # infakt cannot be installed or updated without Play, and it is device-paired
 # to a bank, so losing the ability to update it strands a re-authentication
 # chain. This does NOT reopen YouTube: the sweep is default-deny for
 # third-party packages, so anything installed from Play is hidden on the next
-# at-home pass, and $ALWAYS_BLOCKED (YouTube, Chrome) is never restored by the
-# AWAY branch either. Reinstalling YouTube from Play is UNTESTED as a bypass:
+# at-home pass, and the always-blocked set (YouTube, Chrome) is never restored
+# by the AWAY branch either. Reinstalling YouTube from Play is UNTESTED as a
+# bypass:
 # the sweep would re-hide it within one pass regardless, but treat the claim
 # that Play cannot resurrect a blocked app as unverified until someone tries.
 # NOTE: never use a double-quote character anywhere inside these export
@@ -472,6 +479,14 @@ com.kuhy.wake_alarm_sync
 com.google.android.deskclock
 org.runnerup
 org.runnerup.free
+# Capture-only notes app. Added 2026-08-14 after a curfew-window deploy
+# installed it and the enforcer removed the package ~80ms later: it was in
+# the day list but not here, so any build shipped after 23:00 was silently
+# uninstalled. This is a deliberate loosening of the answer-the-phone /
+# reach-a-bank / handle-an-emergency rule above -- writing an idea down at
+# night is the one thing this app does, and losing the deploy path for six
+# hours a day cost more than the distraction risk.
+dev.kuhy.todo
 "
 
 # ============================================================
