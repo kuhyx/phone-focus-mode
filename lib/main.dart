@@ -8,19 +8,13 @@ import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/enforcement_status_card.dart';
 import 'package:focus_owner/policy.dart';
+import 'package:focus_owner/theme.dart';
 
 void main() => runApp(const FocusOwnerApp());
 
-/// Shared palette: charcoal field with a single accent, matching the other
-/// com.kuhy.* apps.
-const Color _kField = Color(0xFF1B1D21);
-const Color _kSurface = Color(0xFF24272C);
-const Color _kAccent = Color(0xFF5B9DD9);
-const Color _kText = Color(0xFFE8EAED);
-const Color _kMuted = Color(0xFF9AA0A6);
-const Color _kDanger = Color(0xFFD9776B);
-
-const double _kGap = 16;
+// The palette used to be duplicated here as `kField`…`kDanger`, byte for
+// byte identical to theme.dart's copy. Both are gone: theme.dart now aliases
+// the shared design_system palette, and this file reads those aliases.
 
 /// How often to re-read the log while waiting for a pass to land.
 const Duration _kRefreshInterval = Duration(seconds: 2);
@@ -39,11 +33,11 @@ class FocusOwnerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: _kField,
+        scaffoldBackgroundColor: kField,
         colorScheme: const ColorScheme.dark(
-          primary: _kAccent,
-          surface: _kSurface,
-          error: _kDanger,
+          primary: kAccent,
+          surface: kSurface,
+          error: kDanger,
         ),
       ),
       home: const StatusPage(),
@@ -126,7 +120,9 @@ class _StatusPageState extends State<StatusPage> {
       });
     } on PlatformException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message ?? 'Could not read device policy state');
+      setState(
+        () => _error = e.message ?? 'Could not read device policy state',
+      );
     }
   }
 
@@ -158,9 +154,7 @@ class _StatusPageState extends State<StatusPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          started
-              ? 'Enforcement run finished'
-              : 'Could not start enforcement',
+          started ? 'Enforcement run finished' : 'Could not start enforcement',
         ),
       ),
     );
@@ -199,8 +193,7 @@ class _StatusPageState extends State<StatusPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          failure ??
-              'Home set. Enforcement now applies here, not everywhere.',
+          failure ?? 'Home set. Enforcement now applies here, not everywhere.',
         ),
       ),
     );
@@ -224,7 +217,7 @@ class _StatusPageState extends State<StatusPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _kSurface,
+        backgroundColor: kSurface,
         title: const Text('Lock VPN configuration?'),
         content: const Text(
           'The always-on VPN can no longer be turned off from Settings. '
@@ -250,7 +243,9 @@ class _StatusPageState extends State<StatusPage> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? 'VPN configuration locked' : 'Could not lock - see logcat'),
+        content: Text(
+          ok ? 'VPN configuration locked' : 'Could not lock - see logcat',
+        ),
       ),
     );
     await _refresh();
@@ -260,7 +255,7 @@ class _StatusPageState extends State<StatusPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _kSurface,
+        backgroundColor: kSurface,
         title: const Text('Release device owner?'),
         // Deliberately concrete, and honest in both directions. "Restored only
         // by a factory reset" is true but abstract, and this dialog is read in
@@ -271,17 +266,17 @@ class _StatusPageState extends State<StatusPage> {
         content: Text(
           _status?.hasAccounts ?? true
               ? 'Enforcement stops. YouTube comes back.\n\n'
-                  'Accounts exist on this device, so device owner can NEVER '
-                  'be set again without a factory reset. That means '
-                  're-pairing mBank, Revolut and inFakt over SMS, '
-                  're-activating mObywatel, signing in to every account '
-                  'again, and losing Signal history.\n\n'
-                  'This is the way out if something is broken. It is a bad '
-                  'trade for wanting to watch a video.'
+                    'Accounts exist on this device, so device owner can NEVER '
+                    'be set again without a factory reset. That means '
+                    're-pairing mBank, Revolut and inFakt over SMS, '
+                    're-activating mObywatel, signing in to every account '
+                    'again, and losing Signal history.\n\n'
+                    'This is the way out if something is broken. It is a bad '
+                    'trade for wanting to watch a video.'
               : 'Enforcement stops and YouTube comes back.\n\n'
-                  'No account exists yet, so device owner can be set again '
-                  'straight afterwards without a wipe. This is the moment to '
-                  'test the release path, before signing in.',
+                    'No account exists yet, so device owner can be set again '
+                    'straight afterwards without a wipe. This is the moment to '
+                    'test the release path, before signing in.',
         ),
         actions: [
           TextButton(
@@ -290,7 +285,7 @@ class _StatusPageState extends State<StatusPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: _kDanger),
+            style: TextButton.styleFrom(foregroundColor: kDanger),
             child: const Text('Release'),
           ),
         ],
@@ -315,9 +310,7 @@ class _StatusPageState extends State<StatusPage> {
   void _openLog() {
     unawaited(
       Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => DebugLogPage(records: _log),
-        ),
+        MaterialPageRoute<void>(builder: (_) => DebugLogPage(records: _log)),
       ),
     );
   }
@@ -328,7 +321,7 @@ class _StatusPageState extends State<StatusPage> {
     final error = _error;
     final Widget body;
     if (error != null) {
-      body = const _Message(text: 'Could not read state', color: _kDanger);
+      body = const _Message(text: 'Could not read state', color: kDanger);
     } else if (status != null) {
       body = _StatusBody(
         status: status,
@@ -349,8 +342,8 @@ class _StatusPageState extends State<StatusPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _kField,
-        foregroundColor: _kText,
+        backgroundColor: kField,
+        foregroundColor: kText,
         title: const Text('Focus Owner'),
         actions: [
           IconButton(
@@ -364,7 +357,7 @@ class _StatusPageState extends State<StatusPage> {
       // unreachable "Release device owner" button is the one control that
       // must never be clipped off the bottom.
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(_kGap),
+        padding: const EdgeInsets.all(kGap),
         child: body,
       ),
     );
@@ -415,7 +408,7 @@ class _StatusBody extends StatelessWidget {
           record: log.isEmpty ? null : log.first,
           onOpenLog: onOpenLog ?? () {},
         ),
-        const SizedBox(height: _kGap),
+        const SizedBox(height: kGap),
         _Row(label: 'Package', value: status.packageName),
         _Row(label: 'Device owner', value: status.isDeviceOwner ? 'yes' : 'no'),
         _Row(label: 'Admin active', value: status.isAdminActive ? 'yes' : 'no'),
@@ -431,17 +424,18 @@ class _StatusBody extends StatelessWidget {
             final int n => '$n apps hidden',
           },
         ),
-        const SizedBox(height: _kGap),
-        const Divider(color: _kMuted),
-        const SizedBox(height: _kGap / 2),
+        const SizedBox(height: kGap),
+        const Divider(color: kMuted),
+        const SizedBox(height: kGap / 2),
         if (policyError != null)
-          _Message(text: 'Policy: $policyError', color: _kDanger)
+          _Message(text: 'Policy: $policyError', color: kDanger)
         else if (policy == null)
-          const _Message(text: 'Policy: loading...', color: _kMuted)
+          const _Message(text: 'Policy: loading...', color: kMuted)
         else ...[
           _Row(
             label: 'Allowed apps',
-            value: '${policy.allowedPackages.length}'
+            value:
+                '${policy.allowedPackages.length}'
                 ' (${policy.nightAllowedPackages.length} at night)',
           ),
           _Row(
@@ -449,7 +443,7 @@ class _StatusBody extends StatelessWidget {
             value: policy.curfew == null
                 ? 'disabled'
                 : '${_hhmm(policy.curfew!.startMinutes)}'
-                    '-${_hhmm(policy.curfew!.endMinutes)}',
+                      '-${_hhmm(policy.curfew!.endMinutes)}',
           ),
           _Row(
             label: 'Home radius',
@@ -468,12 +462,12 @@ class _StatusBody extends StatelessWidget {
             value: hasHome ? 'active' : 'no home set - enforcing everywhere',
           ),
         ],
-        const SizedBox(height: _kGap * 2),
+        const SizedBox(height: kGap * 2),
         OutlinedButton(
           onPressed: busy ? null : onRunNow,
           child: const Text('Run enforcement now'),
         ),
-        const SizedBox(height: _kGap),
+        const SizedBox(height: kGap),
         if (status.isDeviceOwner) ...[
           OutlinedButton(
             onPressed: busy ? null : onSetHome,
@@ -481,23 +475,23 @@ class _StatusBody extends StatelessWidget {
               hasHome ? 'Update home to here' : 'Set home to current location',
             ),
           ),
-          const SizedBox(height: _kGap),
+          const SizedBox(height: kGap),
           OutlinedButton(
             onPressed: busy ? null : onLockVpn,
             child: const Text('Lock VPN configuration'),
           ),
-          const SizedBox(height: _kGap),
+          const SizedBox(height: kGap),
         ],
         if (status.isDeviceOwner)
           FilledButton(
             onPressed: busy ? null : onRelease,
-            style: FilledButton.styleFrom(backgroundColor: _kDanger),
+            style: FilledButton.styleFrom(backgroundColor: kDanger),
             child: const Text('Release device owner'),
           )
         else
           const _Message(
             text: 'Not provisioned as device owner. Nothing is enforced.',
-            color: _kMuted,
+            color: kMuted,
           ),
       ],
     );
@@ -520,12 +514,12 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: _kGap / 2),
+      padding: const EdgeInsets.symmetric(vertical: kGap / 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: _kMuted)),
-          Text(value, style: const TextStyle(color: _kText)),
+          Text(label, style: const TextStyle(color: kMuted)),
+          Text(value, style: const TextStyle(color: kText)),
         ],
       ),
     );
