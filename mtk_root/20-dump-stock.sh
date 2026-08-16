@@ -66,63 +66,10 @@ read_facts_value() {
   printf '%s' "${line#*=}"
 }
 
-# dump_partition <partition> <destination>
-#
-# MTK_DUMP_CMD overrides the mtkclient invocation and is the seam the tests
-# use: it is called as `$MTK_DUMP_CMD <partition> <destination>`. Without it
-# the only way to exercise the manifest/verification logic below would be to
-# attach a phone in BROM mode, so that code would ship unrun.
-dump_partition() {
-  local partition="$1" dest="$2"
-  local mtk_dir="" python_bin=""
-
-  mtk_info "Dumping ${partition} -> ${dest}"
-
-  if [[ -n ${MTK_DUMP_CMD:-} ]]; then
-    # shellcheck disable=SC2086  # intentional word splitting: the override may
-    # carry arguments, e.g. MTK_DUMP_CMD="./stub.sh --size 4M"
-    ${MTK_DUMP_CMD} "$partition" "$dest"
-    return $?
-  fi
-
-  mtk_dir="$(mtk_mtkclient_dir)"
-  python_bin="$(mtk_venv_python)"
-
-  mtk_info "mtkclient is waiting for the device in BROM/preloader mode."
-  mtk_info "Power the phone OFF, then connect USB (some units need vol- held)."
-
-  # `mtk.py r <partition> <outfile>` per the mtkclient README. Run from the
-  # clone directory because mtk.py resolves its Loader/ paths relative to cwd.
-  (
-    cd "$mtk_dir" || exit 1
-    "$python_bin" mtk.py r "$partition" "$dest"
-  )
-}
-
-verify_dump() {
-  local label="$1" path="$2"
-  local size="" verdict="" sha=""
-
-  if [[ ! -f $path ]]; then
-    mtk_error "${label}: no file produced at ${path}"
-    return 1
-  fi
-
-  size="$(mtk_file_size "$path")"
-  sha="$(mtk_sha256 "$path")"
-
-  if verdict="$(mtk_sane_ramdisk_size "$size")"; then
-    mtk_info "${label}: ${verdict}, sha256 ${sha}"
-  else
-    # mtkclient exits 0 on a truncated read, so size is the only signal that
-    # something went wrong short of parsing the image.
-    mtk_warn "${label}: ${verdict}"
-    mtk_warn "${label}: sha256 ${sha}"
-    mtk_warn "Inspect this image before trusting it as a backup."
-    return 1
-  fi
-  return 0
-}
+# shellcheck source=lib/dump_partitions.sh
+source "$SCRIPT_DIR/lib/dump_partitions.sh"
+# shellcheck source=lib/dump_verify.sh
+source "$SCRIPT_DIR/lib/dump_verify.sh"
 
 main() {
   printf '\033[1m%s - stock partition dump (MediaTek only)\033[0m\n' "$SCRIPT_NAME"
