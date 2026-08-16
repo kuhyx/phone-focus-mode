@@ -74,4 +74,19 @@ internal object EnforcementFixtures {
     )
 
     fun latOffset(metres: Double) = homeLat + metres / metresPerDegreeLat
+
+    /**
+     * A candidate location fix at home, varying only in the fields that fix
+     * selection actually orders on. Shared so the home coordinates stay in
+     * one place: `EnforcementLogTest` asserts they never reach a log record,
+     * and that assertion means less if the literals are copied around.
+     */
+    fun candidate(ageMs: Long, accuracyM: Double?, provider: String) = LocationFix(
+        latitude = homeLat,
+        longitude = homeLon,
+        ageMs = ageMs,
+        accuracyM = accuracyM,
+        provider = provider,
+        outcome = FixOutcome.CACHED_FRESH,
+    )
 }
