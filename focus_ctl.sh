@@ -11,8 +11,23 @@
 
 SCRIPT_DIR="/data/local/tmp/focus_mode"
 . "$SCRIPT_DIR/config.sh"
+# shellcheck source=ctl_hosts.sh
+. "$SCRIPT_DIR/ctl_hosts.sh"
+# shellcheck source=ctl_dns.sh
+. "$SCRIPT_DIR/ctl_dns.sh"
+# shellcheck source=ctl_launcher.sh
+. "$SCRIPT_DIR/ctl_launcher.sh"
+# shellcheck source=ctl_workout.sh
+. "$SCRIPT_DIR/ctl_workout.sh"
+# shellcheck source=ctl_curfew.sh
+. "$SCRIPT_DIR/ctl_curfew.sh"
+# shellcheck source=ctl_tether.sh
+. "$SCRIPT_DIR/ctl_tether.sh"
+# shellcheck source=ctl_usage.sh
+. "$SCRIPT_DIR/ctl_usage.sh"
+# shellcheck source=ctl_daemon.sh
+. "$SCRIPT_DIR/ctl_daemon.sh"
 
-PIDFILE="$STATE_DIR/daemon.pid"
 
 # ---- Logging ----
 log() {
@@ -21,424 +36,25 @@ log() {
 	echo "[$ts] $1" >>"$LOG_FILE"
 }
 
-# Emit one valid package name per line from WHITELIST.
-# This strips comments/blank lines from the multi-line quoted string and avoids
-# treating heading text (e.g. "---") as package tokens.
-iter_whitelist_packages() {
-	printf '%s\n' "$WHITELIST" | while IFS= read -r line; do
-		line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-		case "$line" in
-		"" | \#*) continue ;;
-		esac
 
-		# Keep first token only; ignore any inline prose if present.
-		# Intentional word split to grab the first token. This runs under
-		# /system/bin/sh on the phone, where arrays do not exist, so an
-		# unquoted expansion is the POSIX way to do it.
-		# shellcheck disable=SC2086
-		set -- $line
-		pkg="$1"
 
-		# Package names are dot-delimited identifiers.
-		case "$pkg" in
-		*.*) ;;
-		*) continue ;;
-		esac
-		case "$pkg" in
-		*[!A-Za-z0-9._]*) continue ;;
-		esac
 
-		echo "$pkg"
-	done
-}
 
-usage() {
-	echo "Usage: focus_ctl.sh <command>"
-	echo ""
-	echo "Commands:"
-	echo "  start      - Start the focus mode daemon"
-	echo "  stop       - Stop the daemon and re-enable all apps"
-	echo "  status     - Show current mode, location and disabled apps"
-	echo "  enable     - Force focus mode on (regardless of location)"
-	echo "  disable    - Force focus mode off (regardless of location)"
-	echo "  log        - Show daemon log"
-	echo "  list-apps  - List all non-whitelisted third-party apps"
-	echo "  whitelist  - List currently whitelisted packages"
-	echo "  restart    - Restart the daemon"
-	echo "  hosts-status   - Show hosts enforcer state (mount + hash)"
-	echo "  hosts-start    - Start the hosts enforcer daemon"
-	echo "  hosts-stop     - Stop the hosts enforcer daemon"
-	echo "  hosts-log      - Show hosts enforcer log"
-	echo "  dns-status     - Show DNS enforcer state (Private DNS + iptables)"
-	echo "  dns-start      - Start the DNS enforcer daemon"
-	echo "  dns-stop       - Stop the DNS enforcer daemon (removes iptables chain)"
-	echo "  dns-log        - Show DNS enforcer log"
-	echo "  launcher-status  - Show launcher enforcer state"
-	echo "  launcher-start   - Start the launcher enforcer daemon"
-	echo "  launcher-stop    - Stop the launcher enforcer daemon"
-	echo "  launcher-log     - Show launcher enforcer log"
-	echo "  launcher-snapshot - Back up currently-installed launcher APK"
-	echo "  workout-status   - Show StrongLifts workout-detection state"
-	echo "  workout-start    - Start the workout detector daemon"
-	echo "  workout-stop     - Stop the workout detector daemon (sets flag=0)"
-	echo "  workout-log      - Show workout detector log"
-	echo "  recheck    - Nudge the daemon to perform a fresh location check now"
-	echo "  curfew-status    - Show night-curfew + enforcer state"
-	echo "  curfew-start     - Start the curfew enforcer (grayscale/DND/net)"
-	echo "  curfew-stop      - Stop it and restore daytime display/DND"
-	echo "  curfew-log       - Show curfew enforcer log"
-	echo "  curfew-test-on   - Force curfew ACTIVE now (daytime validation)"
-	echo "  curfew-test-off  - Clear the test force"
-	echo "  curfew-demo-on   - Start a demo: full curfew now, easy one-tap off"
-	echo "  curfew-demo-off  - Stop the demo"
-	echo "  curfew-off       - Escape hatch: suspend curfew now (2am opt-out)"
-	echo "  curfew-on        - Re-arm curfew (clear the override)"
-	echo "  tether-status    - Show hotspot/tethering-block state"
-	echo "  tether-start     - Start the tether enforcer (FORWARD block + offload off)"
-	echo "  tether-stop      - Stop it and restore tethering (teardown FORWARD chain)"
-	echo "  tether-log       - Show tether enforcer log"
-	echo "  tether-test-on   - Force the tether block ACTIVE now (daytime validation)"
-	echo "  tether-test-off  - Clear the tether force"
-	echo "  notif-status - Show companion status-notification details"
-	echo ""
-}
 
-# Helper to check if daemon is running
-daemon_pid() {
-	if [ -f "$PIDFILE" ]; then
-		local pid
-		pid="$(cat "$PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_start() {
-	local pid
-	pid="$(daemon_pid)"
-	if [ -n "$pid" ]; then
-		echo "Daemon already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/focus_daemon.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(daemon_pid)"
-	if [ -n "$pid" ]; then
-		echo "Daemon started (PID $pid)"
-	else
-		echo "ERROR: Daemon failed to start. Check log: $LOG_FILE"
-	fi
-}
 
-cmd_stop() {
-	local pid
-	pid="$(daemon_pid)"
-	if [ -z "$pid" ]; then
-		echo "Daemon not running"
-		# Clean up stale pidfile if present
-		rm -f "$PIDFILE"
-	else
-		kill -TERM "$pid"
-		echo "Daemon stopped (sent SIGTERM to PID $pid)"
-	fi
-}
 
-cmd_status() {
-	local pid
-	pid="$(daemon_pid)"
-	local mode="unknown"
-	[ -f "$MODE_FILE" ] && mode="$(cat "$MODE_FILE")"
 
-	echo "=== Focus Mode Status ==="
-	if [ -n "$pid" ]; then
-		echo "Daemon:   RUNNING (PID $pid)"
-	else
-		echo "Daemon:   STOPPED"
-	fi
-	echo "Mode:     $mode"
-	echo "Home:     $HOME_LAT, $HOME_LON (radius: ${RADIUS}m)"
-	echo ""
 
-	# Show current location if available
-	location="$(dumpsys location 2>/dev/null |
-		grep -oE 'Location\[.*[-]?[0-9]{1,3}\.[0-9]+,[-]?[0-9]{1,3}\.[0-9]+' |
-		grep -oE '[-]?[0-9]{1,3}\.[0-9]+,[-]?[0-9]{1,3}\.[0-9]+' |
-		head -1)"
 
-	if [ -n "$location" ]; then
-		lat="$(echo "$location" | cut -d',' -f1)"
-		lon="$(echo "$location" | cut -d',' -f2)"
-		dist="$(echo "$lat $lon $HOME_LAT $HOME_LON" | awk '{
-            PI=3.14159265358979; R=6371000
-            a1=$1*PI/180; o1=$2*PI/180
-            a2=$3*PI/180; o2=$4*PI/180
-            da=a2-a1; dlon=o2-o1
-            x=sin(da/2)^2+cos(a1)*cos(a2)*sin(dlon/2)^2
-            printf "%d", R*2*atan2(sqrt(x),sqrt(1-x))
-        }')"
-		echo "Location: $lat, $lon"
-		echo "Distance: ${dist}m from home"
-	else
-		echo "Location: unavailable"
-	fi
 
-	echo ""
-	if [ -f "$DISABLED_APPS_FILE" ] && [ -s "$DISABLED_APPS_FILE" ]; then
-		echo "=== Apps disabled by focus mode ==="
-		cat "$DISABLED_APPS_FILE"
-	else
-		echo "No apps currently disabled by focus mode"
-	fi
-}
-
-cmd_enable() {
-	# Disable daemon temporarily, force focus
-	echo "Forcing focus mode ON..."
-	. "$SCRIPT_DIR/config.sh"
-
-	# Source common functions - inline here for standalone use
-	: >"$STATE_DIR/disabled_by_focus.txt"
-	local count=0
-	for pkg in $(pm list packages -3 2>/dev/null | sed 's/^package://'); do
-		# Check whitelist
-		whitelisted=0
-		for w in $(iter_whitelist_packages); do
-			w_clean="$(echo "$w" | tr -d '[:space:]')"
-			[ -z "$w_clean" ] && continue
-			[ "$pkg" = "$w_clean" ] && {
-				whitelisted=1
-				break
-			}
-		done
-		[ "$whitelisted" -eq 1 ] && continue
-
-		# Check system protection
-		protected=0
-		for prefix in $SYSTEM_NEVER_DISABLE; do
-			prefix_clean="$(echo "$prefix" | tr -d '[:space:]')"
-			[ -z "$prefix_clean" ] && continue
-			case "$pkg" in
-			"$prefix_clean"*)
-				protected=1
-				break
-				;;
-			esac
-		done
-		[ "$protected" -eq 1 ] && continue
-
-		if pm disable-user --user 0 "$pkg" >/dev/null 2>&1; then
-			echo "$pkg" >>"$STATE_DIR/disabled_by_focus.txt"
-			count=$((count + 1))
-		fi
-	done
-	echo "focus" >"$MODE_FILE"
-	echo "Done: disabled $count apps"
-}
-
-cmd_recheck() {
-	# Write the trigger file; the daemon's sleep_with_recheck() will pick it
-	# up within ~1 second and perform an immediate location check.
-	if [ ! -f "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-		echo "Daemon not running - start it first with: focus_ctl.sh start"
-		return 1
-	fi
-	touch "$RECHECK_TRIGGER"
-	chmod 666 "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Recheck requested. Tail the log to see the next reading:"
-	echo "  tail -f $LOG_FILE"
-}
-
-cmd_notif_status() {
-	if [ -f "$STATUS_FILE" ]; then
-		echo "=== $STATUS_FILE ==="
-		cat "$STATUS_FILE"
-		echo
-	else
-		echo "No status snapshot yet (daemon has not written $STATUS_FILE)."
-	fi
-	if command -v dumpsys >/dev/null 2>&1; then
-		echo "=== Companion app state ==="
-		dumpsys package com.kuhy.focusstatus 2>/dev/null | grep -E 'enabled=|installed=|userId=' | head -5 || true
-	fi
-}
-
-cmd_disable() {
-	echo "Forcing focus mode OFF..."
-	if [ -f "$DISABLED_APPS_FILE" ] && [ -s "$DISABLED_APPS_FILE" ]; then
-		local count=0
-		while IFS= read -r pkg; do
-			[ -z "$pkg" ] && continue
-			pm enable "$pkg" >/dev/null 2>&1 && count=$((count + 1))
-		done <"$DISABLED_APPS_FILE"
-		: >"$DISABLED_APPS_FILE"
-		echo "Done: re-enabled $count apps"
-	else
-		echo "No apps to re-enable"
-	fi
-	echo "normal" >"$MODE_FILE"
-}
-
-cmd_log() {
-	local lines="${1:-50}"
-	if [ -f "$LOG_FILE" ]; then
-		tail -n "$lines" "$LOG_FILE"
-	else
-		echo "Log file not found: $LOG_FILE"
-	fi
-}
-
-cmd_list_apps() {
-	echo "=== Third-party apps NOT in whitelist ==="
-	for pkg in $(pm list packages -3 2>/dev/null | sed 's/^package://'); do
-		whitelisted=0
-		for w in $(iter_whitelist_packages); do
-			w="$(echo "$w" | tr -d '[:space:]')"
-			[ -z "$w" ] && continue
-			[ "$pkg" = "$w" ] && {
-				whitelisted=1
-				break
-			}
-		done
-		if [ "$whitelisted" -eq 0 ]; then
-			# Check if currently disabled by focus mode
-			if grep -qF "$pkg" "$DISABLED_APPS_FILE" 2>/dev/null; then
-				echo "  [BLOCKED] $pkg"
-			else
-				echo "  [active]  $pkg"
-			fi
-		fi
-	done
-	echo ""
-	echo "=== Whitelisted apps ==="
-	for w in $(iter_whitelist_packages); do
-		w="$(echo "$w" | tr -d '[:space:]')"
-		[ -z "$w" ] && continue
-		echo "  [allowed] $w"
-	done
-}
-
-cmd_whitelist() {
-	echo "=== Whitelisted packages ==="
-	for w in $(iter_whitelist_packages); do
-		w="$(echo "$w" | tr -d '[:space:]')"
-		[ -z "$w" ] && continue
-		# Check if installed
-		if pm list packages "$w" 2>/dev/null | grep -qF "$w"; then
-			echo "  [installed] $w"
-		else
-			echo "  [not found] $w"
-		fi
-	done
-}
 
 HOSTS_PIDFILE="$STATE_DIR/hosts_enforcer.pid"
 
-hosts_enforcer_pid() {
-	if [ -f "$HOSTS_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$HOSTS_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_hosts_status() {
-	local pid
-	pid="$(hosts_enforcer_pid)"
-	echo "=== Hosts Enforcer Status ==="
-	if [ -n "$pid" ]; then
-		echo "Daemon:    RUNNING (PID $pid)"
-	else
-		echo "Daemon:    STOPPED"
-	fi
-	echo "Canonical: $HOSTS_CANONICAL"
-	echo "Target:    $HOSTS_TARGET"
-	if grep -qE "[[:space:]]${HOSTS_TARGET}[[:space:]]" /proc/self/mounts 2>/dev/null; then
-		# A mount exists on the target path, but on Android the OEM sometimes
-		# already mounts its own hosts file here. Trust the sha check below.
-		echo "Mount:     present (integrity check below tells us if ours)"
-	else
-		echo "Mount:     NOT mounted (unprotected)"
-	fi
-	if [ -f "$HOSTS_CANONICAL" ]; then
-		local expected actual
-		expected="$(cat "$HOSTS_SHA_FILE" 2>/dev/null)"
-		if command -v sha256sum >/dev/null 2>&1; then
-			actual="$(sha256sum "$HOSTS_TARGET" 2>/dev/null | awk '{print $1}')"
-		else
-			actual="$(md5sum "$HOSTS_TARGET" 2>/dev/null | awk '{print $1}')"
-		fi
-		echo "Expected:  ${expected:-<none>}"
-		echo "Actual:    ${actual:-<unreadable>}"
-		if [ -n "$expected" ] && [ "$expected" = "$actual" ]; then
-			echo "Integrity: OK"
-		else
-			echo "Integrity: MISMATCH"
-		fi
-	else
-		echo "Canonical hosts file missing - run deploy.sh"
-	fi
-	# Magisk Systemless Hosts module protection state.
-	local module_dir="/data/adb/modules/hosts"
-	if [ -d "$module_dir" ]; then
-		local lock_state="UNLOCKED (Magisk app can disable!)"
-		if lsattr -d "$module_dir" 2>/dev/null | awk '{print $1}' | grep -q i; then
-			lock_state="LOCKED (chattr +i)"
-		fi
-		echo "Magisk dir: $module_dir [$lock_state]"
-		local marker_warn=""
-		for marker in disable remove update; do
-			if [ -e "$module_dir/$marker" ]; then
-				marker_warn="$marker_warn $marker"
-			fi
-		done
-		if [ -n "$marker_warn" ]; then
-			echo "WARN:      Magisk markers present:$marker_warn (will be auto-removed by hosts_enforcer)"
-		fi
-	else
-		echo "Magisk dir: <missing - module not installed>"
-	fi
-}
 
-cmd_hosts_start() {
-	local pid
-	pid="$(hosts_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Hosts enforcer already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/hosts_enforcer.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(hosts_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Hosts enforcer started (PID $pid)"
-	else
-		echo "ERROR: hosts enforcer failed to start. Check log: $HOSTS_LOG"
-	fi
-}
 
-cmd_hosts_stop() {
-	local pid
-	pid="$(hosts_enforcer_pid)"
-	if [ -z "$pid" ]; then
-		echo "Hosts enforcer not running"
-		rm -f "$HOSTS_PIDFILE"
-		return
-	fi
-	kill -TERM "$pid"
-	echo "Hosts enforcer stopped (sent SIGTERM to PID $pid)"
-}
 
-cmd_hosts_log() {
-	local lines="${1:-50}"
-	if [ -f "$HOSTS_LOG" ]; then
-		tail -n "$lines" "$HOSTS_LOG"
-	else
-		echo "Hosts enforcer log not found: $HOSTS_LOG"
-	fi
-}
 
 # ---- DNS enforcer ----
 # Hosts file only works for the system resolver. Apps using DoH/DoT bypass
@@ -447,596 +63,60 @@ cmd_hosts_log() {
 
 DNS_PIDFILE="$STATE_DIR/dns_enforcer.pid"
 
-dns_enforcer_pid() {
-	if [ -f "$DNS_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$DNS_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_dns_status() {
-	local pid
-	pid="$(dns_enforcer_pid)"
-	echo "=== DNS Enforcer Status ==="
-	if [ -n "$pid" ]; then
-		echo "Daemon:         RUNNING (PID $pid)"
-	else
-		echo "Daemon:         STOPPED"
-	fi
-	local mode spec
-	mode="$(settings get global private_dns_mode 2>/dev/null)"
-	spec="$(settings get global private_dns_specifier 2>/dev/null)"
-	echo "private_dns_mode:      ${mode:-<unset>}"
-	echo "private_dns_specifier: ${spec:-<unset>}"
-	if iptables -L "$DNS_IPT_CHAIN" >/dev/null 2>&1; then
-		local v4rules
-		v4rules="$(iptables -S "$DNS_IPT_CHAIN" 2>/dev/null | wc -l)"
-		echo "iptables $DNS_IPT_CHAIN: $v4rules rules"
-	else
-		echo "iptables $DNS_IPT_CHAIN: MISSING"
-	fi
-	if ip6tables -L "$DNS_IPT_CHAIN" >/dev/null 2>&1; then
-		local v6rules
-		v6rules="$(ip6tables -S "$DNS_IPT_CHAIN" 2>/dev/null | wc -l)"
-		echo "ip6tables $DNS_IPT_CHAIN: $v6rules rules"
-	else
-		echo "ip6tables $DNS_IPT_CHAIN: MISSING"
-	fi
-}
 
-cmd_dns_start() {
-	local pid
-	pid="$(dns_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "DNS enforcer already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/dns_enforcer.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(dns_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "DNS enforcer started (PID $pid)"
-	else
-		echo "ERROR: DNS enforcer failed to start. Check log: $DNS_LOG"
-	fi
-}
 
-cmd_dns_stop() {
-	local pid
-	pid="$(dns_enforcer_pid)"
-	if [ -z "$pid" ]; then
-		echo "DNS enforcer not running"
-		rm -f "$DNS_PIDFILE"
-	else
-		kill -TERM "$pid"
-		echo "DNS enforcer stopped (sent SIGTERM to PID $pid)"
-	fi
-	# Explicit teardown of the iptables chain so maintenance work can
-	# use DoH. The enforcer itself leaves the chain intact on TERM to
-	# keep the block closed between periodic re-applies.
-	iptables -D OUTPUT -j "$DNS_IPT_CHAIN" 2>/dev/null || true
-	iptables -F "$DNS_IPT_CHAIN" 2>/dev/null || true
-	iptables -X "$DNS_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -D OUTPUT -j "$DNS_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -F "$DNS_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -X "$DNS_IPT_CHAIN" 2>/dev/null || true
-	echo "iptables chain $DNS_IPT_CHAIN removed"
-}
 
-cmd_dns_log() {
-	local lines="${1:-50}"
-	if [ -f "$DNS_LOG" ]; then
-		tail -n "$lines" "$DNS_LOG"
-	else
-		echo "DNS enforcer log not found: $DNS_LOG"
-	fi
-}
 
 # ---- Launcher enforcer ----
 
 LAUNCHER_PIDFILE="$STATE_DIR/launcher_enforcer.pid"
 DISABLED_COMPETITORS_FILE="$STATE_DIR/disabled_competitors.txt"
 
-launcher_enforcer_pid() {
-	if [ -f "$LAUNCHER_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$LAUNCHER_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_launcher_snapshot() {
-	# Find the APK path for the currently-installed launcher and copy it
-	# to LAUNCHER_APK. Also capture the current HOME activity component.
-	local apk_path
-	apk_path="$(pm path "$LAUNCHER_PACKAGE" 2>/dev/null | head -1 | sed 's/^package://')"
-	if [ -z "$apk_path" ] || [ ! -f "$apk_path" ]; then
-		echo "ERROR: $LAUNCHER_PACKAGE is not installed. Install it once via Aurora/Play Store, then rerun this command."
-		return 1
-	fi
-	mkdir -p "$(dirname "$LAUNCHER_APK")"
-	chattr -i "$LAUNCHER_APK" "$LAUNCHER_SHA_FILE" "$LAUNCHER_ACTIVITY_FILE" 2>/dev/null || true
-	cp "$apk_path" "$LAUNCHER_APK" || return 1
-	chmod 644 "$LAUNCHER_APK"
-	sha256sum "$LAUNCHER_APK" | awk '{print $1}' >"$LAUNCHER_SHA_FILE"
-	chmod 644 "$LAUNCHER_SHA_FILE"
 
-	# Resolve the current HOME activity (or the launcher's default activity
-	# if it isn't yet the default).
-	local component
-	component="$(cmd package resolve-activity --brief \
-		-c android.intent.category.HOME \
-		-a android.intent.action.MAIN 2>/dev/null | awk 'NR==2{print}')"
-	if [ -z "$component" ] || [ "${component%%/*}" != "$LAUNCHER_PACKAGE" ]; then
-		# Fall back to the launcher's MAIN/LAUNCHER activity
-		component="$(cmd package resolve-activity --brief \
-			-c android.intent.category.LAUNCHER \
-			-a android.intent.action.MAIN "$LAUNCHER_PACKAGE" 2>/dev/null |
-			awk 'NR==2{print}')"
-	fi
-	if [ -z "$component" ]; then
-		echo "ERROR: could not resolve HOME activity for $LAUNCHER_PACKAGE"
-		return 1
-	fi
-	echo "$component" >"$LAUNCHER_ACTIVITY_FILE"
-	chmod 644 "$LAUNCHER_ACTIVITY_FILE"
 
-	# Make snapshot immutable so even root-in-a-terminal can't overwrite
-	# it without first running `chattr -i`.
-	chattr +i "$LAUNCHER_APK" "$LAUNCHER_SHA_FILE" "$LAUNCHER_ACTIVITY_FILE" 2>/dev/null || true
 
-	echo "Snapshot saved:"
-	echo "  APK:      $LAUNCHER_APK ($(wc -c <"$LAUNCHER_APK") bytes)"
-	echo "  SHA256:   $(cat "$LAUNCHER_SHA_FILE")"
-	echo "  Activity: $component"
-}
 
-cmd_launcher_status() {
-	local pid
-	pid="$(launcher_enforcer_pid)"
-	echo "=== Launcher Enforcer Status ==="
-	if [ -n "$pid" ]; then
-		echo "Daemon:     RUNNING (PID $pid)"
-	else
-		echo "Daemon:     STOPPED"
-	fi
-	echo "Package:    $LAUNCHER_PACKAGE"
-	if pm path "$LAUNCHER_PACKAGE" >/dev/null 2>&1; then
-		echo "Installed:  YES ($(pm path "$LAUNCHER_PACKAGE" | head -1))"
-	else
-		echo "Installed:  NO"
-	fi
-	local desired actual
-	desired="$(cat "$LAUNCHER_ACTIVITY_FILE" 2>/dev/null)"
-	actual="$(cmd package resolve-activity --brief \
-		-c android.intent.category.HOME -a android.intent.action.MAIN \
-		2>/dev/null | awk 'NR==2{print}')"
-	echo "Expected:   ${desired:-<not armed - run launcher-snapshot>}"
-	echo "Actual:     ${actual:-<unresolved>}"
-	if [ -n "$desired" ] && [ "$desired" = "$actual" ]; then
-		echo "Default:    OK (pinned)"
-	else
-		echo "Default:    MISMATCH"
-	fi
-	echo "Snapshot:   $LAUNCHER_APK"
-	if [ -f "$LAUNCHER_APK" ]; then
-		echo "Snapshot size: $(wc -c <"$LAUNCHER_APK") bytes"
-	fi
-	if [ -s "$DISABLED_COMPETITORS_FILE" ]; then
-		echo "Disabled competitors:"
-		sed 's/^/  - /' "$DISABLED_COMPETITORS_FILE"
-	fi
-}
-
-cmd_launcher_start() {
-	local pid
-	pid="$(launcher_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Launcher enforcer already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/launcher_enforcer.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(launcher_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Launcher enforcer started (PID $pid)"
-	else
-		echo "ERROR: launcher enforcer failed to start. Check log: $LAUNCHER_LOG"
-	fi
-}
-
-cmd_launcher_stop() {
-	local pid
-	pid="$(launcher_enforcer_pid)"
-	if [ -z "$pid" ]; then
-		echo "Launcher enforcer not running"
-		rm -f "$LAUNCHER_PIDFILE"
-	else
-		kill -TERM "$pid"
-		echo "Launcher enforcer stopped (sent SIGTERM to PID $pid)"
-	fi
-	# Re-enable any competitors we disabled so the device is usable if the
-	# enforcer is intentionally stopped (e.g. during maintenance).
-	if [ -s "$DISABLED_COMPETITORS_FILE" ]; then
-		while read -r pkg; do
-			[ -z "$pkg" ] && continue
-			pm enable --user 0 "$pkg" >/dev/null 2>&1 &&
-				echo "Re-enabled competing launcher: $pkg"
-		done <"$DISABLED_COMPETITORS_FILE"
-		: >"$DISABLED_COMPETITORS_FILE"
-	fi
-}
-
-cmd_launcher_log() {
-	local lines="${1:-50}"
-	if [ -f "$LAUNCHER_LOG" ]; then
-		tail -n "$lines" "$LAUNCHER_LOG"
-	else
-		echo "Launcher enforcer log not found: $LAUNCHER_LOG"
-	fi
-}
 
 # ---- Workout detector ----
 
 WORKOUT_PIDFILE="$STATE_DIR/workout_detector.pid"
 
-workout_detector_pid() {
-	if [ -f "$WORKOUT_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$WORKOUT_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_workout_status() {
-	local pid
-	pid="$(workout_detector_pid)"
-	echo "=== Workout Detector Status ==="
-	if [ -n "$pid" ]; then
-		echo "Daemon:        RUNNING (PID $pid)"
-	else
-		echo "Daemon:        STOPPED"
-	fi
-	echo "Package:       $WORKOUT_TRIGGER_PACKAGE"
-	if pm path "$WORKOUT_TRIGGER_PACKAGE" >/dev/null 2>&1; then
-		echo "Installed:     YES"
-	else
-		echo "Installed:     NO (detector will always report inactive)"
-	fi
-	echo "sqlite3:       $WORKOUT_SQLITE3_BIN"
-	if [ -x "$WORKOUT_SQLITE3_BIN" ]; then
-		echo "sqlite3 ver:   $("$WORKOUT_SQLITE3_BIN" -version 2>/dev/null | awk '{print $1}')"
-	else
-		echo "sqlite3 ver:   <missing or not executable — detector cannot query DB>"
-	fi
-	echo "DB path:       $WORKOUT_DB_PATH"
-	if [ -f "$WORKOUT_DB_PATH" ]; then
-		echo "DB present:    YES"
-	else
-		echo "DB present:    NO"
-	fi
-	echo "Poll interval: ${WORKOUT_DETECTOR_INTERVAL}s"
-	local flag="<unset>"
-	if [ -f "$WORKOUT_ACTIVE_FILE" ]; then
-		flag="$(cat "$WORKOUT_ACTIVE_FILE" 2>/dev/null)"
-	fi
-	case "$flag" in
-	1) echo "Workout flag:  1 (workout IN PROGRESS → YouTube hosts UNBLOCKED)" ;;
-	0) echo "Workout flag:  0 (no workout → YouTube hosts BLOCKED)" ;;
-	*) echo "Workout flag:  '$flag' (treated as 0, fail-closed)" ;;
-	esac
-	# Live one-shot query so the user can see ground truth without waiting
-	# for the next poll cycle. Best-effort — never fails the status command.
-	if [ -x "$WORKOUT_SQLITE3_BIN" ] && [ -f "$WORKOUT_DB_PATH" ]; then
-		local live_count
-		live_count="$("$WORKOUT_SQLITE3_BIN" "file:${WORKOUT_DB_PATH}?mode=ro" \
-			"SELECT COUNT(*) FROM workouts WHERE start>0 AND (finish IS NULL OR finish=0);" \
-			2>/dev/null)"
-		echo "Live DB query: in-progress workouts = ${live_count:-<query failed>}"
-	fi
-	if [ -f "$HOSTS_CANONICAL_WORKOUT" ]; then
-		echo "Workout hosts: $HOSTS_CANONICAL_WORKOUT ($(wc -l <"$HOSTS_CANONICAL_WORKOUT" 2>/dev/null) lines)"
-	else
-		echo "Workout hosts: <missing — deploy.sh must regenerate it>"
-	fi
-}
 
-cmd_workout_start() {
-	local pid
-	pid="$(workout_detector_pid)"
-	if [ -n "$pid" ]; then
-		echo "Workout detector already running (PID $pid)"
-		return
-	fi
-	if [ ! -x "$WORKOUT_SQLITE3_BIN" ]; then
-		echo "ERROR: $WORKOUT_SQLITE3_BIN missing or not executable. Re-run deploy.sh."
-		return 1
-	fi
-	setsid sh "$SCRIPT_DIR/workout_detector.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(workout_detector_pid)"
-	if [ -n "$pid" ]; then
-		echo "Workout detector started (PID $pid)"
-	else
-		echo "ERROR: Workout detector failed to start. Check log: $WORKOUT_DETECTOR_LOG"
-	fi
-}
 
-cmd_workout_stop() {
-	local pid
-	pid="$(workout_detector_pid)"
-	if [ -z "$pid" ]; then
-		echo "Workout detector not running"
-		rm -f "$WORKOUT_PIDFILE"
-	else
-		kill -TERM "$pid"
-		echo "Workout detector stopped (sent SIGTERM to PID $pid)"
-	fi
-	# Fail-closed on manual stop: write 0 so the hosts enforcer reverts to
-	# the full-block canonical and YouTube goes back to being blocked.
-	printf '0\n' >"$WORKOUT_ACTIVE_FILE" 2>/dev/null || true
-	chmod 666 "$WORKOUT_ACTIVE_FILE" 2>/dev/null || true
-	echo "workout_active flag forced to 0"
-}
 
-cmd_workout_log() {
-	local lines="${1:-50}"
-	if [ -f "$WORKOUT_DETECTOR_LOG" ]; then
-		tail -n "$lines" "$WORKOUT_DETECTOR_LOG"
-	else
-		echo "Workout detector log not found: $WORKOUT_DETECTOR_LOG"
-	fi
-}
 
 # ============================================================
 # Night-curfew control (see curfew_enforcer.sh / focus_daemon.sh)
 # ============================================================
 CURFEW_PIDFILE="$STATE_DIR/curfew_enforcer.pid"
 
-curfew_enforcer_pid() {
-	if [ -f "$CURFEW_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$CURFEW_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-# Replicates focus_daemon.sh::is_curfew_now for status display.
-_ctl_dec() {
-	local n="$1"
-	while [ "${n#0}" != "$n" ] && [ "${#n}" -gt 1 ]; do n="${n#0}"; done
-	printf '%s' "$n"
-}
-ctl_is_curfew_now() {
-	local now start end
-	now="$(date +%H%M 2>/dev/null)"
-	case "$now" in '' | *[!0-9]*) return 1 ;; esac
-	now="$(_ctl_dec "$now")"
-	start="$(_ctl_dec "$NIGHT_CURFEW_START")"
-	end="$(_ctl_dec "$NIGHT_CURFEW_END")"
-	if [ "$start" -le "$end" ]; then
-		[ "$now" -ge "$start" ] && [ "$now" -lt "$end" ]
-	else
-		[ "$now" -ge "$start" ] || [ "$now" -lt "$end" ]
-	fi
-}
 
-cmd_curfew_status() {
-	local pid
-	pid="$(curfew_enforcer_pid)"
-	echo "=== Night Curfew Status ==="
-	echo "Enabled:        ${NIGHT_CURFEW_ENABLED}"
-	echo "Window:         ${NIGHT_CURFEW_START}-${NIGHT_CURFEW_END} (now $(date +%H%M))"
-	if [ -n "$pid" ]; then
-		echo "Enforcer:       RUNNING (PID $pid)"
-	else
-		echo "Enforcer:       STOPPED"
-	fi
-	ctl_is_curfew_now && echo "Within window:  YES" || echo "Within window:  no"
-	[ -e "$CURFEW_FORCE_FILE" ] && echo "Forced ON:      YES (demo/test active)"
-	[ -e "$CURFEW_OVERRIDE_FILE" ] && echo "Override:       YES (curfew SUSPENDED)"
-	if [ -f "$MODE_FILE" ]; then
-		echo "Focus mode:     $(cat "$MODE_FILE" 2>/dev/null)"
-	fi
-	[ -e "$CURFEW_ENFORCER_STATE" ] && echo "Applied now:    YES (grayscale/DND locked)" ||
-		echo "Applied now:    no"
-	echo "Grayscale:      ${CURFEW_GRAYSCALE_ENABLED}   DND: ${CURFEW_DND_ENABLED}   Net: ${CURFEW_NET_ENABLED}"
-	if iptables -L "$CURFEW_NET_IPT_CHAIN" >/dev/null 2>&1; then
-		echo "iptables $CURFEW_NET_IPT_CHAIN: $(iptables -S "$CURFEW_NET_IPT_CHAIN" 2>/dev/null | wc -l) rules"
-	else
-		echo "iptables $CURFEW_NET_IPT_CHAIN: absent (net curfew not applied)"
-	fi
-	if [ -f "$STATE_DIR/night_whitelist.txt" ]; then
-		echo "Night whitelist: $(wc -l <"$STATE_DIR/night_whitelist.txt" | tr -d ' ') apps allowed"
-	fi
-}
 
-cmd_curfew_start() {
-	local pid
-	pid="$(curfew_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Curfew enforcer already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/curfew_enforcer.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(curfew_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Curfew enforcer started (PID $pid)"
-	else
-		echo "ERROR: curfew enforcer failed to start. Check log: $CURFEW_ENFORCER_LOG"
-	fi
-}
 
-cmd_curfew_stop() {
-	local pid
-	pid="$(curfew_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		kill "$pid" 2>/dev/null
-		echo "Curfew enforcer stopped (PID $pid) - daytime state restored"
-	else
-		echo "Curfew enforcer not running"
-	fi
-}
 
 cmd_curfew_log() { tail -n "${1:-50}" "$CURFEW_ENFORCER_LOG" 2>/dev/null || echo "No curfew log yet."; }
 
-# Test hook: force curfew ACTIVE regardless of clock/location so the whole
-# stack can be validated during the day. Daemon re-checks within one tick.
-cmd_curfew_test_on() {
-	touch "$CURFEW_FORCE_FILE"
-	chmod 666 "$CURFEW_FORCE_FILE" 2>/dev/null || true
-	rm -f "$CURFEW_OVERRIDE_FILE"
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Curfew FORCED ON. App sweep + enforcer will engage within a few seconds."
-	echo "Validate: open mBank (works), keyboard (works), Firefox (gone). Then: curfew-test-off"
-}
 
-cmd_curfew_test_off() {
-	rm -f "$CURFEW_FORCE_FILE"
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Curfew force cleared. Back to clock-based behaviour."
-}
 
-# Demo mode = the same force mechanism as the test hook, worded for an
-# on-demand demo. The companion app's Start/Stop demo button drives the same
-# force file. Easy off: curfew-demo-off (or tap "Stop demo curfew").
-cmd_curfew_demo_on() {
-	touch "$CURFEW_FORCE_FILE"
-	chmod 666 "$CURFEW_FORCE_FILE" 2>/dev/null || true
-	rm -f "$CURFEW_OVERRIDE_FILE"
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Demo curfew STARTED - full curfew engaged now (apps, grayscale, DND, net)."
-	echo "Stop any time with: curfew-demo-off  (or tap 'Stop demo curfew')"
-}
 
-cmd_curfew_demo_off() {
-	rm -f "$CURFEW_FORCE_FILE"
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Demo curfew STOPPED - back to clock-based behaviour."
-}
 
-# Escape hatch: suspend curfew now (the 2am 'let me out' button). Survives
-# until you re-arm. Reachable on-device only via ADB (this command) unless a
-# root file-manager/terminal has been added to NIGHT_WHITELIST.
-cmd_curfew_off() {
-	touch "$CURFEW_OVERRIDE_FILE"
-	chmod 666 "$CURFEW_OVERRIDE_FILE" 2>/dev/null || true
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Curfew SUSPENDED (override set: $CURFEW_OVERRIDE_FILE). Re-arm with: curfew-on"
-}
 
-cmd_curfew_on() {
-	rm -f "$CURFEW_OVERRIDE_FILE"
-	touch "$RECHECK_TRIGGER" 2>/dev/null || true
-	echo "Curfew re-armed (override cleared)."
-}
 
 # ============================================================
 # Hotspot / tethering block control (see tether_enforcer.sh)
 # ============================================================
 TETHER_PIDFILE="$STATE_DIR/tether_enforcer.pid"
 
-tether_enforcer_pid() {
-	if [ -f "$TETHER_PIDFILE" ]; then
-		local pid
-		pid="$(cat "$TETHER_PIDFILE")"
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "$pid"
-		fi
-	fi
-}
 
-cmd_tether_status() {
-	local pid
-	pid="$(tether_enforcer_pid)"
-	echo "=== Hotspot / Tethering Block Status ==="
-	echo "Enabled:        ${TETHER_ENFORCER_ENABLED}"
-	if [ -n "$pid" ]; then
-		echo "Enforcer:       RUNNING (PID $pid)"
-	else
-		echo "Enforcer:       STOPPED"
-	fi
-	if [ -f "$MODE_FILE" ]; then
-		echo "Focus mode:     $(cat "$MODE_FILE" 2>/dev/null)"
-	fi
-	[ -e "$TETHER_FORCE_FILE" ] && echo "Forced ON:      YES (test active)"
-	[ -e "$TETHER_OVERRIDE_FILE" ] && echo "Override:       YES (block SUSPENDED)"
-	[ -e "$TETHER_ENFORCER_STATE" ] && echo "Applied now:    YES (offload off + FORWARD reject)" ||
-		echo "Applied now:    no"
-	local off
-	off="$(settings get global "$TETHER_OFFLOAD_KEY" 2>/dev/null)"
-	echo "tether_offload_disabled: ${off:-<unset>}"
-	if iptables -C FORWARD -j "$TETHER_IPT_CHAIN" >/dev/null 2>&1; then
-		echo "iptables $TETHER_IPT_CHAIN: pinned to FORWARD ($(iptables -S "$TETHER_IPT_CHAIN" 2>/dev/null | grep -c '^-A') rule)"
-	else
-		echo "iptables $TETHER_IPT_CHAIN: absent (block not applied)"
-	fi
-}
 
-cmd_tether_start() {
-	local pid
-	pid="$(tether_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Tether enforcer already running (PID $pid)"
-		return
-	fi
-	setsid sh "$SCRIPT_DIR/tether_enforcer.sh" </dev/null >/dev/null 2>&1 &
-	sleep 2
-	pid="$(tether_enforcer_pid)"
-	if [ -n "$pid" ]; then
-		echo "Tether enforcer started (PID $pid)"
-	else
-		echo "ERROR: tether enforcer failed to start. Check log: $TETHER_LOG"
-	fi
-}
 
-cmd_tether_stop() {
-	local pid
-	pid="$(tether_enforcer_pid)"
-	if [ -z "$pid" ]; then
-		echo "Tether enforcer not running"
-		rm -f "$TETHER_PIDFILE"
-	else
-		kill -TERM "$pid"
-		echo "Tether enforcer stopped (sent SIGTERM to PID $pid)"
-	fi
-	# Explicit teardown so maintenance can tether even if the daemon was already
-	# dead (its own TERM handler reverts too; this is the belt-and-suspenders).
-	iptables -D FORWARD -j "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	iptables -F "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	iptables -X "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -D FORWARD -j "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -F "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	ip6tables -X "$TETHER_IPT_CHAIN" 2>/dev/null || true
-	echo "FORWARD chain $TETHER_IPT_CHAIN removed (tethering restored)"
-}
 
-cmd_tether_log() { tail -n "${1:-50}" "$TETHER_LOG" 2>/dev/null || echo "No tether log yet."; }
 
-# Test hook: force the block ACTIVE regardless of location so the full stack can
-# be validated during the day with a real second phone on the hotspot.
-cmd_tether_test_on() {
-	touch "$TETHER_FORCE_FILE"
-	chmod 666 "$TETHER_FORCE_FILE" 2>/dev/null || true
-	rm -f "$TETHER_OVERRIDE_FILE"
-	echo "Tether block FORCED ON. Enforcer engages within ${TETHER_CHECK_INTERVAL}s."
-	echo "Validate: second phone on the hotspot loses internet; this phone stays online."
-}
 
-cmd_tether_test_off() {
-	rm -f "$TETHER_FORCE_FILE"
-	echo "Tether force cleared. Back to focus-mode-gated behaviour."
-}
 
 case "$1" in
 start) cmd_start ;;

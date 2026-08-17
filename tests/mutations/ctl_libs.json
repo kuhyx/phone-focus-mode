@@ -1,0 +1,138 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_ctl_libs.sh",
+  "timeout": 300,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "[ \"$now\" -ge \"$start\" ] || [ \"$now\" -lt \"$end\" ]",
+      "replace": "[ \"$now\" -ge \"$start\" ] && [ \"$now\" -lt \"$end\" ]",
+      "describe": "break the midnight-wrapping curfew window"
+    },
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "case \"$now\" in '' | *[!0-9]*) return 1 ;; esac",
+      "replace": "case \"$now\" in '' | *[!0-9]*) return 0 ;; esac",
+      "describe": "fail CLOSED on a broken clock instead of open"
+    },
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "while [ \"${n#0}\" != \"$n\" ] && [ \"${#n}\" -gt 1 ]; do n=\"${n#0}\"; done",
+      "replace": ":",
+      "describe": "stop stripping leading zeros (octal parse)"
+    },
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "\ttouch \"$CURFEW_FORCE_FILE\"",
+      "replace": "\t:",
+      "describe": "curfew-test-on stops creating the force file"
+    },
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "cmd_curfew_off() {\n\ttouch \"$CURFEW_OVERRIDE_FILE\"",
+      "replace": "cmd_curfew_off() {\n\t:",
+      "describe": "curfew-off stops creating the 2am escape hatch"
+    },
+    {
+      "file": "phone_focus_mode/ctl_curfew.sh",
+      "find": "cmd_curfew_on() {\n\trm -f \"$CURFEW_OVERRIDE_FILE\"",
+      "replace": "cmd_curfew_on() {\n\t:",
+      "describe": "curfew-on stops clearing the override"
+    },
+    {
+      "file": "phone_focus_mode/ctl_tether.sh",
+      "find": "\ttouch \"$TETHER_FORCE_FILE\"",
+      "replace": "\t:",
+      "describe": "tether-test-on stops creating the force file"
+    },
+    {
+      "file": "phone_focus_mode/ctl_tether.sh",
+      "find": "cmd_tether_test_off() {\n\trm -f \"$TETHER_FORCE_FILE\"",
+      "replace": "cmd_tether_test_off() {\n\t:",
+      "describe": "tether-test-off stops clearing the force file"
+    },
+    {
+      "file": "phone_focus_mode/ctl_dns.sh",
+      "find": "if iptables -L \"$DNS_IPT_CHAIN\" >/dev/null 2>&1; then",
+      "replace": "if ! iptables -L \"$DNS_IPT_CHAIN\" >/dev/null 2>&1; then",
+      "describe": "invert the v4 DNS chain presence check"
+    },
+    {
+      "file": "phone_focus_mode/ctl_dns.sh",
+      "find": "if ip6tables -L \"$DNS_IPT_CHAIN\" >/dev/null 2>&1; then",
+      "replace": "if ! ip6tables -L \"$DNS_IPT_CHAIN\" >/dev/null 2>&1; then",
+      "describe": "invert the v6 DNS chain presence check"
+    },
+    {
+      "file": "phone_focus_mode/ctl_dns.sh",
+      "find": "${mode:-<unset>}",
+      "replace": "${mode}",
+      "describe": "render an unset private DNS mode as blank"
+    },
+    {
+      "file": "phone_focus_mode/ctl_hosts.sh",
+      "find": "cmd_hosts_start() {\n\tlocal pid\n\tpid=\"$(hosts_enforcer_pid)\"\n\tif [ -n \"$pid\" ]; then",
+      "replace": "cmd_hosts_start() {\n\tlocal pid\n\tpid=\"$(hosts_enforcer_pid)\"\n\tif [ -z \"$pid\" ]; then",
+      "describe": "invert the hosts already-running guard"
+    },
+    {
+      "file": "phone_focus_mode/ctl_workout.sh",
+      "find": "if [ ! -x \"$WORKOUT_SQLITE3_BIN\" ]; then",
+      "replace": "if [ -x \"$WORKOUT_SQLITE3_BIN\" ]; then",
+      "describe": "invert the sqlite3 precondition"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "local mode=\"unknown\"",
+      "replace": "local mode=\"\"",
+      "describe": "report an absent mode as blank rather than unknown"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "echo \"Location: unavailable\"",
+      "replace": ":",
+      "describe": "stay silent when no GPS fix is available"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "R=6371000",
+      "replace": "R=1",
+      "describe": "wrong Earth radius in cmd_status's Haversine (awk kcov cannot see)"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "pm enable \"$pkg\" >/dev/null 2>&1 && count=$((count + 1))",
+      "replace": "count=$((count + 1))",
+      "describe": "count apps as restored without enabling them"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "\t\t: >\"$DISABLED_APPS_FILE\"",
+      "replace": "\t\t:",
+      "describe": "leave the disabled record in place after restoring"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "\ttouch \"$RECHECK_TRIGGER\"",
+      "replace": "\t:",
+      "describe": "recheck stops writing the trigger"
+    },
+    {
+      "file": "phone_focus_mode/ctl_daemon.sh",
+      "find": "echo \"Daemon not running - start it first with: focus_ctl.sh start\"\n\t\treturn 1",
+      "replace": "echo \"Daemon not running - start it first with: focus_ctl.sh start\"",
+      "describe": "recheck continues after reporting no daemon"
+    },
+    {
+      "file": "phone_focus_mode/ctl_usage.sh",
+      "find": "\t\t*.*) ;;",
+      "replace": "\t\t*) ;;",
+      "describe": "accept non-dotted tokens as package names"
+    },
+    {
+      "file": "phone_focus_mode/ctl_usage.sh",
+      "find": "\t\tcase \"$pkg\" in\n\t\t*[!A-Za-z0-9._]*) continue ;;\n\t\tesac",
+      "replace": "\t\t:",
+      "describe": "accept packages containing illegal characters"
+    }
+  ]
+}
