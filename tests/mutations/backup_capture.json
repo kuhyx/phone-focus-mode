@@ -1,0 +1,84 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_backup_capture.sh",
+  "timeout": 180,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "sed 's/^package://'",
+      "replace": "cat",
+      "describe": "stop stripping the package: prefix"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "tr -d '\\r'",
+      "replace": "cat",
+      "describe": "stop stripping carriage returns"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "comm -13",
+      "replace": "comm -12",
+      "describe": "invert the purged-package derivation"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "pm list packages -3",
+      "replace": "pm list packages",
+      "describe": "dump all packages as third-party"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "mapfile -t pkgs <\"${dir}/packages-third-party.txt\"",
+      "replace": "read -r pkgs <\"${dir}/packages-third-party.txt\"",
+      "describe": "reintroduce the stdin-draining apk bug"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "for path in \"${paths[@]}\"; do",
+      "replace": "for path in \"${paths[0]}\"; do",
+      "describe": "pull only the first split of a split app"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "_warn \"no APK path for ${pkg}\"",
+      "replace": ":",
+      "describe": "silence the missing-APK-path warning"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "_warn \"could not pull ${base} for ${pkg}\"",
+      "replace": ":",
+      "describe": "silence the failed-pull warning"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "_warn \"partial or failed pull: ${d}\"",
+      "replace": ":",
+      "describe": "silence the sdcard partial-pull warning"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "if adb_cmd shell \"test -d /sdcard/${d}\"",
+      "replace": "if ! adb_cmd shell \"test -d /sdcard/${d}\"",
+      "describe": "invert the sdcard directory probe"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "for ns in system secure global; do",
+      "replace": "for ns in system; do",
+      "describe": "drop two settings namespaces"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "grep -qx 'com.celzero.bravedns'",
+      "replace": "grep -qvx 'com.celzero.bravedns'",
+      "describe": "invert the RethinkDNS detection"
+    },
+    {
+      "file": "phone_focus_mode/lib/backup_capture.sh",
+      "find": "mkdir -p \"${dir}/sdcard/keepass\"",
+      "replace": ":",
+      "describe": "stop creating the keepass directory"
+    }
+  ]
+}

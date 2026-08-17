@@ -1,0 +1,114 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_monitor.sh",
+  "timeout": 180,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/lib/monitor.sh",
+      "find": "escaped=${escaped//\\\"/\\\\\\\"}",
+      "replace": ":",
+      "describe": "drop the JSON quote escaping"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor.sh",
+      "find": "escaped=${escaped//$'\\n'/\\\\n}",
+      "replace": ":",
+      "describe": "drop the newline escaping"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor.sh",
+      "find": "(( missing_count >= FORMAT_DETECTION_MIN_MISSING ))",
+      "replace": "(( missing_count > FORMAT_DETECTION_MIN_MISSING ))",
+      "describe": "off-by-one the format threshold"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor.sh",
+      "find": "adb_root_shell \"kill -0 ${pid} >/dev/null 2>&1\" >/dev/null 2>&1 || return 1",
+      "replace": "adb_root_shell \"kill -0 ${pid} >/dev/null 2>&1\" >/dev/null 2>&1 || return 0",
+      "describe": "make pid_matches_script always succeed"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor.sh",
+      "find": "printf '%s' \"${candidate}\"",
+      "replace": "printf ''",
+      "describe": "make hosts candidate resolution return empty"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "status=\"warn\"",
+      "replace": "status=\"ok\"",
+      "describe": "silence every health warning"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "status=\"fatal\"",
+      "replace": "status=\"ok\"",
+      "describe": "silence the format-indicator fatal"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "(( level < BATTERY_WARN_BELOW ))",
+      "replace": "(( level > BATTERY_WARN_BELOW ))",
+      "describe": "invert the battery threshold"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "(( free_mb < STORAGE_WARN_BELOW_MB ))",
+      "replace": "(( free_mb > STORAGE_WARN_BELOW_MB ))",
+      "describe": "invert the storage threshold"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "free_mb=$((free_kb / 1024))",
+      "replace": "free_mb=$((free_kb / 512))",
+      "describe": "wrong KB-to-MB divisor"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_health.sh",
+      "find": "\"${daemon_name} is NOT running\" \"true\"",
+      "replace": "\"${daemon_name} is NOT running\" \"false\"",
+      "describe": "mark a dead daemon unrepairable"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"hosts_integrity\" \"fatal\"",
+      "replace": "\"hosts_integrity\" \"ok\"",
+      "describe": "call a missing canonical hosts file ok"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"${expected_hash}\" == \"${actual_hash}\"",
+      "replace": "\"${expected_hash}\" != \"${actual_hash}\"",
+      "describe": "invert the hosts hash comparison"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "chain_present=\"yes\"",
+      "replace": "chain_present=\"no\"",
+      "describe": "never observe the DNS chain"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"launcher_state\" \"fatal\"",
+      "replace": "\"launcher_state\" \"warn\"",
+      "describe": "downgrade the missing-launcher fatal"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"launcher_state\" \"error\"",
+      "replace": "\"launcher_state\" \"ok\"",
+      "describe": "call a launcher mismatch ok"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"boot_persistence\" \"fatal\"",
+      "replace": "\"boot_persistence\" \"ok\"",
+      "describe": "call a missing boot script ok"
+    },
+    {
+      "file": "phone_focus_mode/lib/monitor_checks_policy.sh",
+      "find": "\"companion_app\" \"warn\"",
+      "replace": "\"companion_app\" \"ok\"",
+      "describe": "call a missing companion app ok"
+    }
+  ]
+}

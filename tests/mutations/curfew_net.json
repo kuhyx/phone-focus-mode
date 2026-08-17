@@ -1,0 +1,108 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_curfew_net.sh",
+  "timeout": 180,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "-I OUTPUT 1 -j",
+      "replace": "-I OUTPUT 2 -j",
+      "describe": "stop pinning the OUTPUT jump at position 1"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "iptw \"$ipt\" -N \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || return 1",
+      "replace": "iptw \"$ipt\" -N \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || true",
+      "describe": "swallow a failed chain creation"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "iptw \"$ipt\" -I OUTPUT 1 -j \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || return 1",
+      "replace": "iptw \"$ipt\" -I OUTPUT 1 -j \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || true",
+      "describe": "swallow a failed jump insert"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "iptw \"$ipt\" -F \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || return 1",
+      "replace": "iptw \"$ipt\" -F \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || true",
+      "describe": "swallow a failed flush and layer onto stale rules"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "-o lo -j ACCEPT",
+      "replace": "-o lo -j REJECT",
+      "describe": "reject loopback"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "--state ESTABLISHED,RELATED -j ACCEPT",
+      "replace": "--state ESTABLISHED,RELATED -j REJECT",
+      "describe": "reject established flows"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "--uid-owner 0 -j ACCEPT",
+      "replace": "--uid-owner 0 -j REJECT",
+      "describe": "cut off root"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "-p udp --dport 53 -j ACCEPT",
+      "replace": "-p udp --dport 5353 -j ACCEPT",
+      "describe": "allow the wrong DNS port"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "--uid-owner 10000-19999 -j REJECT",
+      "replace": "--uid-owner 10000-19999 -j ACCEPT",
+      "describe": "let every app through instead of cutting it off"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "case \"$uid\" in ''|*[!0-9]*) continue ;; esac",
+      "replace": ":",
+      "describe": "pass non-numeric uids to iptables"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "$1 == p {",
+      "replace": "$1 != p {",
+      "describe": "invert the package-to-uid match"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "mv \"$CURFEW_NET_UID_CACHE.tmp\" \"$CURFEW_NET_UID_CACHE\"",
+      "replace": "cp \"$CURFEW_NET_UID_CACHE.tmp\" \"$CURFEW_NET_UID_CACHE\"",
+      "describe": "leave the uid cache temp file behind"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "rebuilds=$((rebuilds + 1))",
+      "replace": ":",
+      "describe": "stop counting net_hold rebuilds"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "[ \"${CURFEW_NET_ENABLED:-0}\" = \"1\" ] || return 0",
+      "replace": ":",
+      "describe": "ignore the net-layer disable switch"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "NET_BUILT=1",
+      "replace": ":",
+      "describe": "never mark the chain as built"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "iptw \"$ipt\" -X \"$CURFEW_NET_IPT_CHAIN\" 2>/dev/null || true",
+      "replace": ":",
+      "describe": "leave the chain behind on teardown"
+    },
+    {
+      "file": "phone_focus_mode/curfew_net.sh",
+      "find": "rm -f \"$map\"",
+      "replace": ":",
+      "describe": "leak the uid map temp file"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_hosts_libs.sh",
+  "timeout": 180,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "[ -n \"$target_hash\" ] && [ \"$target_hash\" = \"$canonical_hash\" ]",
+      "replace": "true",
+      "describe": "call any target correctly mounted"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "[ -n \"$target_hash\" ] && ",
+      "replace": "",
+      "describe": "treat a missing target as mounted"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "[ \"$attempts\" -ge 5 ]",
+      "replace": "[ \"$attempts\" -ge 500 ]",
+      "describe": "raise the unmount give-up threshold"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "mount -o remount,ro \"$system_mount\"",
+      "replace": ":",
+      "describe": "leave /system mounted read-write"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "chattr +i \"$HOSTS_TARGET\"",
+      "replace": ":",
+      "describe": "never re-lock the hosts target"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "log \"Bind mount reported success but target still mismatches - unmounting\"",
+      "replace": ":",
+      "describe": "silence the no-op bind detection"
+    },
+    {
+      "file": "phone_focus_mode/hosts_mount.sh",
+      "find": "\n    return 1\n}",
+      "replace": "\n    return 0\n}",
+      "describe": "claim success when nothing fixed the target"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "if [ \"$module_hash\" != \"$canonical_hash\" ]; then",
+      "replace": "if true; then",
+      "describe": "rewrite the module on every poll"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "\n    protect_magisk_module\n}",
+      "replace": "\n    :\n}",
+      "describe": "stop re-locking the module directory"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "for marker in disable remove update; do",
+      "replace": "for marker in disable; do",
+      "describe": "ignore the remove and update markers"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "removed=$((removed + 1))",
+      "replace": ":",
+      "describe": "stop counting removed markers"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "chattr +i \"$module_dir\"",
+      "replace": ":",
+      "describe": "never lock the module directory"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "[ -f \"${profile_dir}prefs.js\" ] || continue",
+      "replace": ":",
+      "describe": "write to non-profile directories"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "network.trr.mode\", 5",
+      "replace": "network.trr.mode\", 0",
+      "describe": "set the DoH pref to the wrong mode"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "chattr +i \"$HOSTS_CANONICAL\"",
+      "replace": ":",
+      "describe": "leave the canonical mutable"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "if [ \"$current_pid\" = \"$last_pid\" ]; then",
+      "replace": "if false; then",
+      "describe": "restart netd on every tick"
+    },
+    {
+      "file": "phone_focus_mode/hosts_magisk.sh",
+      "find": "echo \"${new_pid:-$current_pid}\" > \"$stamp_file\"",
+      "replace": ":",
+      "describe": "never stamp the netd pid"
+    }
+  ]
+}
