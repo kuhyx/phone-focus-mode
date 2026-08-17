@@ -14,6 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/daemon_cases_location.sh"
 # shellcheck source=daemon_cases_state.sh
 . "${SCRIPT_DIR}/daemon_cases_state.sh"
+# shellcheck source=daemon_cases_status.sh
+. "${SCRIPT_DIR}/daemon_cases_status.sh"
 # shellcheck source=daemon_cases_apps.sh
 . "${SCRIPT_DIR}/daemon_cases_apps.sh"
 # shellcheck source=daemon_cases_sweep.sh

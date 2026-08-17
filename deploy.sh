@@ -372,6 +372,11 @@ do_deploy() {
 
 	echo "[4/7] Uploading scripts..."
 	adb_cmd push "$DEPLOY_DIR/config.sh" "/data/local/tmp/focus_stage/config.sh"
+	adb_cmd push "$DEPLOY_DIR/config_paths.sh" "/data/local/tmp/focus_stage/config_paths.sh"
+	adb_cmd push "$DEPLOY_DIR/config_dns.sh" "/data/local/tmp/focus_stage/config_dns.sh"
+	adb_cmd push "$DEPLOY_DIR/config_curfew.sh" "/data/local/tmp/focus_stage/config_curfew.sh"
+	adb_cmd push "$DEPLOY_DIR/config_tether.sh" "/data/local/tmp/focus_stage/config_tether.sh"
+	adb_cmd push "$DEPLOY_DIR/config_launcher.sh" "/data/local/tmp/focus_stage/config_launcher.sh"
 	adb_cmd push "$DEPLOY_DIR/focus_daemon.sh" "/data/local/tmp/focus_stage/focus_daemon.sh"
 	adb_cmd push "$DEPLOY_DIR/daemon_location.sh" "/data/local/tmp/focus_stage/daemon_location.sh"
 	adb_cmd push "$DEPLOY_DIR/daemon_state.sh" "/data/local/tmp/focus_stage/daemon_state.sh"
@@ -496,6 +501,11 @@ do_deploy() {
 
 	# Move staged files into place with root
 	adb_root "cp /data/local/tmp/focus_stage/config.sh             $REMOTE_DIR/config.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_paths.sh       $REMOTE_DIR/config_paths.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_dns.sh         $REMOTE_DIR/config_dns.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_curfew.sh      $REMOTE_DIR/config_curfew.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_tether.sh      $REMOTE_DIR/config_tether.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_launcher.sh    $REMOTE_DIR/config_launcher.sh"
 	adb_root "cp /data/local/tmp/focus_stage/focus_daemon.sh       $REMOTE_DIR/focus_daemon.sh"
 	adb_root "cp /data/local/tmp/focus_stage/daemon_location.sh    $REMOTE_DIR/daemon_location.sh"
 	adb_root "cp /data/local/tmp/focus_stage/daemon_state.sh       $REMOTE_DIR/daemon_state.sh"
