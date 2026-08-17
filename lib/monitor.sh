@@ -29,7 +29,11 @@ _mon_escape_json() {
     local escaped="$1"
 
     escaped=${escaped//\\/\\\\}
-    escaped=${escaped//"/\\"}
+    # The quote must be backslash-escaped in the pattern. Written bare as
+    # ${escaped//"/\\"} bash reads the quote as opening a quoted string, so the
+    # pattern silently becomes `/\` with an empty replacement and no quote is
+    # ever escaped — which emitted invalid JSON for any message containing one.
+    escaped=${escaped//\"/\\\"}
     escaped=${escaped//$'\n'/\\n}
     escaped=${escaped//$'\r'/\\r}
     printf '%s' "${escaped}"
@@ -126,37 +130,32 @@ monitor_is_formatted() {
     (( missing_count >= FORMAT_DETECTION_MIN_MISSING ))
 }
 
+# Each array element is appended on its own statement rather than listed
+# across a multi-line literal: kcov instruments the continuation lines but
+# bash only ever reports the statement's first line, so a literal spanning N
+# lines is permanently stuck at 1/N covered however thoroughly it is tested.
 monitor_print_format_warning() {
     local -a missing_indicators=("$@")
-    local -a box_lines=(
-        ""
-        "The following expected components were NOT found:"
-    )
+    local -a box_lines=()
     local indicator=""
+
+    box_lines+=("")
+    box_lines+=("The following expected components were NOT found:")
 
     for indicator in "${missing_indicators[@]}"; do
         box_lines+=("  ✗ ${indicator}")
     done
 
-    box_lines+=(
-        ""
-        "This strongly suggests the phone was factory-reset or formatted."
-        ""
-        "Next step: run the full recovery workflow:"
-        "  ./scripts/run_all/run_phone.sh fresh-phone"
-        ""
-        "Do NOT run 'auto' mode — it will not restore anything."
-    )
+    box_lines+=("")
+    box_lines+=("This strongly suggests the phone was factory-reset or formatted.")
+    box_lines+=("")
+    box_lines+=("Next step: run the full recovery workflow:")
+    box_lines+=("  ./scripts/run_all/run_phone.sh fresh-phone")
+    box_lines+=("")
+    box_lines+=("Do NOT run 'auto' mode — it will not restore anything.")
 
     _box "PHONE APPEARS TO HAVE BEEN WIPED" "${box_lines[@]}"
 }
-
-
-
-
-
-
-
 
 
 
@@ -183,11 +182,13 @@ monitor_collect_snapshot() {
     _check_companion_app "${tmp_checks}"
     _check_boot_persistence "${tmp_checks}"
 
-    {
-        printf '{"timestamp":"%s","device":"%s","checks":[\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$( _mon_escape_json "${ADB_SERIAL}" )"
-        paste -sd ',' "${tmp_checks}"
-        printf '\n]}\n'
-    } >"${report_path}"
+    # Redirected per statement rather than as a `{ ... } >file` group: kcov
+    # counts the group's closing brace as an instrumented line that bash never
+    # reports, which alone held this file below 100%.
+    printf '{"timestamp":"%s","device":"%s","checks":[\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_mon_escape_json "${ADB_SERIAL}")" >"${report_path}"
+    paste -sd ',' "${tmp_checks}" >>"${report_path}"
+    printf '\n]}\n' >>"${report_path}"
 
     cp "${report_path}" "$(dirname "${snapshot_dir}")/latest.json" 2>/dev/null || true
     rm -f "${tmp_checks}"
