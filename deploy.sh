@@ -379,6 +379,7 @@ do_deploy() {
 	adb_cmd push "$DEPLOY_DIR/launcher_enforcer.sh" "/data/local/tmp/focus_stage/launcher_enforcer.sh"
 	adb_cmd push "$DEPLOY_DIR/curfew_enforcer.sh" "/data/local/tmp/focus_stage/curfew_enforcer.sh"
 	adb_cmd push "$DEPLOY_DIR/tether_enforcer.sh" "/data/local/tmp/focus_stage/tether_enforcer.sh"
+	adb_cmd push "$DEPLOY_DIR/tether_iptables.sh" "/data/local/tmp/focus_stage/tether_iptables.sh"
 	adb_cmd push "$DEPLOY_DIR/workout_detector.sh" "/data/local/tmp/focus_stage/workout_detector.sh"
 	adb_cmd push "$DEPLOY_DIR/magisk_service.sh" "/data/local/tmp/focus_stage/99-focus-mode.sh"
 
@@ -495,6 +496,7 @@ do_deploy() {
 	adb_root "cp /data/local/tmp/focus_stage/launcher_enforcer.sh  $REMOTE_DIR/launcher_enforcer.sh"
 	adb_root "cp /data/local/tmp/focus_stage/curfew_enforcer.sh    $REMOTE_DIR/curfew_enforcer.sh"
 	adb_root "cp /data/local/tmp/focus_stage/tether_enforcer.sh    $REMOTE_DIR/tether_enforcer.sh"
+	adb_root "cp /data/local/tmp/focus_stage/tether_iptables.sh    $REMOTE_DIR/tether_iptables.sh"
 	adb_root "cp /data/local/tmp/focus_stage/workout_detector.sh   $REMOTE_DIR/workout_detector.sh"
 	if adb_cmd shell "test -f /data/local/tmp/focus_stage/sqlite3" 2>/dev/null; then
 		adb_root "cp /data/local/tmp/focus_stage/sqlite3 $REMOTE_DIR/sqlite3"

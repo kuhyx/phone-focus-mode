@@ -24,6 +24,9 @@ STATE="$RUN/state"
 
 # --- fake config.sh in the daemon's own dir (it sources "$SCRIPT_DIR/config.sh") ---
 cp "$SRC" "$RUN/app/tether_enforcer.sh"
+# tether_enforcer sources this sibling; the phone gets it from deploy.sh's
+# copy list, and this harness has to mirror that or the daemon dies on source.
+cp "$(dirname "$SRC")/tether_iptables.sh" "$RUN/app/tether_iptables.sh"
 cat >"$RUN/app/config.sh" <<EOF
 export STATE_DIR="$STATE"
 export MODE_FILE="$STATE/current_mode.txt"
