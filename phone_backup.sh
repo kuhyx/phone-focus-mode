@@ -41,23 +41,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 # shellcheck source=lib/adb_common.sh
 source "${SCRIPT_DIR}/lib/adb_common.sh"
+# shellcheck source=lib/backup_capture.sh
+source "${SCRIPT_DIR}/lib/backup_capture.sh"
 
 OUT_ROOT="${HOME}/phone-backup"
 PULL_APKS=1
 VERIFY_DIR=""
 
-# Directories pulled wholesale from shared storage. Anything not
-# listed here is not backed up, so keep the list honest.
-readonly SDCARD_DIRS=(
-	DCIM
-	Pictures
-	Download
-	Documents
-	Movies
-	Music
-	Signal
-	RunnerUp
-)
 
 usage() {
 	sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -141,104 +131,10 @@ verify_backup() {
 	_info "Verify OK"
 }
 
-dump_packages() {
-	local dir="$1"
-	adb_cmd shell pm list packages | sed 's/^package://' | tr -d '\r' |
-		sort >"${dir}/packages-all.txt"
-	adb_cmd shell pm list packages -3 | sed 's/^package://' | tr -d '\r' |
-		sort >"${dir}/packages-third-party.txt"
-	# Packages removed for user 0 read as uninstalled here; recorded
-	# separately so a restore knows what was deliberately purged.
-	adb_cmd shell pm list packages -u | sed 's/^package://' | tr -d '\r' |
-		sort >"${dir}/packages-including-removed.txt"
-	comm -13 "${dir}/packages-all.txt" "${dir}/packages-including-removed.txt" \
-		>"${dir}/packages-removed-for-user0.txt"
-	_info "Packages: $(wc -l <"${dir}/packages-third-party.txt") third-party, $(wc -l <"${dir}/packages-removed-for-user0.txt") removed for user 0"
-}
 
-pull_apks() {
-	local dir="$1" pkg="" path="" n=0 base=""
-	local -a pkgs=() paths=()
-	mkdir -p "${dir}/apks"
 
-	# Read the list into an array FIRST. Iterating the file with
-	# `while read < file` breaks after one package, because `adb`
-	# inside the loop inherits and drains that same stdin -- measured:
-	# it pulled 1 of 54 before this was fixed.
-	mapfile -t pkgs <"${dir}/packages-third-party.txt"
 
-	for pkg in "${pkgs[@]}"; do
-		[[ -n "${pkg}" ]] || continue
-		# A split app reports several paths (base + split_config.*).
-		# All of them are needed for a working offline reinstall, so
-		# each package gets its own directory rather than one file.
-		mapfile -t paths < <(
-			adb_cmd shell pm path "${pkg}" 2>/dev/null |
-				sed 's/^package://' | tr -d '\r'
-		)
-		[[ "${#paths[@]}" -gt 0 ]] || {
-			_warn "no APK path for ${pkg}"
-			continue
-		}
-		mkdir -p "${dir}/apks/${pkg}"
-		for path in "${paths[@]}"; do
-			[[ -n "${path}" ]] || continue
-			base="$(basename "${path}")"
-			adb_cmd pull "${path}" "${dir}/apks/${pkg}/${base}" >/dev/null 2>&1 ||
-				_warn "could not pull ${base} for ${pkg}"
-		done
-		n=$((n + 1))
-	done
-	_info "APKs pulled: ${n} packages, $(find "${dir}/apks" -name '*.apk' | wc -l) files"
-}
 
-pull_sdcard() {
-	local dir="$1" d=""
-	mkdir -p "${dir}/sdcard"
-	for d in "${SDCARD_DIRS[@]}"; do
-		if adb_cmd shell "test -d /sdcard/${d}" 2>/dev/null; then
-			_info "Pulling /sdcard/${d}"
-			adb_cmd pull "/sdcard/${d}" "${dir}/sdcard/" >/dev/null 2>&1 ||
-				_warn "partial or failed pull: ${d}"
-		fi
-	done
-	# Same stdin caveat as pull_apks: collect first, pull second.
-	local -a kdbx_paths=()
-	mapfile -t kdbx_paths < <(
-		adb_cmd shell 'find /sdcard -iname "*.kdbx" 2>/dev/null' | tr -d '\r'
-	)
-	local kdbx=""
-	for kdbx in "${kdbx_paths[@]}"; do
-		[[ -n "${kdbx}" ]] || continue
-		_info "Pulling KeePass database: ${kdbx}"
-		mkdir -p "${dir}/sdcard/keepass"
-		adb_cmd pull "${kdbx}" "${dir}/sdcard/keepass/" >/dev/null 2>&1 || true
-	done
-}
-
-dump_settings() {
-	local dir="$1" ns=""
-	for ns in system secure global; do
-		adb_cmd shell settings list "${ns}" | tr -d '\r' | sort \
-			>"${dir}/settings-${ns}.txt"
-	done
-	_info "Settings captured (system/secure/global)"
-}
-
-dump_focus_state() {
-	local dir="$1"
-	{
-		printf '# Focus-mode state at backup time\n'
-		printf '# Restore with: phone_focus_mode/distraction_purge.sh\n\n'
-		printf '## Packages removed for user 0\n'
-		cat "${dir}/packages-removed-for-user0.txt"
-		printf '\n## RethinkDNS installed: '
-		grep -qx 'com.celzero.bravedns' "${dir}/packages-all.txt" &&
-			printf 'yes\n' || printf 'no\n'
-		printf '## uBlock filters live in the Firefox profile and CANNOT be\n'
-		printf '## backed up from adb; see docs/youtube-block-unrooted.md\n'
-	} >"${dir}/focus-state.md"
-}
 
 write_manifest() {
 	local dir="$1"
