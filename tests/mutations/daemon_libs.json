@@ -1,0 +1,204 @@
+{
+  "test": "phone_focus_mode/lib/tests/test_daemon_libs.sh",
+  "timeout": 300,
+  "mutations": [
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "R = 6371000.0",
+      "replace": "R = 1.0",
+      "describe": "wrong Earth radius in the Haversine (awk body kcov cannot measure)"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "sdlat * sdlat + cos(lat1) * cos(lat2) * sdlon * sdlon",
+      "replace": "sdlat * sdlat",
+      "describe": "drop the longitude term from the Haversine"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "PI / 180.0",
+      "replace": "PI",
+      "describe": "skip the degrees-to-radians conversion"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "head -1",
+      "replace": "tail -1",
+      "describe": "take the stalest GPS fix instead of the freshest"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "[0-9]{4,}",
+      "replace": "[0-9]{1,}",
+      "describe": "accept imprecise coordinates as a real fix"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "[ \"$now\" -ge \"$start\" ] || [ \"$now\" -lt \"$end\" ]",
+      "replace": "[ \"$now\" -ge \"$start\" ] && [ \"$now\" -lt \"$end\" ]",
+      "describe": "break the midnight-wrapping curfew window"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "[ \"$now\" -ge \"$start\" ] && [ \"$now\" -lt \"$end\" ]\n\telse",
+      "replace": "[ \"$now\" -gt \"$start\" ] && [ \"$now\" -lt \"$end\" ]\n\telse",
+      "describe": "exclude the start minute of a same-day window"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "'' | *[!0-9]*) return 1 ;;",
+      "replace": "'' | *[!0-9]*) return 0 ;;",
+      "describe": "fail CLOSED on a broken clock instead of open"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "while [ \"${n#0}\" != \"$n\" ] && [ \"${#n}\" -gt 1 ]; do n=\"${n#0}\"; done",
+      "replace": ":",
+      "describe": "stop stripping leading zeros (octal parse)"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "[ ! -e \"$CURFEW_OVERRIDE_FILE\" ]",
+      "replace": "[ -e \"$CURFEW_OVERRIDE_FILE\" ]",
+      "describe": "invert the curfew override"
+    },
+    {
+      "file": "phone_focus_mode/daemon_location.sh",
+      "find": "_CURFEW_TICK_CACHED=1",
+      "replace": ":",
+      "describe": "never set the per-tick curfew memo"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "[ \"${n:-0}\" -lt 30 ]",
+      "replace": "[ \"${n:-0}\" -lt 0 ]",
+      "describe": "never warn about a truncated whitelist"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "[ \"${n:-0}\" -lt 10 ]",
+      "replace": "[ \"${n:-0}\" -lt 0 ]",
+      "describe": "never warn about a truncated night whitelist"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "grep -v '^[[:space:]]*#'",
+      "replace": "cat",
+      "describe": "keep comment lines as whitelist entries"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "cut -d/ -f1",
+      "replace": "cat",
+      "describe": "record the IME component instead of its package"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "[ \"$sms\" != \"null\" ]",
+      "replace": "true",
+      "describe": "record a literal null as the SMS handler"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "grep -qxF",
+      "replace": "grep -qF",
+      "describe": "match default handlers by substring instead of exactly"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "sort -u \"$tmp\" -o \"$f\"",
+      "replace": ":",
+      "describe": "never write the default-handler file"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "if curfew_active; then cf=1; else cf=0; fi",
+      "replace": "cf=0",
+      "describe": "always report curfew inactive in the snapshot"
+    },
+    {
+      "file": "phone_focus_mode/daemon_state.sh",
+      "find": "\"$DISABLED_APPS_FILE\" 2>/dev/null | tr -d ' ' || echo 0",
+      "replace": "/dev/null 2>/dev/null | tr -d ' ' || echo 0",
+      "describe": "always report zero disabled apps"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "list=\"$STATE_DIR/night_whitelist.txt\"",
+      "replace": "list=\"$STATE_DIR/whitelist.txt\"",
+      "describe": "use the permissive day list during the night curfew"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "if grep -qxF \"$pkg\" \"$list\" 2>/dev/null; then",
+      "replace": "if grep -qF \"$pkg\" \"$list\" 2>/dev/null; then",
+      "describe": "match the whitelist by substring instead of exactly"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "\"$prefix\"*) return 0 ;;",
+      "replace": "*\"$prefix\"*) return 0 ;;",
+      "describe": "match sysprotect anywhere instead of as a prefix"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "is_default_handler \"$pkg\" && return 0",
+      "replace": ":",
+      "describe": "drop the default-handler safety net"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "if ! curfew_active &&",
+      "replace": "if true &&",
+      "describe": "let the browser guard resurrect a browser during curfew"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "done <\"$tmp_pkgs\"",
+      "replace": "done </dev/null",
+      "describe": "sweep no packages (proves the redirect line kcov misses runs)"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "done <\"$STATE_DIR/sysprotect.txt\"",
+      "replace": "done </dev/null",
+      "describe": "read no sysprotect prefixes (same redirect class)"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "done <\"$blocked_sys\"",
+      "replace": "done </dev/null",
+      "describe": "disable no blocked system apps (same redirect class)"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "newly_disabled=$((newly_disabled + 1))",
+      "replace": ":",
+      "describe": "stop counting newly disabled apps"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "CURRENT_MODE=\"focus\"",
+      "replace": ":",
+      "describe": "never record entry into focus mode"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "CURRENT_MODE=\"normal\"",
+      "replace": ":",
+      "describe": "never record the exit from focus mode"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "mv \"$tmp_disabled\" \"$DISABLED_APPS_FILE\"",
+      "replace": ":",
+      "describe": "never apply the reconciliation result"
+    },
+    {
+      "file": "phone_focus_mode/daemon_apps.sh",
+      "find": "pm install-existing --user 0 \"$pkg\" >/dev/null 2>&1 || true",
+      "replace": ":",
+      "describe": "skip reinstalling for user 0 before enabling"
+    }
+  ]
+}
