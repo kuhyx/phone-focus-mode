@@ -8,16 +8,22 @@ set -euo pipefail
 _MONITOR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly _MONITOR_LIB_DIR
 
+# Constants read here or by both probe libraries. Those read by exactly one of
+# them live in that file instead: a file must not assign a global it never
+# reads (SC2034), and shellcheck runs without -x so each file stands alone.
 readonly _MONITOR_REMOTE_DIR="/data/local/tmp/focus_mode"
-readonly _MONITOR_HOSTS_CANONICAL="/data/local/tmp/focus_mode/hosts.canonical"
-readonly _MONITOR_HOSTS_SHA_FILE="/data/local/tmp/focus_mode/hosts.sha256"
 readonly _MONITOR_HOSTS_TARGET="/system/etc/hosts"
-readonly _MONITOR_BOOT_SCRIPT="/data/adb/service.d/99-focus-mode.sh"
 readonly _MONITOR_LAUNCHER_PACKAGE="com.qqlabs.minimalistlauncher"
 readonly _MONITOR_LAUNCHER_ACTIVITY_FILE="/data/local/tmp/focus_mode/minimalist_launcher.activity"
-readonly _MONITOR_COMPANION_PACKAGE="com.kuhy.focusstatus"
-readonly _MONITOR_DNS_CHAIN="FOCUS_DNS_BLOCK"
 readonly _MONITOR_HOSTS_CANDIDATES="/system/etc/hosts /etc/hosts /vendor/etc/hosts /system/system/etc/hosts"
+
+# Sourced after the constants above, which the probes read. Both libraries call
+# helpers defined below (_mon_check, _trim_output, _safe_adb_root_output); that
+# is fine because nothing here runs until monitor_collect_snapshot is called.
+# shellcheck source=monitor_checks_health.sh
+. "${_MONITOR_LIB_DIR}/monitor_checks_health.sh"
+# shellcheck source=monitor_checks_policy.sh
+. "${_MONITOR_LIB_DIR}/monitor_checks_policy.sh"
 
 _mon_escape_json() {
     local escaped="$1"
@@ -145,256 +151,16 @@ monitor_print_format_warning() {
     _box "PHONE APPEARS TO HAVE BEEN WIPED" "${box_lines[@]}"
 }
 
-_check_format_indicators() {
-    local outfile="$1"
-    local -a missing_indicators=()
-    local status="ok"
-    local message="All format indicators are present"
 
-    mapfile -t missing_indicators < <(monitor_check_format_indicators)
-    if (( ${#missing_indicators[@]} >= FORMAT_DETECTION_MIN_MISSING )); then
-        status="fatal"
-        message="Missing ${#missing_indicators[@]} format indicators: ${missing_indicators[*]}"
-    elif (( ${#missing_indicators[@]} > 0 )); then
-        status="warn"
-        message="Missing ${#missing_indicators[@]} format indicators: ${missing_indicators[*]}"
-    fi
 
-    _mon_check "format_indicators" "${status}" "FORMAT_INDICATORS" "${message}" "false" >>"${outfile}"
-}
 
-_check_battery() {
-    local outfile="$1"
-    local level=""
-    local health=""
-    local temp=""
-    local status="ok"
-    local message=""
 
-    level="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/level:/{print \$2; exit}'")")"
-    health="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/health:/{print \$2; exit}'")")"
-    temp="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/temperature:/{print \$2; exit}'")")"
 
-    if [[ ! "${level}" =~ ^[0-9]+$ ]]; then
-        status="warn"
-        message="Battery level unavailable"
-    elif (( level < BATTERY_WARN_BELOW )); then
-        status="warn"
-        message="Battery low: ${level}% (threshold ${BATTERY_WARN_BELOW}%)"
-    else
-        message="Battery level ${level}%, health ${health:-unknown}, temp ${temp:-unknown}"
-    fi
 
-    _mon_check "battery" "${status}" "dumpsys battery" "${message}" "false" >>"${outfile}"
-}
 
-_check_storage() {
-    local outfile="$1"
-    local free_kb=""
-    local free_mb=0
-    local status="ok"
-    local message=""
 
-    free_kb="$(_trim_output "$(_safe_adb_root_output "df /sdcard 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
-    if [[ ! "${free_kb}" =~ ^[0-9]+$ ]]; then
-        free_kb="$(_trim_output "$(_safe_adb_root_output "df /storage/emulated/0 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
-    fi
 
-    if [[ "${free_kb}" =~ ^[0-9]+$ ]]; then
-        free_mb=$((free_kb / 1024))
-        if (( free_mb < STORAGE_WARN_BELOW_MB )); then
-            status="warn"
-            message="Low storage: ${free_mb} MB free (threshold ${STORAGE_WARN_BELOW_MB} MB)"
-        else
-            message="Free storage: ${free_mb} MB"
-        fi
-    else
-        status="warn"
-        message="Free storage unavailable"
-    fi
 
-    _mon_check "storage" "${status}" "df /sdcard" "${message}" "false" >>"${outfile}"
-}
-
-_check_daemon() {
-    local daemon_name="$1"
-    local script_name="$2"
-    local pidfile="$3"
-    local outfile="$4"
-    local pid=""
-    local pgrep_pid=""
-
-    pid="$(_monitor_read_pidfile "${pidfile}")"
-    if [[ "${pid}" =~ ^[0-9]+$ ]] && _monitor_pid_matches_script "${pid}" "${script_name}"; then
-        _mon_check "${daemon_name}" "ok" "${pidfile}" "${daemon_name} running (PID ${pid})" "false" >>"${outfile}"
-        return
-    fi
-
-    pgrep_pid="$(_trim_output "$(_safe_adb_root_output "pgrep -f '${script_name}' 2>/dev/null | head -1")")"
-    if [[ "${pgrep_pid}" =~ ^[0-9]+$ ]] && adb_root_shell "kill -0 ${pgrep_pid} >/dev/null 2>&1" >/dev/null 2>&1; then
-        _mon_check "${daemon_name}" "ok" "pgrep -f ${script_name}" "${daemon_name} running (PID ${pgrep_pid})" "false" >>"${outfile}"
-        return
-    fi
-
-    _mon_check "${daemon_name}" "error" "${pidfile}" "${daemon_name} is NOT running" "true" >>"${outfile}"
-}
-
-_check_hosts_daemon() {
-    local outfile="$1"
-    local resolved_target=""
-
-    resolved_target="$(_monitor_resolve_hosts_target)"
-    if [[ -z "${resolved_target}" ]]; then
-        _mon_check "hosts_enforcer" "warn" "hosts target probe" \
-            "No hosts target file exists on this ROM; hosts daemon check skipped" "false" >>"${outfile}"
-        return
-    fi
-
-    _check_daemon "hosts_enforcer" "hosts_enforcer.sh" "${_MONITOR_REMOTE_DIR}/hosts_enforcer.pid" "${outfile}"
-}
-
-_check_launcher_daemon() {
-    local outfile="$1"
-    local has_snapshot="no"
-    local launcher_installed="no"
-
-    if adb_root_shell "test -s '${_MONITOR_LAUNCHER_ACTIVITY_FILE}'" >/dev/null 2>&1; then
-        has_snapshot="yes"
-    fi
-
-    if adb_root_shell "pm path '${_MONITOR_LAUNCHER_PACKAGE}' >/dev/null 2>&1" >/dev/null 2>&1; then
-        launcher_installed="yes"
-    fi
-
-    if [[ "${has_snapshot}" == "no" && "${launcher_installed}" == "no" ]]; then
-        _mon_check "launcher_enforcer" "warn" "launcher optional probe" \
-            "Launcher enforcer check skipped (launcher not configured yet)" "false" >>"${outfile}"
-        return
-    fi
-
-    _check_daemon "launcher_enforcer" "launcher_enforcer.sh" "${_MONITOR_REMOTE_DIR}/launcher_enforcer.pid" "${outfile}"
-}
-
-_check_hosts_integrity() {
-    local outfile="$1"
-    local hosts_target=""
-    local expected_hash=""
-    local actual_hash=""
-
-    hosts_target="$(_monitor_resolve_hosts_target)"
-    if [[ -z "${hosts_target}" ]]; then
-        _mon_check "hosts_integrity" "warn" "hosts target probe" \
-            "No hosts file target exists on this ROM; hosts integrity check skipped" "false" >>"${outfile}"
-        return
-    fi
-
-    if ! adb_root_shell "test -f ${_MONITOR_HOSTS_CANONICAL}" >/dev/null 2>&1; then
-        _mon_check "hosts_integrity" "fatal" "${_MONITOR_HOSTS_CANONICAL}" \
-            "Canonical hosts file missing at ${_MONITOR_HOSTS_CANONICAL}" "true" >>"${outfile}"
-        return
-    fi
-
-    expected_hash="$(_trim_output "$(_safe_adb_root_output "cat ${_MONITOR_HOSTS_SHA_FILE} 2>/dev/null")")"
-    actual_hash="$(_trim_output "$(_safe_adb_root_output "sha256sum ${hosts_target} 2>/dev/null | awk '{print \$1}'")")"
-
-    if [[ -z "${expected_hash}" || -z "${actual_hash}" ]]; then
-        _mon_check "hosts_integrity" "error" "${hosts_target}" \
-            "Could not read hosts integrity hashes" "true" >>"${outfile}"
-    elif [[ "${expected_hash}" == "${actual_hash}" ]]; then
-        _mon_check "hosts_integrity" "ok" "${hosts_target}" \
-            "Hosts file matches canonical (${actual_hash:0:12}…)" "false" >>"${outfile}"
-    else
-        _mon_check "hosts_integrity" "error" "${hosts_target}" \
-            "Hosts mismatch: active ${actual_hash:0:12}… != expected ${expected_hash:0:12}…" "true" >>"${outfile}"
-    fi
-}
-
-_check_dns() {
-    local outfile="$1"
-    local private_dns_mode=""
-    local chain_present="no"
-    local status="ok"
-    local message=""
-
-    private_dns_mode="$(_trim_output "$(_safe_adb_root_output "settings get global private_dns_mode 2>/dev/null")")"
-    if adb_root_shell "iptables -L ${_MONITOR_DNS_CHAIN} >/dev/null 2>&1 && ip6tables -L ${_MONITOR_DNS_CHAIN} >/dev/null 2>&1" >/dev/null 2>&1; then
-        chain_present="yes"
-    fi
-
-    if [[ "${private_dns_mode}" == "off" || "${private_dns_mode}" == "null" || -z "${private_dns_mode}" ]]; then
-        if [[ "${chain_present}" == "yes" ]]; then
-            message="Private DNS disabled and DNS firewall chains present"
-        else
-            status="error"
-            message="Private DNS disabled, but DNS firewall chains are missing"
-        fi
-    else
-        status="error"
-        message="Private DNS is enabled (mode=${private_dns_mode})"
-    fi
-
-    _mon_check "dns_enforcement" "${status}" "settings get global private_dns_mode" "${message}" "true" >>"${outfile}"
-}
-
-_check_launcher() {
-    local outfile="$1"
-    local desired_activity=""
-    local actual_activity=""
-    local has_snapshot="no"
-
-    if adb_root_shell "test -s '${_MONITOR_LAUNCHER_ACTIVITY_FILE}'" >/dev/null 2>&1; then
-        has_snapshot="yes"
-    fi
-
-    if ! adb_root_shell "pm path '${_MONITOR_LAUNCHER_PACKAGE}' >/dev/null 2>&1" >/dev/null 2>&1; then
-        if [[ "${has_snapshot}" == "yes" ]]; then
-            _mon_check "launcher_state" "fatal" "pm path ${_MONITOR_LAUNCHER_PACKAGE}" \
-                "Minimalist launcher is not installed but snapshot metadata exists" "true" >>"${outfile}"
-        else
-            _mon_check "launcher_state" "warn" "pm path ${_MONITOR_LAUNCHER_PACKAGE}" \
-                "Minimalist launcher is not installed (optional until snapshot is configured)" "false" >>"${outfile}"
-        fi
-        return
-    fi
-
-    desired_activity="$(_trim_output "$(_safe_adb_root_output "cat ${_MONITOR_LAUNCHER_ACTIVITY_FILE} 2>/dev/null")")"
-    actual_activity="$(_trim_output "$(_safe_adb_root_output "cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>/dev/null | awk 'NR==2{print}'")")"
-
-    if [[ -z "${desired_activity}" ]]; then
-        _mon_check "launcher_state" "warn" "cat ${_MONITOR_LAUNCHER_ACTIVITY_FILE}" \
-            "Launcher snapshot metadata is missing or empty" "true" >>"${outfile}"
-    elif [[ -n "${actual_activity}" && "${desired_activity}" != "${actual_activity}" ]]; then
-        _mon_check "launcher_state" "error" "cmd package resolve-activity" \
-            "Launcher default mismatch: expected ${desired_activity}, got ${actual_activity}" "true" >>"${outfile}"
-    else
-        _mon_check "launcher_state" "ok" "pm path ${_MONITOR_LAUNCHER_PACKAGE}" \
-            "Minimalist launcher installed and HOME activity aligned" "false" >>"${outfile}"
-    fi
-}
-
-_check_companion_app() {
-    local outfile="$1"
-
-    if adb_root_shell "pm list packages -e '${_MONITOR_COMPANION_PACKAGE}' 2>/dev/null | grep -q '${_MONITOR_COMPANION_PACKAGE}'" >/dev/null 2>&1; then
-        _mon_check "companion_app" "ok" "pm list packages -e ${_MONITOR_COMPANION_PACKAGE}" \
-            "Focus companion app is installed" "false" >>"${outfile}"
-    else
-        _mon_check "companion_app" "warn" "pm list packages -e ${_MONITOR_COMPANION_PACKAGE}" \
-            "Focus companion app is missing" "true" >>"${outfile}"
-    fi
-}
-
-_check_boot_persistence() {
-    local outfile="$1"
-
-    if adb_root_shell "test -x ${_MONITOR_BOOT_SCRIPT}" >/dev/null 2>&1; then
-        _mon_check "boot_persistence" "ok" "test -x ${_MONITOR_BOOT_SCRIPT}" \
-            "Magisk boot script present and executable" "false" >>"${outfile}"
-    else
-        _mon_check "boot_persistence" "fatal" "test -x ${_MONITOR_BOOT_SCRIPT}" \
-            "Magisk boot script missing or not executable" "true" >>"${outfile}"
-    fi
-}
 
 monitor_collect_snapshot() {
     local snapshot_dir="$1"
