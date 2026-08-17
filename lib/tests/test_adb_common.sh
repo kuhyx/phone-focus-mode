@@ -1,73 +1,12 @@
 #!/usr/bin/env bash
-# Unit tests for adb_common.sh helper functions (no real device needed).
+# Unit tests for adb_common.sh and adb_locking.sh (no real device needed).
+# The enrolled-device tests live in test_adb_trusted.sh; both share the
+# fixtures in adb_test_harness.sh.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PASS=0
-FAIL=0
-
-_t_pass() {
-	PASS=$((PASS + 1))
-	printf '  OK: %s\n' "$1"
-}
-
-_t_fail() {
-	FAIL=$((FAIL + 1))
-	printf '  FAIL: %s\n' "$1"
-}
-
-TEST_TMPDIR="$(mktemp -d)"
-trap 'rm -rf "${TEST_TMPDIR}"' EXIT
-
-export XDG_STATE_HOME="${TEST_TMPDIR}/state"
-mkdir -p "${XDG_STATE_HOME}"
-
-source "${SCRIPT_DIR}/../adb_common.sh"
-
-ADB_MOCK_MODEL=$'Pixel "7";$(rm -rf /)`danger`\nline2'
-# Single quotes are the whole point: this is an injection payload that must
-# reach the code under test LITERALLY. Expanding $evil / `cmd` here would
-# execute them in the test harness and test nothing.
-# shellcheck disable=SC2016
-ADB_MOCK_FINGERPRINT='google/pixel:14/UP1A.231005.007/$evil;`cmd`'
-
-adb() {
-	if [[ "$#" -eq 1 && "$1" == "devices" ]]; then
-		printf 'List of devices attached\nSERIAL123\tdevice\n'
-		return 0
-	fi
-
-	if [[ "$1" == "-s" && "$3" == "shell" && "$4" == "getprop" && "$5" == "ro.product.model" ]]; then
-		printf '%s\r\n' "${ADB_MOCK_MODEL}"
-		return 0
-	fi
-
-	if [[ "$1" == "-s" && "$3" == "shell" && "$4" == "getprop" && "$5" == "ro.build.fingerprint" ]]; then
-		printf '%s\r\n' "${ADB_MOCK_FINGERPRINT}"
-		return 0
-	fi
-
-	if [[ "$1" == "-s" && "$3" == "shell" && "$4" == "su" && "$5" == "--mount-master" && "$6" == "-c" && "$7" == "echo ok" ]]; then
-		printf 'ok\n'
-		return 0
-	fi
-
-	printf 'Unexpected adb invocation:' >&2
-	printf ' %q' "$@" >&2
-	printf '\n' >&2
-	return 1
-}
-
-run_test() {
-	local name="$1"
-	shift
-
-	if "$@"; then
-		_t_pass "${name}"
-	else
-		_t_fail "${name}"
-	fi
-}
+_HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=adb_test_harness.sh
+source "${_HARNESS_DIR}/adb_test_harness.sh"
 
 test_box_does_not_crash() {
 	_box "Test title" "line 1" "line 2" >/dev/null 2>&1
@@ -180,92 +119,6 @@ EOF
 	return 0
 }
 
-test_verify_trusted_identity_accepts_exact_match() {
-	export ADB_SERIAL='SERIAL123'
-	adb_save_trusted_device
-	adb_verify_trusted_identity >/dev/null 2>&1
-}
-
-test_verify_trusted_identity_rejects_model_mismatch() {
-	export ADB_SERIAL='SERIAL123'
-	adb_save_trusted_device
-
-	cat >"${ADB_ENROLLED_DEVICE_FILE}" <<'EOF'
-TRUSTED_SERIAL='SERIAL123'
-TRUSTED_MODEL='Different Model'
-TRUSTED_FINGERPRINT='google/pixel:14/UP1A.231005.007/evilcmd'
-EOF
-
-	if (adb_verify_trusted_identity >/dev/null 2>&1); then
-		return 1
-	fi
-
-	return 0
-}
-
-test_verify_trusted_identity_rejects_fingerprint_mismatch() {
-	export ADB_SERIAL='SERIAL123'
-	adb_save_trusted_device
-
-	cat >"${ADB_ENROLLED_DEVICE_FILE}" <<'EOF'
-TRUSTED_SERIAL='SERIAL123'
-TRUSTED_MODEL='Pixel 7rm -rf /dangerline2'
-TRUSTED_FINGERPRINT='different/fingerprint'
-EOF
-
-	if (adb_verify_trusted_identity >/dev/null 2>&1); then
-		return 1
-	fi
-
-	return 0
-}
-
-test_verify_trusted_identity_accepts_any_enrolled_device() {
-	# Two phones enrolled from one PC: the second must not evict the first,
-	# which is the whole reason the store is a directory.
-	export ADB_SERIAL='SERIAL_ONE'
-	adb_save_trusted_device
-	export ADB_SERIAL='SERIAL_TWO'
-	adb_save_trusted_device
-
-	adb_verify_trusted_identity >/dev/null 2>&1 || return 1
-
-	export ADB_SERIAL='SERIAL_ONE'
-	adb_verify_trusted_identity >/dev/null 2>&1 || return 1
-
-	return 0
-}
-
-test_verify_trusted_identity_rejects_unenrolled_device() {
-	export ADB_SERIAL='SERIAL_ONE'
-	adb_save_trusted_device
-
-	# An unknown serial must still abort, or multi-device support would have
-	# quietly turned the guard off.
-	export ADB_SERIAL='SERIAL_STRANGER'
-	if (adb_verify_trusted_identity >/dev/null 2>&1); then
-		return 1
-	fi
-
-	return 0
-}
-
-test_forget_trusted_device_removes_only_that_record() {
-	export ADB_SERIAL='SERIAL_ONE'
-	adb_save_trusted_device
-	export ADB_SERIAL='SERIAL_TWO'
-	adb_save_trusted_device
-
-	adb_forget_trusted_device 'SERIAL_ONE' >/dev/null 2>&1
-
-	adb_list_trusted_serials | grep -qx 'SERIAL_TWO' || return 1
-	if adb_list_trusted_serials | grep -qx 'SERIAL_ONE'; then
-		return 1
-	fi
-
-	return 0
-}
-
 run_test "_box output without crash" test_box_does_not_crash
 run_test "adb_check_cooldown 0 returns 0 (proceed)" test_check_cooldown_zero_allows
 run_test "adb_check_cooldown blocks when marker is fresh" test_check_cooldown_blocks_when_marker_fresh
@@ -276,12 +129,6 @@ run_test "_sanitize_device_string strips dangerous characters" test_sanitize_dev
 run_test "adb_save_trusted_device sanitizes and safely quotes values" test_save_trusted_device_sanitizes_and_quotes
 run_test "adb_verify_root succeeds when root shell returns ok" test_verify_root_uses_root_shell
 run_test "adb_select_device rejects multiple devices even with trusted record" test_select_device_rejects_multiple_devices_even_with_trusted_record
-run_test "adb_verify_trusted_identity accepts exact saved identity" test_verify_trusted_identity_accepts_exact_match
-run_test "adb_verify_trusted_identity rejects model mismatch" test_verify_trusted_identity_rejects_model_mismatch
-run_test "adb_verify_trusted_identity rejects fingerprint mismatch" test_verify_trusted_identity_rejects_fingerprint_mismatch
-run_test "adb_verify_trusted_identity accepts any enrolled device" test_verify_trusted_identity_accepts_any_enrolled_device
-run_test "adb_verify_trusted_identity rejects unenrolled device" test_verify_trusted_identity_rejects_unenrolled_device
-run_test "adb_forget_trusted_device removes only that record" test_forget_trusted_device_removes_only_that_record
 
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"
 [[ "${FAIL}" -eq 0 ]]
