@@ -102,6 +102,32 @@ CASE
 )" \
     "is idempotent across repeated calls"
 
+_reset_ipt
+_fail_op N
+_t_eq "1" "$(_with_subject <<'CASE'
+ensure_chain iptables >/dev/null 2>&1; echo $?
+CASE
+)" \
+    "fails when the chain cannot be created"
+
+_reset_ipt
+_fail_op I
+_t_eq "1" "$(_with_subject <<'CASE'
+ensure_chain iptables >/dev/null 2>&1; echo $?
+CASE
+)" \
+    "fails when the OUTPUT jump cannot be inserted"
+
+_reset_ipt
+# The lock-race state the de-dupe loop exists for: several stale jumps, which
+# must collapse to exactly one without the call failing.
+_seed_jumps iptables 3
+_t_eq "0" "$(_with_subject <<'CASE'
+ensure_chain iptables >/dev/null 2>&1; echo $?
+CASE
+)" \
+    "collapses several stale OUTPUT jumps and still succeeds"
+
 printf '\nfill_chain_v4 / fill_chain_v6\n'
 
 _reset_ipt
@@ -133,6 +159,18 @@ ip6tables -S "$DNS_IPT_CHAIN" | grep -c "^-A"
 CASE
 )" \
     "fills v6 to 2 fixed + 4 for the single DoH v6 IP"
+
+_reset_ipt
+# The v6 mirror of the ACCEPT-before-REJECT rule. Needs a trusted v6 literal,
+# since trusted_dot_ips filters by family.
+_t_eq "ACCEPT" "$(TEST_DOT_HOST=dns.example.net TEST_DOT_IPS='9.9.9.9 2620:fe::9' \
+    _with_subject <<'CASE'
+ensure_chain ip6tables >/dev/null 2>&1
+fill_chain_v6 >/dev/null 2>&1
+ip6tables -S "$DNS_IPT_CHAIN" | head -1 | grep -o "ACCEPT\|REJECT"
+CASE
+)" \
+    "puts the trusted v6 resolver ACCEPT before the blanket REJECT"
 
 printf '\nchain_intact\n'
 

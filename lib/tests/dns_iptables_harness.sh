@@ -68,19 +68,45 @@ jump="${store}/jump"
 touch "$rules"
 printf '%s %s\n' "$bin" "$*" >>"${IPT_STATE}/calls.log"
 
+# Failure injection. A test writes the operation it wants to fail into
+# ${IPT_STATE}/fail_<op>; the stub then reports that operation as failing,
+# which is how the error branches inside ensure_chain become reachable.
+_fails() { [[ -f "${IPT_STATE}/fail_$1" ]]; }
+
+# Pre-seeded jump count, so the de-dupe path (more than one existing jump)
+# can be exercised. Defaults to the single flag file.
+_jumps_file="${store}/jumps"
+[[ -f "$_jumps_file" ]] || { [[ -f "$jump" ]] && echo 1 >"$_jumps_file"; }
+
 case "$1" in
 -L) [[ -f "${store}/chain" ]] && exit 0 || exit 1 ;;
--N) touch "${store}/chain"; exit 0 ;;
+-N)
+    _fails N && exit 1
+    touch "${store}/chain"
+    exit 0
+    ;;
 -F) : >"$rules"; exit 0 ;;
 -A)
     shift
     printf -- '-A %s\n' "$*" >>"$rules"
     exit 0
     ;;
--I) touch "$jump"; exit 0 ;;
+-I)
+    _fails I && exit 1
+    touch "$jump"
+    echo 1 >"$_jumps_file"
+    exit 0
+    ;;
 -D)
     # Succeeds once per existing jump, so the de-dupe loop terminates.
-    if [[ -f "$jump" ]]; then rm -f "$jump"; exit 0; fi
+    n=0
+    [[ -f "$_jumps_file" ]] && read -r n <"$_jumps_file"
+    if ((n > 0)); then
+        echo $((n - 1)) >"$_jumps_file"
+        ((n - 1 == 0)) && rm -f "$jump"
+        exit 0
+    fi
+    rm -f "$jump"
     exit 1
     ;;
 -C) [[ -f "$jump" ]] && exit 0 || exit 1 ;;
@@ -129,4 +155,20 @@ PRELUDE
 _reset_ipt() {
     rm -rf "${RUN}/ipt"
     mkdir -p "${RUN}/ipt"
+}
+
+# Make the next run report the given iptables operation as failing, so the
+# error branches in ensure_chain are reachable. "N" is chain creation,
+# "I" is inserting the OUTPUT jump.
+_fail_op() {
+    touch "${RUN}/ipt/fail_$1"
+}
+
+# Pre-seed the chain as existing with N stale OUTPUT jumps, which is the
+# lock-race state ensure_chain's de-dupe loop exists to clean up.
+_seed_jumps() {
+    local bin="$1" count="$2"
+    mkdir -p "${RUN}/ipt/${bin}"
+    touch "${RUN}/ipt/${bin}/chain" "${RUN}/ipt/${bin}/jump"
+    echo "$count" >"${RUN}/ipt/${bin}/jumps"
 }
