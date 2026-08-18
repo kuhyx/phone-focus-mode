@@ -158,24 +158,7 @@ class _StatusPageState extends State<StatusPage> {
   Future<void> _lockVpn() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: kSurface,
-        title: const Text('Lock VPN configuration?'),
-        content: const Text(
-          'The always-on VPN can no longer be turned off from Settings. '
-          'Releasing device owner lifts this.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Lock'),
-          ),
-        ],
-      ),
+      builder: _lockVpnDialog,
     );
     if (confirmed != true) return;
 
@@ -194,44 +177,10 @@ class _StatusPageState extends State<StatusPage> {
   }
 
   Future<void> _release() async {
+    final hasAccounts = _status?.hasAccounts ?? true;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: kSurface,
-        title: const Text('Release device owner?'),
-        // Deliberately concrete, and honest in both directions. "Restored only
-        // by a factory reset" is true but abstract, and this dialog is read in
-        // the moment the block is most inconvenient -- the price has to be
-        // legible right then, not inferred. While no account exists the price
-        // really is low, and overstating it there would teach the user to
-        // ignore the warning that matters later.
-        content: Text(
-          _status?.hasAccounts ?? true
-              ? 'Enforcement stops. YouTube comes back.\n\n'
-                    'Accounts exist on this device, so device owner can NEVER '
-                    'be set again without a factory reset. That means '
-                    're-pairing mBank, Revolut and inFakt over SMS, '
-                    're-activating mObywatel, signing in to every account '
-                    'again, and losing Signal history.\n\n'
-                    'This is the way out if something is broken. It is a bad '
-                    'trade for wanting to watch a video.'
-              : 'Enforcement stops and YouTube comes back.\n\n'
-                    'No account exists yet, so device owner can be set again '
-                    'straight afterwards without a wipe. This is the moment to '
-                    'test the release path, before signing in.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: kDanger),
-            child: const Text('Release'),
-          ),
-        ],
-      ),
+      builder: (context) => _releaseDialog(context, hasAccounts: hasAccounts),
     );
     if (confirmed != true) return;
 
@@ -259,28 +208,20 @@ class _StatusPageState extends State<StatusPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
-    final error = _error;
-    final Widget body;
-    if (error != null) {
-      body = const _Message(text: 'Could not read state', color: kDanger);
-    } else if (status != null) {
-      body = _StatusBody(
-        status: status,
-        focusPolicy: _focusPolicy,
-        policyError: _policyError,
-        busy: _busy,
-        onRelease: _release,
-        onRunNow: _runNow,
-        onSetHome: _setHome,
-        onLockVpn: _lockVpn,
-        hasHome: _hasHome,
-        log: _log,
-        onOpenLog: _openLog,
-      );
-    } else {
-      body = const Center(child: CircularProgressIndicator());
-    }
+    final body = _statusPageBody(
+      status: _status,
+      error: _error,
+      focusPolicy: _focusPolicy,
+      policyError: _policyError,
+      busy: _busy,
+      onRelease: _release,
+      onRunNow: _runNow,
+      onSetHome: _setHome,
+      onLockVpn: _lockVpn,
+      hasHome: _hasHome,
+      log: _log,
+      onOpenLog: _openLog,
+    );
 
     return Scaffold(
       appBar: AppBar(

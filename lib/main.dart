@@ -12,6 +12,8 @@ import 'package:focus_owner/theme.dart';
 
 part 'status_page_state.dart';
 
+part 'status_page_dialogs.dart';
+
 part 'status_body.dart';
 
 void main() => runApp(const FocusOwnerApp());
