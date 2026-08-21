@@ -1,14 +1,7 @@
 package com.kuhy.focus_owner
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationManager
 import android.util.Log
-import androidx.core.content.ContextCompat
-import org.json.JSONObject
-import java.io.File
 import java.util.Calendar
 
 /**
@@ -16,9 +9,15 @@ import java.util.Calendar
  *
  * Split out of [EnforcementService] so the service stays a thin lifecycle
  * wrapper and this part can be reasoned about — and eventually instrumented —
- * on its own.
+ * on its own. Location-fix acquisition itself lives in [LocationAcquisition];
+ * this class keeps the decide/apply orchestration and delegates to it.
  */
 class EnforcementRunner(private val context: Context) {
+
+    private val locationAcquisition = LocationAcquisition(context)
+    private val homeLocationStore = HomeLocationStore(context) { freshWindowMs, maxAccuracyM ->
+        acquireLocation(freshWindowMs = freshWindowMs, maxAccuracyM = maxAccuracyM)
+    }
 
     /**
      * Inputs from the current pass, carried from [decide] to [apply].
@@ -47,7 +46,7 @@ class EnforcementRunner(private val context: Context) {
             return null
         }
 
-        val home = readHomeLocation()
+        val home = homeLocationStore.readHomeLocation()
         // Acquired even when no home is configured, so the log can tell
         // "never provisioned" apart from "could not get a fix" -- previously
         // both produced an identical LOCATION_UNKNOWN with nothing to
@@ -72,7 +71,7 @@ class EnforcementRunner(private val context: Context) {
         return EnforcementDecision.evaluate(
             effective,
             EnforcementInputs(
-                installedPackages = sweepablePackages(effective),
+                installedPackages = sweepablePackages(context, effective),
                 minutesSinceMidnight = minutes,
                 // A stale fix is withheld entirely rather than passed with its
                 // age attached: it must not be able to classify the phone as
@@ -115,61 +114,14 @@ class EnforcementRunner(private val context: Context) {
         val granted = bridge.grantLocationPermissions()
         bridge.enableLocation()
 
-        // Re-pinned every pass, unconditionally rather than tracking the
-        // decision: the network filter is the layer that reaches youtube.com
-        // in Firefox, in a webview, and in clients nobody has enumerated, so
-        // it must not lift when the geofence says AWAY. DISALLOW_CONFIG_VPN is
-        // deliberately NOT applied here -- it is a separate, later step, so a
-        // misconfigured VPN stays repairable from the device.
-        policy?.alwaysOnVpnPackage?.let { vpn ->
-            bridge.setAlwaysOnVpn(vpn, lockdown = policy.vpnLockdown)?.let { failure ->
-                Log.w(FocusDeviceAdminReceiver.TAG, "always-on VPN not pinned: $failure")
-            }
-            // Measured hole: `pm uninstall --user 0` removed the provider
-            // while it was pinned, taking the network filter with it and
-            // leaving the pin aimed at a package that no longer existed.
-            bridge.setPackageUninstallBlocked(vpn, true)
-        }
+        // VPN/Private DNS pins + self-uninstall-block re-assertion; see
+        // [pinPolicyToDevice].
+        pinPolicyToDevice(policy, decision, bridge)
 
-        // Pinned every pass for the same reason as the VPN: this is where the
-        // domain rules actually live now, so it must not depend on anyone
-        // remembering to set it. DISALLOW_CONFIG_PRIVATE_DNS is applied
-        // separately, only once the host is confirmed answering.
-        policy?.privateDnsHost?.let { host ->
-            bridge.setPrivateDns(host)?.let { failure ->
-                Log.w(FocusDeviceAdminReceiver.TAG, "private DNS not pinned: $failure")
-            }
-        }
-
-        // Re-asserted every pass rather than set once at provisioning time, so
-        // the protection self-heals: `adb uninstall` while enforcing is the one
-        // route that strands device ownership with no holder, and a factory
-        // reset is then the only exit. Tracking the decision means going away
-        // from home lifts it, which keeps the app removable in exactly the
-        // state where enforcement is already off.
-        bridge.setSelfUninstallBlocked(decision.isEnforcing)
-
-        // Named rather than counted, so the log can answer "what changed on
-        // the pass that broke it" instead of only "how many".
-        val restoredNow = mutableListOf<String>()
-        val hiddenNow = mutableListOf<String>()
-        for (pkg in decision.packagesToShow) {
-            if (bridge.isApplicationHidden(pkg)) {
-                if (bridge.setApplicationHidden(pkg, false)) restoredNow.add(pkg)
-            }
-        }
-        for (pkg in decision.packagesToHide) {
-            // The exporter injects this package into both allowlists, so the
-            // decision layer should never propose it. Kept as a belt-and-braces
-            // check because it guards the unrecoverable case: hiding the
-            // enforcer takes the escape hatch and the trigger with it, and a
-            // policy asset rendered before that fix -- or hand-edited -- would
-            // otherwise hide the app on the first enforcing pass.
-            if (pkg == context.packageName) continue
-            if (!bridge.isApplicationHidden(pkg)) {
-                if (bridge.setApplicationHidden(pkg, true)) hiddenNow.add(pkg)
-            }
-        }
+        // Show/hide deltas; see [applyVisibilitySweep]. Show is applied before
+        // hide inside it for the same interrupted-pass reason documented there.
+        val (hiddenNow, restoredNow) =
+            applyVisibilitySweep(decision, bridge, selfPackage = context.packageName)
         rememberEnforcing(decision.isEnforcing)
         // Only recorded when the fence actually returned an answer. A pass
         // with no usable fix must leave the previous verdict standing rather
@@ -185,7 +137,7 @@ class EnforcementRunner(private val context: Context) {
                 decision = decision,
                 fix = pass?.fix,
                 policy = pass?.policy ?: policy,
-                homeConfigured = pass?.homeConfigured ?: hasHomeLocation(),
+                homeConfigured = pass?.homeConfigured ?: homeLocationStore.hasHomeLocation(),
                 permissions = granted,
                 hidDelta = hiddenNow,
                 restoredDelta = restoredNow,
@@ -198,271 +150,18 @@ class EnforcementRunner(private val context: Context) {
         )
     }
 
-    /**
-     * Packages the allowlist sweep considers: every third-party app, plus the
-     * system apps the policy names in `blockable_system_packages`.
-     *
-     * System apps are default-deny rather than filtered out entirely, because
-     * the apps most worth blocking are preinstalled — YouTube ships at
-     * `/product/app/YouTube` with `FLAG_SYSTEM`, and so does Chrome — while
-     * most of the rest are platform components. Measured on this device: 320
-     * system packages, of which 243 match no allowlist entry and no
-     * `never_disable_prefix`, including `com.android.cellbroadcastreceiver`
-     * (emergency alerts) and `com.android.devicelockcontroller`. Sweeping
-     * those under Device Owner risks an unrecoverable phone, so eligibility is
-     * opt-in per package.
-     *
-     * [PackageManager.MATCH_UNINSTALLED_PACKAGES] is required, not optional: a
-     * package hidden by `setApplicationHidden` is dropped from the default
-     * enumeration entirely, even though it remains `installed=true`. Querying
-     * with flags `0` therefore returns a set that can never contain anything
-     * this app has already hidden — so [EnforcementDecision.packagesToShow]
-     * would come back empty and nothing could ever be unhidden again. Measured
-     * on device: after a pass hid three apps, the following pass reported
-     * `hid 0, restored 0` and left them hidden permanently.
-     */
-    private fun sweepablePackages(policy: FocusPolicy): Set<String> {
-        val pm = context.packageManager
-        return pm.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES)
-            .filter { info ->
-                val isSystem =
-                    (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                !isSystem || info.packageName in policy.blockableSystemPackages
-            }
-            .map { it.packageName }
-            .toSet()
-    }
-
-    /**
-     * Writes the current location as home.
-     *
-     * The app has to do this itself. `push_home_location.sh` stages the file
-     * through `run-as`, which returns "package not debuggable" on the release
-     * build device owner requires -- and making the build debuggable to fix
-     * that would let anyone with adb edit this app's state, which is the
-     * bypass the whole design exists to close.
-     *
-     * Deliberately not an exported intent or receiver: anything that can set
-     * home from outside the app can set it to somewhere else, and the geofence
-     * would then report AWAY forever with enforcement off.
-     *
-     * @return null on success, or a message describing why it failed.
-     */
-    fun setHomeToCurrentLocation(): String? {
-        // Its own thresholds, so a retry actually requests a new fix rather
-        // than being handed the same cached one it just rejected.
-        val fix = acquireLocation(
-            freshWindowMs = SET_HOME_MAX_AGE_MS,
-            maxAccuracyM = SET_HOME_MAX_ACCURACY_M,
-        )
-        if (!fix.hasCoordinates) {
-            return when (fix.outcome) {
-                FixOutcome.NO_PERMISSION -> "location permission is not granted"
-                FixOutcome.NO_PROVIDER -> "location services are off - turn them on"
-                else -> "no location fix available - go outside or open a maps app, then retry"
-            }
-        }
-        // A wrong home is worse than no home: it silently inverts the geofence
-        // everywhere, forever, and nothing on screen would say so. So this
-        // refuses anything but a fix taken now -- unlike an enforcement pass,
-        // there is a user standing here who can simply retry.
-        if (!fix.isFresh(SET_HOME_MAX_AGE_MS)) {
-            return "only a stale fix (${fix.ageMs / 1000}s old) - wait a moment and retry"
-        }
-        // Unknown accuracy reads as unacceptable, matching `best` and the
-        // cached-fix gate. The opposite reading would let a fix of unknown
-        // precision anchor home, which silently inverts the geofence
-        // everywhere and forever -- and unlike an enforcement pass, there is a
-        // user present who can simply step outside and retry.
-        val accuracy = fix.accuracyM ?: Double.MAX_VALUE
-        if (accuracy > SET_HOME_MAX_ACCURACY_M) {
-            val reported = fix.accuracyM?.toInt()?.let { "$it m" } ?: "unknown"
-            return "fix accuracy is $reported (need under " +
-                "${SET_HOME_MAX_ACCURACY_M.toInt()} m) - " +
-                "go outside for a better signal, then retry"
-        }
-        return try {
-            val json = JSONObject()
-                .put("latitude", fix.latitude)
-                .put("longitude", fix.longitude)
-            File(context.filesDir, "home_location.json").writeText(json.toString())
-            // Never log the coordinates: this is the user's home address and
-            // logcat is world-readable to anyone with adb.
-            Log.i(FocusDeviceAdminReceiver.TAG, "home location written")
-            null
-        } catch (e: Exception) {
-            Log.e(FocusDeviceAdminReceiver.TAG, "could not write home location", e)
-            e.message ?: e::class.java.simpleName
-        }
-    }
+    /** Writes the current location as home. See [HomeLocationStore.setHomeToCurrentLocation]. */
+    fun setHomeToCurrentLocation(): String? = homeLocationStore.setHomeToCurrentLocation()
 
     /** Whether home coordinates are provisioned, without revealing them. */
-    fun hasHomeLocation(): Boolean = readHomeLocation() != null
+    fun hasHomeLocation(): Boolean = homeLocationStore.hasHomeLocation()
 
-    /** Coordinates provisioned by `push_home_location.sh`, or null. */
-    private fun readHomeLocation(): Pair<Double, Double>? {
-        val file = File(context.filesDir, "home_location.json")
-        if (!file.exists()) return null
-        return try {
-            val json = JSONObject(file.readText())
-            val lat = json.getDouble("latitude")
-            val lon = json.getDouble("longitude")
-            if (lat !in -90.0..90.0 || lon !in -180.0..180.0) null else lat to lon
-        } catch (e: Exception) {
-            // Unreadable coordinates read as "no home", which the decision
-            // layer treats as location-unknown and therefore fails closed.
-            Log.w(FocusDeviceAdminReceiver.TAG, "home_location.json unreadable", e)
-            null
-        }
-    }
-
-    /**
-     * Acquires a fix, preferring a fresh one over whatever happens to be cached.
-     *
-     * The old implementation only read [LocationManager.getLastKnownLocation]
-     * and took the newest across providers, with no age check and no request
-     * of its own. That produced both reported failures: at the office with no
-     * navigation app running the cache was empty, so the pass fell through to
-     * LOCATION_UNKNOWN and blocked everything; and a cached fix from hours ago
-     * would have classified the office as home just as readily.
-     *
-     * Bounded by [ACQUIRE_TIMEOUT_MS] so a pass can never hang waiting for a
-     * fix that is not coming. On expiry it falls back to the cache, tagged so
-     * the decision layer and the log can both say the acquisition timed out
-     * rather than silently presenting a stale fix as current.
-     */
+    /** Acquires a fix. See [LocationAcquisition.acquireLocation]. */
     fun acquireLocation(
-        timeoutMs: Long = ACQUIRE_TIMEOUT_MS,
-        freshWindowMs: Long = FRESH_WINDOW_MS,
+        timeoutMs: Long = LocationAcquisition.ACQUIRE_TIMEOUT_MS,
+        freshWindowMs: Long = LocationAcquisition.FRESH_WINDOW_MS,
         maxAccuracyM: Double? = null,
-    ): LocationFix {
-        val fine = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!fine && !coarse) return LocationFix.unavailable(FixOutcome.NO_PERMISSION)
-        val manager = context.getSystemService(LocationManager::class.java)
-            ?: return LocationFix.unavailable(FixOutcome.NO_PROVIDER)
-
-        // A recent cached fix is both cheaper and no less accurate than one we
-        // would request right now, so it short-circuits acquisition entirely.
-        // This is the common case whenever any app has used location lately.
-        //
-        // The caller's own thresholds are applied HERE, not only after the
-        // fact: "Set home" demands a fix under 2 minutes old and accurate to
-        // 100 m, and if this returned a 5-minute-old cache regardless, every
-        // retry would hand back the identical rejected fix and the button
-        // could never succeed until the cache aged out on its own.
-        cachedFix(manager, freshWindowMs)
-            ?.takeIf { it.ageMs <= freshWindowMs }
-            // Unknown accuracy is treated as unacceptable, matching `best`.
-            // The alternative reading (0.0, i.e. perfect) would let a fix of
-            // unknown precision anchor home, which silently inverts the
-            // geofence everywhere and forever.
-            ?.takeIf {
-                maxAccuracyM == null ||
-                    (it.accuracyM ?: Double.MAX_VALUE) <= maxAccuracyM
-            }
-            ?.let { return it.copy(outcome = FixOutcome.CACHED_FRESH) }
-
-        val active = runCatching { requestCurrentFix(manager, timeoutMs) }
-            .getOrElse { error ->
-                Log.w(FocusDeviceAdminReceiver.TAG, "location request failed", error)
-                null
-            }
-        // The caller's accuracy bound applies to a freshly requested fix too,
-        // not just the cache: a brand-new fix that cannot say where it is to
-        // within maxAccuracyM answers the question no better than an old one.
-        if (active != null &&
-            (maxAccuracyM == null || (active.accuracyM ?: Double.MAX_VALUE) <= maxAccuracyM)
-        ) {
-            return active.copy(outcome = FixOutcome.ACTIVE_OK)
-        }
-
-        // Nothing fresh. Return the stale cache anyway, labelled: the decision
-        // layer decides what to do with it, and the log needs to say what was
-        // actually available rather than reporting a bare "no fix".
-        // Window passed through so `best` takes its no-fresh-candidates branch
-        // and reports the NEWEST stale fix. Without it every candidate counts
-        // as fresh and the most accurate one wins, which does not change the
-        // decision (the caller rejects anything stale either way) but makes
-        // the log and the set-home error quote a six-hour-old fix when a
-        // forty-minute-old one was available.
-        val stale = cachedFix(manager, freshWindowMs)
-        return stale?.copy(outcome = FixOutcome.TIMEOUT)
-            ?: LocationFix.unavailable(FixOutcome.TIMEOUT)
-    }
-
-    /** The newest cached fix across enabled providers, or null. */
-    private fun cachedFix(
-        manager: LocationManager,
-        freshWindowMs: Long = Long.MAX_VALUE,
-    ): LocationFix? = try {
-        manager.getProviders(true)
-            .asSequence()
-            .mapNotNull { provider ->
-                manager.getLastKnownLocation(provider)?.let { provider to it }
-            }
-            .map { (provider, location) -> location.toFix(provider) }
-            .toList()
-            .let { best(it, freshWindowMs) }
-    } catch (e: SecurityException) {
-        Log.w(FocusDeviceAdminReceiver.TAG, "location denied", e)
-        null
-    }
-
-    /**
-     * Asks the platform for a fix now, blocking up to [timeoutMs].
-     *
-     * Uses [LocationManager] rather than the fused Play Services client on
-     * purpose: a device owner should not depend on Play Services, which is
-     * itself inside this app's blast radius.
-     *
-     * The caller must not be on the main thread -- [EnforcementService] runs
-     * the pass on a background executor for exactly this reason.
-     */
-    private fun requestCurrentFix(manager: LocationManager, timeoutMs: Long): LocationFix? {
-        val provider = PROVIDER_PREFERENCE.firstOrNull { manager.isProviderEnabled(it) }
-            ?: return null
-        val latch = java.util.concurrent.CountDownLatch(1)
-        val holder = java.util.concurrent.atomic.AtomicReference<Location?>()
-        val signal = android.os.CancellationSignal()
-        // The main executor rather than a fresh one per call: the consumer
-        // only stores a reference and counts down, so it does no work worth a
-        // thread, and creating one per pass leaked ~96 threads a day.
-        manager.getCurrentLocation(
-            provider,
-            signal,
-            androidx.core.content.ContextCompat.getMainExecutor(context),
-        ) { location ->
-            holder.set(location)
-            latch.countDown()
-        }
-        val answered = latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-        if (!answered) {
-            // Stop the provider working on a request nobody is waiting for.
-            runCatching { signal.cancel() }
-            return null
-        }
-        return holder.get()?.toFix(provider)
-    }
-
-    /** Converts a platform [Location] into the fix the decision layer sees. */
-    private fun Location.toFix(provider: String): LocationFix = LocationFix(
-        latitude = latitude,
-        longitude = longitude,
-        // elapsedRealtimeNanos is monotonic, so a clock change cannot make a
-        // fix look fresher than it is.
-        ageMs = (android.os.SystemClock.elapsedRealtimeNanos() - elapsedRealtimeNanos) /
-            1_000_000L,
-        accuracyM = if (hasAccuracy()) accuracy.toDouble() else null,
-        provider = provider,
-        outcome = FixOutcome.CACHED_FRESH,
-    )
+    ): LocationFix = locationAcquisition.acquireLocation(timeoutMs, freshWindowMs, maxAccuracyM)
 
     private fun prefs() =
         context.getSharedPreferences("enforcement", Context.MODE_PRIVATE)
@@ -492,7 +191,7 @@ class EnforcementRunner(private val context: Context) {
         private const val KEY_WAS_INSIDE = "was_inside_fence"
 
         /** Longest a pass will wait for a fresh fix before falling back. */
-        const val ACQUIRE_TIMEOUT_MS = 20_000L
+        const val ACQUIRE_TIMEOUT_MS = LocationAcquisition.ACQUIRE_TIMEOUT_MS
 
         /**
          * A fix at most this old is trusted as describing "now".
@@ -503,20 +202,7 @@ class EnforcementRunner(private val context: Context) {
          * LOCATION_UNKNOWN and blocking everything -- turning the fail-closed
          * default from a safety net into the normal case.
          */
-        const val FRESH_WINDOW_MS = 30L * 60L * 1000L
-
-        /**
-         * Much tighter than [FRESH_WINDOW_MS], for anchoring home.
-         *
-         * An enforcement pass tolerates an older fix because it re-runs every
-         * 15 minutes and a wrong call self-corrects. Home is written once and
-         * silently inverts the geofence everywhere if it is wrong, and there
-         * is a user present who can just retry -- so it demands a fresh fix.
-         */
-        const val SET_HOME_MAX_AGE_MS = 2L * 60L * 1000L
-
-        /** Refuse to anchor home to a fix vaguer than the fence is wide. */
-        const val SET_HOME_MAX_ACCURACY_M = 100.0
+        const val FRESH_WINDOW_MS = LocationAcquisition.FRESH_WINDOW_MS
 
         /**
          * Picks the fix best able to answer "is the phone inside the fence".
@@ -547,18 +233,5 @@ class EnforcementRunner(private val context: Context) {
                     .thenBy { it.ageMs },
             ).first()
         }
-
-        /**
-         * Providers tried in order when requesting a fix.
-         *
-         * GPS first because it is the only one accurate enough for a 150 m
-         * fence; fused and network are fallbacks that at least distinguish
-         * "same city" from "10 km away".
-         */
-        private val PROVIDER_PREFERENCE = listOf(
-            LocationManager.GPS_PROVIDER,
-            LocationManager.FUSED_PROVIDER,
-            LocationManager.NETWORK_PROVIDER,
-        )
     }
 }
