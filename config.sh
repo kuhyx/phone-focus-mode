@@ -123,6 +123,7 @@ com.kunzisoft.keepass.libre
 # --- kuhy's own apps ---
 com.kuhy.diet_guard_app
 com.kuhy.home_inventory
+com.kuhy.lyricanki
 com.kuhy.untools
 com.kuhy.wake_alarm_sync
 com.kuhy.workout_app
@@ -204,7 +205,6 @@ pl.infakt.infakt
 # just the filter. Must outrank every enforcement branch.
 com.celzero.bravedns
 com.android.launcher
-com.android.launcher3
 com.android.settings
 com.android.systemui
 com.android.phone
@@ -224,7 +224,6 @@ com.android.vpndialogs
 com.android.se
 com.android.emergency
 com.android.camera
-com.android.camera2
 com.android.documentsui
 com.android.externalstorage
 com.android.keychain
