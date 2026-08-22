@@ -182,6 +182,7 @@ pl.nask.mobywatel
 com.kunzisoft.keepass.libre
 com.kuhy.wake_alarm_sync
 com.google.android.deskclock
+com.metrolist.music
 org.runnerup
 org.runnerup.free
 # dev.kuhy.todo: deliberate loosening of the night rule.
