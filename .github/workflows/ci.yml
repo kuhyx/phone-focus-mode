@@ -1,0 +1,23 @@
+name: CI
+
+# In testsAndMisc these two suites were named explicitly in shell-tests.yml.
+# That list does not follow the code out, so CI is re-declared here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 shellcheck
+      - name: tests
+        run: |
+          for t in tests/*.sh; do echo "== $t"; bash "$t"; done
