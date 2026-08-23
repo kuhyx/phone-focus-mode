@@ -65,11 +65,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Generated from phone_focus_mode/config.sh, which stays the source of truth:
-  #   python3 -m python_pkg.focus_policy \
-  #     --config phone_focus_mode/config.sh --redact-home \
-  #     --output focus_owner/assets/policy.json
+  # Generated from config.sh in the phone-focus-mode repo, which stays the
+  # source of truth. From a checkout of that repo:
+  #   python3 -m focus_policy \
+  #     --config config.sh --redact-home \
+  #     --output ../focus-owner/assets/policy.json
   # The committed copy is redacted, so it carries no home coordinates.
+  # Regeneration is manual and deliberately so: the generator, its input and
+  # this consumer now live in separate repos.
   assets:
     - assets/policy.json
 
