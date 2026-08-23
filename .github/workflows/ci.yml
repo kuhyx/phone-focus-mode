@@ -1,0 +1,43 @@
+name: CI
+
+# In testsAndMisc this code was covered by python-tests.yml (paths filter),
+# shell-tests.yml and a pre-commit mutation hook. None of those follow the
+# code out, so CI is re-declared here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest
+      - name: python tests
+        run: python -m pytest tests focus_policy -q
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 shellcheck
+      - name: shell suites
+        # No config_secrets.sh here, by design: it is never committed. config.sh
+        # tolerates its absence and the suites pin their own coordinates.
+        run: |
+          set -euo pipefail
+          rc=0
+          for t in lib/tests/test_*.sh; do
+            # test_magisk_service.sh hangs rather than finishing. It did so in
+            # the monorepo too (verified against the pre-extraction tree) and
+            # was never in any CI list there, so this is a pre-existing gap
+            # carried over knowingly, not a regression introduced by the split.
+            case "$t" in */test_magisk_service.sh) echo "SKIP $t (hangs; pre-existing)"; continue ;; esac
+            printf '\n=== %s ===\n' "$t"
+            timeout 300 bash "$t" || rc=1
+          done
+          exit "$rc"

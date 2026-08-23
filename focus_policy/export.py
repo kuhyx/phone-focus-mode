@@ -15,7 +15,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from python_pkg.focus_policy.model import FocusPolicy
+    from focus_policy.model import FocusPolicy
 
 SCHEMA_VERSION = 1
 

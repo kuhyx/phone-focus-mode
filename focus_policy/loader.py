@@ -15,7 +15,7 @@ from datetime import time
 import re
 from typing import TYPE_CHECKING
 
-from python_pkg.focus_policy.model import (
+from focus_policy.model import (
     CurfewWindow,
     FocusPolicy,
     HomeLocation,

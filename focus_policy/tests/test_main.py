@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from python_pkg.focus_policy.__main__ import build_parser, main
+from focus_policy.__main__ import build_parser, main
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -11,7 +11,7 @@ Owner app consume the same policy from here, so the two can never drift.
 
 from __future__ import annotations
 
-from python_pkg.focus_policy.model import (
+from focus_policy.model import (
     CurfewWindow,
     FocusPolicy,
     HomeLocation,

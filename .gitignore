@@ -1,0 +1,12 @@
+# Home coordinates. NEVER commit this: the repo is public, and the whole point
+# of the file is that it holds a real location. config.sh sources it only if it
+# exists, so a clean clone and CI work without it.
+config_secrets.sh
+
+# Android build output for the status app.
+focus_status_app/build
+focus_status_app/debug.keystore
+
+__pycache__/
+*.pyc
+.pytest_cache/

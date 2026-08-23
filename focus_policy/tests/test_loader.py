@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from python_pkg.focus_policy.export import policy_to_dict, policy_to_json
-from python_pkg.focus_policy.loader import (
+from focus_policy.export import policy_to_dict, policy_to_json
+from focus_policy.loader import (
     load_policy,
     parse_hhmm,
     parse_package_list,
     parse_shell_assignments,
 )
-from python_pkg.focus_policy.model import PolicyError
+from focus_policy.model import PolicyError
 
 if TYPE_CHECKING:
     from pathlib import Path

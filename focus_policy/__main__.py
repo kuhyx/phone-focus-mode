@@ -3,7 +3,7 @@ r"""Render the focus policy as JSON for a non-Python enforcement backend.
 The Device Owner app is Kotlin and cannot read ``config.sh`` or import this
 package, so the policy is handed over as a generated asset:
 
-    python3 -m python_pkg.focus_policy \\
+    python3 -m focus_policy \\
         --config phone_focus_mode/config.sh \\
         --output focus_owner/assets/policy.json
 
@@ -17,15 +17,15 @@ import argparse
 from pathlib import Path
 import sys
 
-from python_pkg.focus_policy.export import policy_to_json
-from python_pkg.focus_policy.loader import load_policy
-from python_pkg.focus_policy.model import PolicyError
+from focus_policy.export import policy_to_json
+from focus_policy.loader import load_policy
+from focus_policy.model import PolicyError
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Return the argument parser for the policy exporter."""
     parser = argparse.ArgumentParser(
-        prog="python3 -m python_pkg.focus_policy",
+        prog="python3 -m focus_policy",
         description="Render phone_focus_mode's policy as backend-neutral JSON.",
     )
     parser.add_argument(

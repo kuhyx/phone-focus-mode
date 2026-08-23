@@ -18,8 +18,14 @@ fi
 # .gitignore) and is created per-machine / pushed to the phone at deploy
 # time. It does not exist in a clean checkout, so the linter cannot follow
 # it there -- which is exactly what CI lints.
+# Guarded so a clean clone -- and CI -- can source this file. The enforcers
+# need real coordinates and will behave as "not home" without them, but the
+# test suites pin HOME_LAT/HOME_LON themselves and must not require a secrets
+# file that by design is never committed.
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/config_secrets.sh"
+if [ -f "$SCRIPT_DIR/config_secrets.sh" ]; then
+	. "$SCRIPT_DIR/config_secrets.sh"
+fi
 
 # --- Radius in meters ---
 export RADIUS=150

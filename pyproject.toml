@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+testpaths = ["tests", "focus_policy"]
+
+[tool.coverage.run]
+branch = true
+source = ["focus_policy"]
+
+[tool.coverage.report]
+show_missing = true

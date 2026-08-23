@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import datetime as dt
 
-from python_pkg.focus_policy.export import (
+from focus_policy.export import (
     policy_to_dict,
     policy_to_json,
 )
-from python_pkg.focus_policy.model import CurfewWindow, FocusPolicy, HomeLocation
+from focus_policy.model import CurfewWindow, FocusPolicy, HomeLocation
 
 _DEFAULT_CURFEW = CurfewWindow(start=dt.time(23, 0), end=dt.time(5, 0))
 

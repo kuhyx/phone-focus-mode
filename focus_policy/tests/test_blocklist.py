@@ -14,7 +14,7 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-from python_pkg.focus_policy.blocklist import (
+from focus_policy.blocklist import (
     apply_exceptions,
     domain_matches,
     is_valid_domain,

@@ -1,159 +1,44 @@
-# Phone Focus Mode
+# phone-focus-mode
 
-Location-based app restriction for a rooted Android phone using wireless ADB.
+GPS-based Android focus enforcer: a Magisk-backed set of shell daemons that
+block distracting apps, enforce a hosts blocklist, hold a night curfew and
+gate tethering — driven by whether the phone is at home. Extracted from the
+`testsAndMisc` monorepo with its history.
 
-When within ~500m of home: only whitelisted productive apps remain usable.
-When outside that radius: all apps work normally.
-
-## Requirements
-
-- Rooted phone with **Magisk** installed
-- Wireless ADB enabled (`Settings → Developer options → Wireless debugging`)
-- `adb` installed on your PC (`sudo apt install adb` on Debian/Ubuntu)
-- GPS/Location enabled on the phone
-
-## Setup (first time)
-
-### 1. Find your home coordinates
-
-Open Google Maps, right-click your apartment → copy the coordinates shown.
-
-### 2. Edit `config_secrets.sh`
-
-```sh
-HOME_LAT="-48.876667"   # your latitude
-HOME_LON="-123.393333"  # your longitude
+```
+*.sh              the enforcers, daemons and ctl_* subcommands
+lib/              the libraries they source, split under a 250-line cap
+lib/tests/        35 shell suites
+focus_policy/     the Python half: parses config.sh into a typed policy and
+                  exports the JSON asset that focus-owner consumes
+tests/            Python tests, plus mutation fixtures for the shell suites
+focus_status_app/ the on-phone status app
+docs/             design notes and policy lists
 ```
 
-### 3. (Optional) Adjust the whitelist in `config.sh`
+## Secrets
 
-To find the exact package name of any app:
+`config_secrets.sh` holds `HOME_LAT` / `HOME_LON` and is **never committed**.
+`config.sh` tolerates its absence so a clean clone and CI can still source it;
+the enforcers simply behave as "not home" until it exists.
+
+## Tests
 
 ```bash
-./deploy.sh <phone_ip> --find-pkg stronglift
-./deploy.sh <phone_ip> --find-pkg anki
-./deploy.sh <phone_ip> --find-pkg pomodoro
+python -m pytest tests focus_policy -q     # 161 tests
+for t in lib/tests/test_*.sh; do bash "$t"; done
 ```
 
-Then add the correct package name to `WHITELIST` in `config.sh`.
+Both run without a device or a secrets file. The suites pin their own
+coordinates — see the note in `lib/tests/ctl_libs_harness.sh` about why.
 
-### 4. Deploy
+**Known gap:** `lib/tests/test_magisk_service.sh` hangs instead of finishing.
+It behaved the same way in the monorepo and was never wired into CI there, so
+CI here skips it explicitly rather than pretending it passes.
 
-```bash
-chmod +x deploy.sh
-./deploy.sh 192.168.1.42        # replace with your phone's IP
-```
+## Related repos
 
-This:
-
-1. Pushes all scripts to `/data/local/tmp/focus_mode/` on the device
-2. Installs a Magisk `service.d` script so the daemon auto-starts on boot
-3. Starts the daemon immediately
-
-## Usage
-
-```bash
-./deploy.sh <ip> --status    # Current mode, location, distance from home
-./deploy.sh <ip> --log       # View recent daemon log
-./deploy.sh <ip> --list      # List all apps + whitelist status
-./deploy.sh <ip> --enable    # Force focus mode ON (for testing)
-./deploy.sh <ip> --disable   # Force focus mode OFF
-./deploy.sh <ip> --stop      # Stop daemon entirely (restores all apps)
-./deploy.sh <ip> --start     # Start daemon
-./deploy.sh <ip> --restart   # Restart daemon (picks up config changes)
-./deploy.sh <ip> --pull-log  # Download log file to your PC
-```
-
-## How it works
-
-```
-Every 60 seconds:
-  get_location()  ─── dumpsys location ──► lat,lon
-        │
-        ▼
-  calc_distance()  ─── Haversine formula ──► meters
-        │
-        ├── within radius?  ──► enable_focus_mode()
-        │                           pm disable-user all non-whitelisted apps
-        │                           record which apps were disabled
-        │
-        └── outside radius? ──► disable_focus_mode()
-                                    pm enable each app in the disabled list
-```
-
-**Hysteresis:** 50m buffer prevents rapid toggling at the boundary. You must travel
-`radius - 50m` inward to trigger lock, and `radius + 50m` outward to unlock.
-
-**Fail-safe:** If location is unavailable for 5 consecutive checks (~5 minutes),
-focus mode is automatically disabled so you can't be locked out.
-
-**State persistence:** The daemon records exactly which apps _it_ disabled
-(in `/data/local/tmp/focus_mode/disabled_by_focus.txt`), so it never accidentally
-re-enables apps that were already disabled by the user before focus mode ran.
-
-## On-device control (without PC)
-
-From a root terminal app (e.g. Termux + tsu):
-
-```sh
-su --mount-master -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh status'
-su --mount-master -c 'sh /data/local/tmp/focus_mode/focus_ctl.sh disable'
-```
-
-**Why `--mount-master`:** MagiskSU puts each `su -c` session in an isolated
-mount namespace by default, so bind mounts made by the hosts enforcer would be
-invisible (and `/data/adb/focus_mode/*` checks would fail due to SELinux
-interactions). `--mount-master` joins the global namespace where the daemons
-(started from Magisk `service.d` at boot) actually live. The boot autostart
-script doesn't need this flag because `post-fs-data` already runs there.
-
-## File layout
-
-| File                 | Purpose                                                |
-| -------------------- | ------------------------------------------------------ |
-| `config.sh`          | Coordinates, radius, whitelist, constants              |
-| `focus_daemon.sh`    | Main daemon — runs on device, loops every 60s          |
-| `focus_ctl.sh`       | Control utility — runs on device                       |
-| `curfew_enforcer.sh` | Night-curfew enforcer — grayscale + DND + optional net |
-| `hosts_enforcer.sh`  | Bind-mounts `hosts.canonical` over `/system/etc/hosts` |
-| `magisk_service.sh`  | Magisk boot hook → auto-starts both daemons            |
-| `deploy.sh`          | PC-side ADB deployment and control script              |
-
-## Hosts hardening
-
-A second daemon, `hosts_enforcer.sh`, locks the phone's `/system/etc/hosts`
-to the same blocklist installed by `linux_configuration/hosts/install.sh`
-on the PC. Three layers:
-
-1. Canonical copy at `/data/adb/focus_mode/hosts.canonical` is `chattr +i`.
-2. It is bind-mounted read-only over `/system/etc/hosts` at boot.
-3. A watchdog verifies a sha256 every 15 seconds and restores on mismatch.
-
-This blocks the common `echo > /etc/hosts` one-liner from a terminal app.
-It is NOT a guarantee against a determined root user on the device itself —
-a real "impossible without USB" gate would require removing `su` access,
-which would break the rest of this system. The watchdog at least ensures
-tampering is logged and reverted within ~15s.
-
-Status and logs:
-
-```bash
-./deploy.sh <ip> --hosts-status
-./deploy.sh <ip> --hosts-log
-```
-
-## Periodic rescan / Play Store
-
-The focus daemon now **re-scans every tick** (not just on first entry). If
-you re-enable an app via Play Store or `pm enable`, it gets re-disabled
-within `CHECK_INTERVAL_FOCUS` seconds. `com.android.vending` (Play Store),
-`com.*.packageinstaller`, and popular terminal apps are also uninstalled
-`--user 0` in focus mode to close the usual bypass paths. Google Play
-Services (`com.google.android.gms`) is left alone so banking apps work.
-
-## More detail
-
-Split out to stay under the 250-line cap.
-
-- [Night curfew and the hotspot/tethering block](docs/night-curfew.md)
-- [Updating and troubleshooting](docs/updating-and-troubleshooting.md)
+- [`focus-owner`](https://github.com/kuhyx/focus-owner) — the Device-Owner
+  enforcer, which consumes `focus_policy`'s exported `policy.json`.
+- [`android-guardian`](https://github.com/kuhyx/android-guardian) — an
+  independent Magisk module for hosts/app blocking.

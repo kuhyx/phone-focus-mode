@@ -116,6 +116,19 @@ export FOCUS_MODE_SCRIPT_DIR
 # shellcheck source=../../config.sh
 . "${PHONE_DIR}/config.sh"
 
+# Pin the home coordinates the distance assertions depend on. config.sh sources
+# the untracked config_secrets.sh, so without this the suite silently asserts
+# against whatever real coordinates that file happens to hold -- it passed on
+# the author's machine and failed everywhere else, and it leaked a real home
+# location into the pass/fail condition.
+#
+# 4300 m due south of the fix ctl_cases_daemon.sh seeds (52.2297, 21.0122),
+# which is what its ~4.3 km assertion checks. One degree of latitude is
+# 111320 m, so 4300 m is 0.0386 degrees.
+HOME_LAT=52.1911
+HOME_LON=21.0122
+export HOME_LAT HOME_LON
+
 STATE_DIR="${RUN}/state"
 LOG_FILE="${STATE_DIR}/focus.log"
 MODE_FILE="${STATE_DIR}/mode"

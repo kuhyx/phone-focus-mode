@@ -6,7 +6,7 @@ from datetime import time
 
 import pytest
 
-from python_pkg.focus_policy.model import (
+from focus_policy.model import (
     CurfewWindow,
     FocusPolicy,
     HomeLocation,
