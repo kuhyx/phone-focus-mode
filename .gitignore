@@ -10,3 +10,11 @@ focus_status_app/debug.keystore
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# --- Absorbed subtrees ---
+# focus-owner keeps its own .gitignore: its patterns are anchored (/build/,
+# /coverage/, /android/app/release), which git evaluates relative to the
+# containing directory. Hoisting them here would silently change what they
+# match, so they stay where they were written.
+#
+# mtk-root and android-guardian shipped no .gitignore of their own.

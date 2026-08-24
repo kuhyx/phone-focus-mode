@@ -101,7 +101,7 @@ pending update on a phone that is not carrier-locked at all.
 
 - **Magisk v30.7** (2026-02-23), sha256 `e0d32d2…afae9ebd5`. Verify it is still
   current; beware `app-debug.apk` in the same release, which is _not_ the one
-  to install. See `NOTES.md`.
+  to install. See `DOCS-notes.md`.
 - **mtkclient rev `0542a87`** (2026-08-02). `./install.sh` pulls and rebuilds.
   Good sign: this rev has an explicit MT6765 entry with an `mt6765_payload.bin`
   loader — the Ulefone's exact chipset.

@@ -5,6 +5,11 @@ block distracting apps, enforce a hosts blocklist, hold a night curfew and
 gate tethering — driven by whether the phone is at home. Extracted from the
 `testsAndMisc` monorepo with its history.
 
+Every change that lands on the phone lives here. `android-guardian`,
+`mtk-root` and `focus-owner` were absorbed as subtrees (with their history)
+and their standalone repos deleted, so a change spanning the policy and its
+on-device consumer is one commit rather than a cross-repo ordering problem.
+
 ```
 *.sh              the enforcers, daemons and ctl_* subcommands
 lib/              the libraries they source, split under a 250-line cap
@@ -14,6 +19,11 @@ focus_policy/     the Python half: parses config.sh into a typed policy and
 tests/            Python tests, plus mutation fixtures for the shell suites
 focus_status_app/ the on-phone status app
 docs/             design notes and policy lists
+
+focus-owner/      the Device-Owner enforcer (Flutter + Kotlin), which consumes
+                  focus_policy's exported policy.json
+android-guardian/ an independent Magisk module for hosts/app blocking
+mtk-root/         the MT6765 rooting toolkit that puts Magisk on the device
 ```
 
 ## Secrets
@@ -36,9 +46,11 @@ coordinates — see the note in `lib/tests/ctl_libs_harness.sh` about why.
 It behaved the same way in the monorepo and was never wired into CI there, so
 CI here skips it explicitly rather than pretending it passes.
 
-## Related repos
+The absorbed subtrees carry their own suites, wired into CI explicitly rather
+than by glob (the root globs match neither of their layouts):
 
-- [`focus-owner`](https://github.com/kuhyx/focus-owner) — the Device-Owner
-  enforcer, which consumes `focus_policy`'s exported `policy.json`.
-- [`android-guardian`](https://github.com/kuhyx/android-guardian) — an
-  independent Magisk module for hosts/app blocking.
+```bash
+for t in android-guardian/tests/*.sh; do bash "$t"; done
+./mtk-root/lib/tests/run_all.sh
+cd focus-owner && flutter analyze --fatal-infos && flutter test
+```

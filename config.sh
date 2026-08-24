@@ -4,7 +4,7 @@
 #
 # The lists below stay in THIS file: focus_policy's loader finds them by
 # regex over config.sh's own text, so one moved into a config_*.sh sibling
-# parses as empty with no error. Rationale lives in docs/policy-lists.md.
+# parses as empty with no error. Rationale lives in docs/DOCS-policy-lists.md.
 
 # --- Home location (loaded from config_secrets.sh, not tracked by git) ---
 SCRIPT_DIR="${FOCUS_MODE_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
@@ -38,7 +38,7 @@ export HYSTERESIS=30
 
 # NIGHT CURFEW (time-gated strict allow-list). Times are local 24h HHMM;
 # the window wraps past midnight when START > END (e.g. 2300 -> 0500).
-# see docs/policy-lists.md#night-curfew
+# see docs/DOCS-policy-lists.md#night-curfew
 export NIGHT_CURFEW_ENABLED=1
 export NIGHT_CURFEW_START="2300"
 export NIGHT_CURFEW_END="0500"
@@ -97,7 +97,7 @@ export LAUNCHER_PACKAGE="com.google.android.apps.nexuslauncher"
 . "$SCRIPT_DIR/config_launcher.sh"
 
 # WHITELISTED APPS -- always enabled, even in focus mode.
-# see docs/policy-lists.md#whitelisted-apps
+# see docs/DOCS-policy-lists.md#whitelisted-apps
 
 export WHITELIST="
 # Rewritten 2026-08-11 for the unrooted Pixel 6a under Device Owner. The list
@@ -146,7 +146,7 @@ eu.kanade.tachiyomi.sy
 
 # com.android.vending -- day only. NEVER put a dollar-sign reference or a
 # double quote in this string, not even in a comment: both break the list
-# silently. see docs/policy-lists.md#why-the-play-store-is-in-the-day-list
+# silently. see docs/DOCS-policy-lists.md#why-the-play-store-is-in-the-day-list
 com.android.vending
 
 # --- Workout tracking (always beneficial; must stay enabled to export runs) ---
@@ -155,7 +155,7 @@ org.runnerup.free
 "
 
 # ALLOWED PACKAGE PREFIXES -- why prefixes, and how narrow to keep them:
-# see docs/policy-lists.md#allowed-package-prefixes
+# see docs/DOCS-policy-lists.md#allowed-package-prefixes
 
 export ALLOWED_PREFIXES="
 # Manga reader + its per-source extension apks.
@@ -169,7 +169,7 @@ eu.kanade.tachiyomi
 "
 
 # NIGHT CURFEW WHITELIST -- what stays enabled at night and why, plus the
-# prefix exception: see docs/policy-lists.md#night-curfew-whitelist
+# prefix exception: see docs/DOCS-policy-lists.md#night-curfew-whitelist
 
 export NIGHT_WHITELIST="
 # Curfew (23:00-05:00 at home) is strictly tighter than the day list: only what
@@ -192,7 +192,7 @@ com.metrolist.music
 org.runnerup
 org.runnerup.free
 # dev.kuhy.todo: deliberate loosening of the night rule.
-# see docs/policy-lists.md#why-devkuhytodo-is-in-the-night-list
+# see docs/DOCS-policy-lists.md#why-devkuhytodo-is-in-the-night-list
 dev.kuhy.todo
 "
 
@@ -203,7 +203,7 @@ dev.kuhy.todo
 
 # --- System / essential packages that must NEVER be disabled ---
 # Prefix-matched. Why pl.infakt.infakt is here rather than allowlisted:
-# see docs/policy-lists.md#system-packages-that-must-never-be-disabled
+# see docs/DOCS-policy-lists.md#system-packages-that-must-never-be-disabled
 export SYSTEM_NEVER_DISABLE="
 pl.infakt.infakt
 # The always-on VPN provider. Hiding it is self-defeating in the worst way:

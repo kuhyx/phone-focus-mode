@@ -6,7 +6,7 @@ monorepo with its history.
 
 ```
 mtk_root/     the numbered stages, install.sh and udev rules
-              -> start at mtk_root/README.md, and READY.md for the
+              -> start at mtk_root/README.md, and DOCS-ready.md for the
                  arrival-day sequence
 lib/          mtk_common / mtk_classify / mtk_device / mtk_partitions,
               sourced by the stages as ../lib/<name>.sh

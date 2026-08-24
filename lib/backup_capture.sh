@@ -114,6 +114,6 @@ dump_focus_state() {
 		"${purged}" \
 		'## RethinkDNS installed: ' "${rethink}" \
 		'## uBlock filters live in the Firefox profile and CANNOT be' \
-		'## backed up from adb; see docs/youtube-block-unrooted.md' \
+		'## backed up from adb; see docs/DOCS-youtube-block-unrooted.md' \
 		>"${out}"
 }

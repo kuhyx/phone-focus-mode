@@ -15,7 +15,7 @@
 # This exists because focus_owner cannot do the job. Its sweep filters
 # to third-party packages, and YouTube ships at /product/app/YouTube
 # with FLAG_SYSTEM — so the Device Owner path would skip it even after
-# the wipe. See docs/youtube-block-unrooted.md.
+# the wipe. See docs/DOCS-youtube-block-unrooted.md.
 #
 # Usage:
 #   ./distraction_purge.sh            # purge (default)

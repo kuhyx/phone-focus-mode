@@ -87,7 +87,7 @@ invocation so the dump/manifest logic is exercised without hardware.
 
 `tests/fixtures/pixel-boot-ab/` is harvested from a real Pixel 6a. The
 `ulefone-*` fixtures are synthetic and encode _assumed_ property values — see
-`NOTES.md`.
+`DOCS-notes.md`.
 
 ## Related
 
