@@ -117,6 +117,16 @@ jobs:
       # logic -- including the Play Store geofence, which is the policy's
       # load-bearing behaviour -- is Kotlin, and its suites live under
       # android/app/src/test. Without this step they never run in CI.
+      # Gradle is installed rather than invoked through ./gradlew: the wrapper
+      # script AND its jar are gitignored by Flutter's android/.gitignore, so
+      # they do not exist in a fresh clone (the first run of this step failed
+      # with "./gradlew: No such file or directory"). Committing them is not
+      # the fix -- gradle-wrapper.jar is a binary, which this repo's hooks
+      # block. The version matches the wrapper's pinned distributionUrl so CI
+      # and a local ./gradlew run agree.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.1.0"
       - name: kotlin unit tests
         working-directory: focus-owner/android
-        run: ./gradlew :app:testDebugUnitTest --console=plain
+        run: gradle :app:testDebugUnitTest --console=plain
