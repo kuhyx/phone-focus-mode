@@ -1,0 +1,24 @@
+# mtk_root - USB access for Android debugging and MediaTek BROM recovery.
+#
+# Installed by mtk_root/install.sh. Scoped to two vendor IDs on purpose.
+#
+# MODE="0660" plus GROUP + TAG+="uaccess", NOT MODE="0666":
+#   - 0666 grants every process on the machine read/write access to the device
+#   - uaccess grants access to the user logged in at the physical seat, which
+#     is what is actually wanted, and it is revoked on logout
+# A rule matching idVendor=="*" with 0666 applies to every USB device attached
+# to the system - storage, security keys, everything - not just phones.
+
+# Google (Pixel): adb + fastboot
+SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", MODE="0660", GROUP="adbusers", TAG+="uaccess"
+
+# MediaTek: BROM / preloader / DA modes, used by mtkclient.
+# 0e8d covers the BROM (2000), preloader (2001) and DA download ports.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", MODE="0660", GROUP="adbusers", TAG+="uaccess"
+
+# MediaTek devices also expose a CDC-ACM serial port in preloader mode;
+# mtkclient opens it directly.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0e8d", MODE="0660", GROUP="uucp", TAG+="uaccess"
+
+# Ulefone's own USB vendor ID, if it differs from MediaTek's, is UNKNOWN until
+# the device is attached: run `lsusb` with it plugged in and add a line here.

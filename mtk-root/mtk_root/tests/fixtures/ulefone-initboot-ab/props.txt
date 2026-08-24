@@ -1,0 +1,7 @@
+ro.product.manufacturer=Ulefone
+ro.product.model=Armor X12 Pro
+ro.product.device=Armor_X12_Pro
+ro.board.platform=mt6765
+ro.hardware=mt6765
+ro.product.first_api_level=33
+ro.boot.slot_suffix=_a
