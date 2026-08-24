@@ -40,7 +40,9 @@ ENFORCER_PACKAGE = "com.kuhy.focus_owner"
 #
 # So the sweep stays default-deny for system apps and this is the opt-in.
 # com.android.vending is included deliberately: leaving Play reachable makes
-# every other removal a one-tap undo.
+# every other removal a one-tap undo. It is also in ALWAYS_BLOCKED_PACKAGES --
+# being sweepable is what makes it eligible for a decision at all, and the
+# always-blocked set is what fixes that decision to "hide" everywhere.
 BLOCKABLE_SYSTEM_PACKAGES = frozenset(
     {
         "com.android.chrome",
@@ -61,12 +63,23 @@ BLOCKABLE_SYSTEM_PACKAGES = frozenset(
 #
 # Chrome is here because it is a second route to the same content, not because
 # browsing is banned -- Firefox stays available and carries the uBlock filters.
-# com.android.vending is deliberately NOT here: Play stays geofenced so apps
-# can still be installed and updated away from home, and a hidden package
-# cannot be reinstalled from Play anyway.
+# com.android.vending IS here as of 2026-08-24. It used to be geofenced so apps
+# could still be installed away from home, on the reasoning that a hidden
+# package cannot be reinstalled from Play anyway. That reasoning only covered
+# re-showing something already blocked -- it said nothing about installing a
+# package the policy has never seen. Play can fetch any browser in the store,
+# and a fresh browser is a complete bypass of both the app sweep (which is
+# default-deny by package name, so it hides the new browser only after a pass)
+# and, for the window in between, of the hosts blocklist. That install power is
+# worth more to the bypass than Play is to the phone.
+#
+# Being always-blocked rather than geofenced is the point: geofenced means
+# leaving the house is the off switch, which is exactly what Device Owner was
+# provisioned to remove.
 ALWAYS_BLOCKED_PACKAGES = frozenset(
     {
         "com.android.chrome",
+        "com.android.vending",
         "com.google.android.apps.youtube.music",
         "com.google.android.youtube",
     },

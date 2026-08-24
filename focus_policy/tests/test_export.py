@@ -112,20 +112,24 @@ def test_an_allowed_system_package_stays_sweepable() -> None:
     assert "com.android.vending" in payload["allowed_packages"]
 
 
-def test_always_blocked_exempts_youtube_and_chrome_from_the_geofence() -> None:
+def test_always_blocked_exempts_youtube_chrome_and_play_from_the_geofence() -> None:
     """The geofence must not become an off switch for these.
 
     Everything else is restored on the AWAY branch, which makes leaving the
     house a way to switch enforcement off -- the specific thing Device Owner
-    was provisioned to remove. Play is deliberately absent: it stays geofenced
-    so apps can still be installed away from home.
+    was provisioned to remove.
+
+    Play joined this set on 2026-08-24. It was previously geofenced so apps
+    could still be installed away from home; the cost of that is an install
+    path for any browser in the store, which bypasses the app sweep for as
+    long as it takes the next pass to notice a package name it has never seen.
     """
     always = policy_to_dict(_policy())["always_blocked_packages"]
 
     assert "com.google.android.youtube" in always
     assert "com.google.android.apps.youtube.music" in always
     assert "com.android.chrome" in always
-    assert "com.android.vending" not in always
+    assert "com.android.vending" in always
 
 
 def test_always_on_vpn_requires_a_sweep_protected_provider() -> None:

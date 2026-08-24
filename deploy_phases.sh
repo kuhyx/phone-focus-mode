@@ -70,13 +70,37 @@ _deploy_stage_assets() {
 
 	# Generate and upload the canonical hosts file (StevenBlack + custom entries).
 	# This mirrors what linux_configuration/hosts/install.sh installs on the PC.
-	HOSTS_GENERATOR="$DEPLOY_DIR/../linux_configuration/scripts/periodic_background/hosts/generate_hosts_file.sh"
-	if [ -f "$HOSTS_GENERATOR" ]; then
-		chmod +x "$HOSTS_GENERATOR" 2>/dev/null || true
+	# The generator lives in its own repo now (github.com/kuhyx/hosts-blocker).
+	# The path below used to point into linux_configuration/, which no longer
+	# exists -- and because the guard was a `[ -f ]` that only WARNED, hosts
+	# enforcement silently no-opped on every deploy instead of failing. The
+	# missing-generator branch is fatal now: a self-check that detects failure
+	# must gate, not warn. Override with HOSTS_GENERATOR to relocate it.
+	HOSTS_GENERATOR="${HOSTS_GENERATOR:-$HOME/hosts-blocker/generate_hosts_file.sh}"
+	if [ ! -f "$HOSTS_GENERATOR" ]; then
+		echo "  ERROR: hosts generator not found at $HOSTS_GENERATOR" >&2
+		echo "         Clone github.com/kuhyx/hosts-blocker, or set HOSTS_GENERATOR." >&2
+		echo "         Refusing to deploy: skipping this silently is how the" >&2
+		echo "         hosts layer was dead without anyone noticing." >&2
+		exit 1
+	fi
+	chmod +x "$HOSTS_GENERATOR" 2>/dev/null || true
+	{
 		echo "  Generating canonical hosts file..."
 		HOSTS_TMP="$(mktemp)"
 		HOSTS_SHA_TMP="$(mktemp)"
 		if bash "$HOSTS_GENERATOR" "$HOSTS_TMP"; then
+			# Phone-only entries (Play Store APK delivery) appended before the
+			# hash is taken, so the enforcer's tamper check covers them too.
+			HOSTS_SUPPLEMENTAL="$DEPLOY_DIR/hosts_supplemental.txt"
+			if [ ! -f "$HOSTS_SUPPLEMENTAL" ]; then
+				rm -f "$HOSTS_TMP" "$HOSTS_SHA_TMP"
+				echo "  ERROR: $HOSTS_SUPPLEMENTAL missing - refusing to deploy a" >&2
+				echo "         hosts file without the phone-side Play blocks." >&2
+				exit 1
+			fi
+			cat "$HOSTS_SUPPLEMENTAL" >>"$HOSTS_TMP"
+			echo "  Appended $(grep -c '^0\.0\.0\.0' "$HOSTS_SUPPLEMENTAL") phone-only host blocks."
 			hosts_hash="$(compute_file_hash "$HOSTS_TMP")"
 			printf '%s\n' "$hosts_hash" >"$HOSTS_SHA_TMP"
 			echo "  Uploading canonical hosts ($(wc -l <"$HOSTS_TMP") lines)..."
@@ -125,9 +149,7 @@ _deploy_stage_assets() {
 			rm -f "$HOSTS_SHA_TMP"
 			echo "  WARNING: failed to generate hosts file - skipping hosts enforcement"
 		fi
-	else
-		echo "  WARNING: $HOSTS_GENERATOR not found - skipping hosts enforcement"
-	fi
+	}
 
 	# Only push config_secrets.sh if phone doesn't already have one
 	if adb_root "test -f $REMOTE_DIR/config_secrets.sh" 2>/dev/null; then

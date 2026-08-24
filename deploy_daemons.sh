@@ -52,7 +52,7 @@ _deploy_start_daemons() {
 	if adb_root "test -f $REMOTE_DIR/minimalist_launcher.apk" 2>/dev/null; then
 		adb_cmd shell su --mount-master -c 'setsid sh /data/local/tmp/focus_mode/launcher_enforcer.sh </dev/null >/dev/null 2>/dev/null &'
 	else
-		echo "  NOTE: launcher snapshot missing. Install Minimalist Phone via Aurora Store, then run:"
+		echo "  NOTE: launcher snapshot missing. Sideload Minimalist Phone (--sideload), then run:"
 		echo "        $0 $PHONE_IP --snapshot-launcher"
 	fi
 	# Start night-curfew enforcer (grayscale + DND + optional net allow-list).
@@ -144,5 +144,5 @@ _deploy_report() {
 	echo "  $0 $PHONE_IP --list        # See all apps and whitelist status"
 	echo "  $0 $PHONE_IP --enable      # Force focus mode on for testing"
 	echo "  $0 $PHONE_IP --disable     # Force focus mode off"
-	echo "  $0 $PHONE_IP --install-aurora  # Install Aurora Store (Play Store alternative)"
+	echo "  $0 $PHONE_IP --sideload a.apk  # Install an APK from the PC (no store on device)"
 }

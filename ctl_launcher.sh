@@ -28,7 +28,7 @@ cmd_launcher_snapshot() {
 	local apk_path
 	apk_path="$(pm path "$LAUNCHER_PACKAGE" 2>/dev/null | head -1 | sed 's/^package://')"
 	if [ -z "$apk_path" ] || [ ! -f "$apk_path" ]; then
-		echo "ERROR: $LAUNCHER_PACKAGE is not installed. Install it once via Aurora/Play Store, then rerun this command."
+		echo "ERROR: $LAUNCHER_PACKAGE is not installed. Sideload it from the PC (deploy.sh --sideload), then rerun this command."
 		return 1
 	fi
 	mkdir -p "$(dirname "$LAUNCHER_APK")"

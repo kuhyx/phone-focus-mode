@@ -48,11 +48,17 @@ ADB_TARGET=()
 # Support orchestrator-driven device targeting via ADB_SERIAL.
 # When ADB_SERIAL is set, deploy.sh uses that target directly and preserves
 # the existing PHONE_IP workflow when ADB_SERIAL is unset.
+# The APK argument for --sideload. Read here rather than in the case branch
+# because the whole argv shifts by one when the IP is omitted (ADB_SERIAL
+# form), and the branch cannot tell which form it was invoked in.
+SIDELOAD_APK="${3:-}"
+
 if [[ -n "${ADB_SERIAL:-}" ]]; then
 	ADB_TARGET=(-s "${ADB_SERIAL}")
 	if [[ -z "${PHONE_IP}" || "${PHONE_IP}" == --* ]]; then
 		ACTION="${PHONE_IP:---deploy}"
 		PHONE_IP=""
+		SIDELOAD_APK="${2:-}"
 	fi
 fi
 
@@ -139,18 +145,23 @@ HOSTS_MODULE_REBOOT_WAIT_SECS=180
 
 
 # ============================================================
-# AURORA STORE
+# APP INSTALLS -- no store on the device
 # ============================================================
-# Aurora Store is a free, open-source Play Store client that lets you
-# install apps anonymously without a Google account. We use it so that
-# Play Store (com.android.vending) can be network-blocked during focus
-# mode without preventing legitimate app installs at other times.
+# There is deliberately no app store here, not even a Play-free one.
 #
-# Official release APK is hosted on the Aurora OSS GitLab. We pin a
-# known version tag and verify the hash on every install.
-AURORA_VERSION="4.8.1"
-AURORA_APK_URL="https://gitlab.com/-/project/6922885/uploads/2ee95ec85244b45cc860b63ec7a10ad6/AuroraStore-4.8.1.apk"
-AURORA_PACKAGE="com.aurora.store"
+# Aurora Store used to be installed by `--install-aurora`, on the reasoning
+# that it let apps be installed while Play itself was blocked. Removed
+# 2026-08-24: Aurora is a Play *client*. It can fetch any browser in the
+# store, which is the exact bypass blocking Play exists to prevent, so it
+# reproduced the hole one layer down while looking like a mitigation.
+#
+# Installing and updating apps is now a PC-side operation over adb, which
+# keeps the install decision on this side of the airlock:
+#
+#   ./deploy.sh <ip> --sideload /path/to/app.apk
+#
+# See docs/DOCS-policy-lists.md#installing-and-updating-apps-without-a-store
+# for the infakt update procedure, which is the case this has to serve.
 
 
 # ============================================================
@@ -233,7 +244,7 @@ case "$ACTION" in
 	;;
 --capture-coords) do_capture_coords ;;
 --snapshot-launcher) do_snapshot_launcher ;;
---install-aurora) do_install_aurora ;;
+--sideload) do_sideload "$SIDELOAD_APK" ;;
 *)
 	echo "Unknown action: $ACTION"
 	usage

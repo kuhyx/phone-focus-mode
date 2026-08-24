@@ -86,7 +86,7 @@ com.android.chrome
 # --- Launcher enforcer state (see launcher_enforcer.sh) ---
 # Keeps Minimalist Phone installed and locked as the default HOME app.
 # The APK is snapshotted by `deploy.sh --snapshot-launcher` from the
-# currently-installed copy (user installs once via Aurora/Play).
+# currently-installed copy (user sideloads it once from the PC).
 # The Pixel 6a's stock launcher. The previous value named the rooted
 # Blackview's minimalist launcher, which is not installed here -- the exporter's
 # launcher check caught it, which is the whole reason that check exists: hiding
@@ -144,10 +144,11 @@ com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
 
-# com.android.vending -- day only. NEVER put a dollar-sign reference or a
-# double quote in this string, not even in a comment: both break the list
-# silently. see docs/DOCS-policy-lists.md#why-the-play-store-is-in-the-day-list
-com.android.vending
+# com.android.vending is NOT here and must not be re-added: the Play Store is
+# now blocked at home, day and night. see
+# docs/DOCS-policy-lists.md#why-the-play-store-is-blocked
+# NEVER put a dollar-sign reference or a double quote in this string, not even
+# in a comment: both break the list silently.
 
 # --- Workout tracking (always beneficial; must stay enabled to export runs) ---
 org.runnerup

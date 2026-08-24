@@ -1,7 +1,7 @@
 #!/bin/bash
 # deploy_magisk.sh — the Magisk systemless-hosts module: creating it when
 # absent, clearing its disable markers, and rebooting to bring the magic mount
-# up. Also carries the Aurora Store installer and the file-hash helper, both
+# up. Also carries the APK sideload helper and the file-hash helper, both
 # of which are one-off setup rather than part of a deploy run.
 #
 # Sourced by deploy.sh, which owns adb_cmd and adb_root.
@@ -104,32 +104,30 @@ ensure_magisk_hosts_module() {
 	echo "  Magisk Systemless Hosts module is now active."
 }
 
-do_install_aurora() {
-	connect_adb
+do_sideload() {
+	local apk="$1"
 
-	# Check if already installed.
-	if adb_cmd shell pm list packages 2>/dev/null | grep -qx "package:${AURORA_PACKAGE}"; then
-		echo "Aurora Store is already installed (${AURORA_PACKAGE})."
-		return 0
+	if [ -z "$apk" ]; then
+		echo "ERROR: --sideload needs an APK path."
+		echo "Usage: $0 <ip> --sideload /path/to/app.apk"
+		return 1
 	fi
-
-	echo "Downloading Aurora Store ${AURORA_VERSION}..."
-	local tmp_apk
-	tmp_apk="$(mktemp --suffix=.apk)"
-	if ! curl -fsSL --retry 3 -o "$tmp_apk" "$AURORA_APK_URL"; then
-		rm -f "$tmp_apk"
-		echo "ERROR: Failed to download Aurora Store from $AURORA_APK_URL"
-		echo "Manual download: https://auroraoss.com/"
+	if [ ! -f "$apk" ]; then
+		echo "ERROR: no such APK: $apk"
 		return 1
 	fi
 
-	echo "Installing Aurora Store..."
-	if adb_cmd install -r "$tmp_apk"; then
-		echo "Aurora Store ${AURORA_VERSION} installed successfully."
-		echo "Open Aurora Store on the phone, choose 'Anonymous' login, then install apps normally."
+	connect_adb
+
+	# install -r, never uninstall-then-install: a reinstall would drop app
+	# data, and for the app this exists to serve (infakt) that means losing
+	# the device pairing this whole procedure is trying to preserve.
+	echo "Sideloading $(basename "$apk")..."
+	if adb_cmd install -r "$apk"; then
+		echo "Installed. No store was involved, which is the point:"
+		echo "see docs/DOCS-policy-lists.md#installing-and-updating-apps-without-a-store"
 	else
-		echo "ERROR: adb install failed. You can side-load manually:"
-		echo "  adb install ${tmp_apk}"
+		echo "ERROR: adb install failed for $apk"
+		return 1
 	fi
-	rm -f "$tmp_apk"
 }

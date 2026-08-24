@@ -77,25 +77,78 @@ reach-a-bank / handle-an-emergency rule above -- writing an idea down at
 night is the one thing this app does, and losing the deploy path for six
 hours a day cost more than the distraction risk.
 
-## Why the Play Store is in the day list
+## Why the Play Store is blocked
 
---- App store (day only; deliberately absent from the night list) ---
-NB: never write a dollar-sign variable reference inside this list. WHITELIST
-is a double-quoted string, so even a comment line expands, and deploy.sh
-runs under set -u, where an undefined name aborts the whole deploy. A
-reference to the night list sat here and did exactly that (it is defined
-below this point, so it was still unset), blocking every focus-mode deploy.
-Same rule for double quotes: one in a comment ends the string early.
-infakt cannot be installed or updated without Play, and it is device-paired
-to a bank, so losing the ability to update it strands a re-authentication
-chain. This does NOT reopen YouTube: the sweep is default-deny for
-third-party packages, so anything installed from Play is hidden on the next
-at-home pass, and the always-blocked set (YouTube, Chrome) is never restored
-by the AWAY branch either. Reinstalling YouTube from Play is UNTESTED as a
-bypass:
-the sweep would re-hide it within one pass regardless, but treat the claim
-that Play cannot resurrect a blocked app as unverified until someone tries.
-NOTE: never use a double-quote character anywhere inside these export
-blocks, not even in a comment. The policy loader matches a quoted value up
-to the next quote, so one stray quote terminates the string early and
-silently truncates the allowlist -- which drops apps with no error at all.
+Changed 2026-08-24. Play used to sit in the day list, geofenced, with the
+argument reproduced below. It is now in `ALWAYS_BLOCKED_PACKAGES`: hidden at
+home and away, day and night, and blocked at the network layer as well.
+
+The old argument was that a hidden package cannot be reinstalled from Play,
+so leaving Play reachable could not undo anything. That only covers
+*re-showing something already blocked*. It says nothing about **installing a
+package the policy has never seen** -- and Play can fetch any browser in the
+store. The app sweep is default-deny by package name, so a freshly installed
+browser is hidden on the next pass, but "the next pass" is a window, and for
+the length of that window the browser is a complete bypass of both the sweep
+and the hosts blocklist. That install power is worth more to a bypass than
+Play is to the phone.
+
+Aurora Store was removed at the same time and for the same reason. It was
+installed precisely to survive a Play block, which made it a Play client with
+exactly the same install power -- the hole reproduced one layer down, wearing
+the label of a mitigation.
+
+### What this costs, and what it does not
+
+It does **not** endanger infakt. `pl.infakt.infakt` is in
+`SYSTEM_NEVER_DISABLE`, which `isAllowed()` consults before the curfew split,
+so infakt survives every enforcement branch regardless of what happens to
+Play. What is lost is only the ability to *update* it from the device, which
+is what the section below replaces.
+
+Blocking Play also does not touch push. `com.google.android.gms` is a
+separate package, is itself in `SYSTEM_NEVER_DISABLE`, and is deliberately
+left alone: it carries the Firebase push that infakt's browser-login approval
+tap arrives on. Only `com.android.vending` is blocked, and the supplemental
+hosts blocklist names APK-delivery hosts only, never the GMS push channel.
+
+## Installing and updating apps without a store
+
+There is no app store on the device. Installs and updates are PC-side:
+
+```bash
+./deploy.sh <phone-ip> --sideload /path/to/app.apk
+```
+
+That runs `adb install -r` -- never uninstall-then-install, which would drop
+app data and, for infakt, the bank device pairing this procedure exists to
+preserve.
+
+For infakt specifically: fetch the current APK on the PC, sideload it, and
+confirm on the phone that the app opens and a login-approval push still
+arrives. See `DOCS-youtube-block-unrooted.md` on infakt before any factory
+reset for what is and is not recoverable if the pairing is lost -- login
+needs the password alone (2FA is SMS-only, so no TOTP seed exists), but the
+banking pairing and the local app PIN do not survive and are re-paired over
+SMS.
+
+### The original argument, kept for the record
+
+The text below is what the day-list entry said before 2026-08-24. It is
+retained because it names a failure mode that is still real -- the
+double-quote and dollar-sign rules for the export blocks are unchanged:
+
+> NB: never write a dollar-sign variable reference inside this list.
+> WHITELIST is a double-quoted string, so even a comment line expands, and
+> deploy.sh runs under set -u, where an undefined name aborts the whole
+> deploy. A reference to the night list sat here and did exactly that (it is
+> defined below this point, so it was still unset), blocking every
+> focus-mode deploy. Same rule for double quotes: one in a comment ends the
+> string early.
+>
+> infakt cannot be installed or updated without Play, and it is device-paired
+> to a bank, so losing the ability to update it strands a re-authentication
+> chain. This does NOT reopen YouTube: the sweep is default-deny for
+> third-party packages, so anything installed from Play is hidden on the next
+> at-home pass, and the always-blocked set (YouTube, Chrome) is never
+> restored by the AWAY branch either.

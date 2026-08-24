@@ -27,7 +27,7 @@ usage() {
 	echo "  --launcher-status    Show launcher enforcer status on the phone"
 	echo "  --launcher-log       Show launcher enforcer log on the phone"
 	echo "  --snapshot-launcher  Snapshot installed Minimalist Phone APK + default HOME"
-	echo "  --install-aurora     Download & install Aurora Store (open-source Play Store alt)"
+	echo "  --sideload <apk>     Install an APK from the PC (no store on the device)"
 	echo ""
 	echo "Examples:"
 	echo "  $0 192.168.1.42"
@@ -67,7 +67,7 @@ do_snapshot_launcher() {
 	# Run the on-device snapshot command. This captures the APK + HOME
 	# activity of the already-installed Minimalist Phone launcher into
 	# /data/adb/focus_mode/ so the launcher enforcer can restore it later.
-	# The user must install the launcher once (via Aurora/Play) before
+	# The user must install the launcher once (--sideload) before
 	# running this command - we only back up what's already there.
 	connect_adb
 	echo "Snapshotting currently-installed launcher APK..."
