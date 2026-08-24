@@ -101,9 +101,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # `flutter-version: stable` was wrong: that field wants a VERSION and
+      # "stable" is a channel, so the action failed with "Unable to determine
+      # Flutter version for channel: stable version: stable" before running a
+      # single test. Inherited from focus-owner's original workflow, where it
+      # had never passed. The channel alone is what selects stable.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "stable"
           channel: stable
           cache: true
       - run: flutter pub get

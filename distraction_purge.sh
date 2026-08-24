@@ -127,6 +127,8 @@ restore_packages() {
 }
 
 main() {
+	# shellcheck disable=SC2119  # intentional: no argument means "use $ADB_SERIAL, else the only device".
+	# Forwarding "$@" here would pass this script's own flags as a serial.
 	adb_select_device
 	adb_verify_trusted_identity
 

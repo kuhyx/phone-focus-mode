@@ -23,13 +23,15 @@ night_uids() {
         | sed 's/^package://' > "$map"
     # Piped rather than redirected on `done`: kcov instruments a trailing
     # `done < file` as a line bash never reports, which alone held this file
-    # below 100%. The loop only writes to stdout, so running it in the pipe's
-    # subshell changes nothing — unlike the pull_apks case in
-    # backup_capture.sh, nothing inside here consumes stdin.
-    cat "$plist" | while IFS= read -r pkg; do
+    # below 100%. Changed to a redirect 2026-08-24 anyway: CI's shellcheck
+    # rejects the `cat |` form (SC2002) and runs with no severity filter, and
+    # kcov is not in CI -- so the coverage artefact costs nothing there while
+    # the lint failure blocked every run. The loop only writes to stdout, so
+    # neither form changes behaviour.
+    while IFS= read -r pkg; do
         [ -z "$pkg" ] && continue
         awk -v p="$pkg" '$1 == p { sub(/uid:/,"",$2); print $2 }' "$map"
-    done
+    done <"$plist"
     rm -f "$map"
 }
 
@@ -61,14 +63,15 @@ fill_net_chain() {
     # the fast watchdog fork-free (no `pm list packages` on every rebuild).
     local uid
     if [ -f "$CURFEW_NET_UID_CACHE" ]; then
-        # Piped for the same reason as night_uids above: a trailing
-        # `done < file` is a line kcov counts and bash never reports. The
-        # loop's only effect is the iptw calls, which are external commands,
-        # so the pipe's subshell is immaterial here.
-        cat "$CURFEW_NET_UID_CACHE" | while IFS= read -r uid; do
+        # Redirected rather than piped, for the same reason as night_uids
+        # above: SC2002 fails CI, and the kcov line-count artefact that
+        # motivated the pipe does not apply there. The loop's only effect is
+        # the iptw calls, which are external commands, so the subshell
+        # question is immaterial either way.
+        while IFS= read -r uid; do
             case "$uid" in ''|*[!0-9]*) continue ;; esac
             iptw "$ipt" -A "$CURFEW_NET_IPT_CHAIN" -m owner --uid-owner "$uid" -j ACCEPT 2>/dev/null || true
-        done
+        done <"$CURFEW_NET_UID_CACHE"
     fi
     # Cut off every remaining ordinary APP uid (10000-19999 = user-0 app range).
     # Scoped to the app range so kernel/system sockets (no owner / low uids) are
