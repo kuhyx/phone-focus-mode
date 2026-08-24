@@ -1,6 +1,5 @@
 {
   "allowed_packages": [
-    "com.android.vending",
     "com.celzero.bravedns",
     "com.facebook.orca",
     "com.google.android.apps.maps",

@@ -112,25 +112,48 @@ def test_an_allowed_system_package_stays_sweepable() -> None:
     assert "com.android.vending" in payload["allowed_packages"]
 
 
-def test_always_blocked_exempts_youtube_chrome_and_play_from_the_geofence() -> None:
+def test_always_blocked_exempts_youtube_and_chrome_from_the_geofence() -> None:
     """The geofence must not become an off switch for these.
 
     Everything else is restored on the AWAY branch, which makes leaving the
     house a way to switch enforcement off -- the specific thing Device Owner
     was provisioned to remove.
 
-    Play joined this set on 2026-08-24. It was previously geofenced so apps
-    could still be installed away from home; the cost of that is an install
-    path for any browser in the store, which bypasses the app sweep for as
-    long as it takes the next pass to notice a package name it has never seen.
+    Play is deliberately absent, and that is NOT the same as Play being
+    allowed: see the test below. It is hidden at home by being absent from
+    both allowlists, and shown away because infakt cannot start without it.
     """
     always = policy_to_dict(_policy())["always_blocked_packages"]
 
     assert "com.google.android.youtube" in always
     assert "com.google.android.apps.youtube.music" in always
     assert "com.android.chrome" in always
-    assert "com.android.vending" in always
+    assert "com.android.vending" not in always
 
+
+def test_play_is_hidden_at_home_but_available_away() -> None:
+    """Play is geofenced, not allowed -- the distinction infakt forces.
+
+    Measured 2026-08-24: infakt is PairIP-wrapped and binds
+    ``com.android.vending.licensing.ILicensingService``, which lives inside the
+    vending package. Hiding Play makes infakt refuse to start outright, so Play
+    cannot be always-blocked. Blocking it AT HOME is what stops the
+    browser-install bypass, and the AWAY branch is the window where infakt can
+    be opened.
+
+    Encoded as a test because the two facts that produce this behaviour are far
+    apart -- absence from the allowlists, and absence from always-blocked --
+    and adding Play to either list would silently undo it.
+    """
+    payload = policy_to_dict(_policy())
+
+    # Absent from both allowlists => the AT_HOME and CURFEW branches hide it.
+    assert "com.android.vending" not in payload["allowed_packages"]
+    assert "com.android.vending" not in payload["night_allowed_packages"]
+    # Absent from always-blocked => the AWAY branch shows it again.
+    assert "com.android.vending" not in payload["always_blocked_packages"]
+    # Sweepable, or it would freeze in whatever state it was last left in.
+    assert "com.android.vending" in payload["blockable_system_packages"]
 
 def test_always_on_vpn_requires_a_sweep_protected_provider() -> None:
     """Pinning a package the enforcer can hide is the worst failure mode.

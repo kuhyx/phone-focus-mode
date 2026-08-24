@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Launcher-icon colours. Charcoal field from the shared icon family
+  (~/testsAndMisc/python_pkg/app_icons), with the accent used as the glyph.
+
+  The icon is a VECTOR adaptive icon rather than the usual generated PNG
+  mipmap set: this repo blocks binaries at commit time, and the app shipped
+  with no icon resource at all — the manifest referenced @mipmap/ic_launcher
+  and every release AND debug build failed on AAPT "resource not found".
+  That was true in the standalone focus-owner repo before it was absorbed, so
+  the app on the phone predates the breakage.
+
+  This is the minimal correct unblock, not a designed family icon. Registering
+  focus_owner with the shared generator in testsAndMisc is the proper fix and
+  is still outstanding.
+-->
+<resources>
+    <color name="ic_launcher_background">#1B1D21</color>
+</resources>

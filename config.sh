@@ -144,9 +144,11 @@ com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
 
-# com.android.vending is NOT here and must not be re-added: the Play Store is
-# now blocked at home, day and night. see
-# docs/DOCS-policy-lists.md#why-the-play-store-is-blocked
+# com.android.vending is NOT here and must not be re-added. Play is hidden at
+# home, day and night, and shown only on the AWAY branch -- absence from this
+# list AND from NIGHT_WHITELIST is what produces that. It is NOT in
+# ALWAYS_BLOCKED_PACKAGES either, because infakt cannot start without Play:
+# see docs/DOCS-policy-lists.md#why-the-play-store-is-blocked-at-home-only
 # NEVER put a dollar-sign reference or a double quote in this string, not even
 # in a comment: both break the list silently.
 

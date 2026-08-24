@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Glyph: a shield outline enclosing a keyhole — the enforcer holds the device
+  policy. Drawn inside the adaptive-icon safe zone (the inner 72x72 of the
+  108x108 canvas), so no part of it is cropped by a circular mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shield body -->
+    <path
+        android:fillColor="#E8EAED"
+        android:pathData="M54,28 L74,36 L74,54 C74,66 65,75 54,80 C43,75 34,66 34,54 L34,36 Z" />
+    <!-- Keyhole, punched out of the shield in the charcoal field colour -->
+    <path
+        android:fillColor="#1B1D21"
+        android:pathData="M54,45 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+    <path
+        android:fillColor="#1B1D21"
+        android:pathData="M51,50 L57,50 L58,64 L50,64 Z" />
+</vector>
