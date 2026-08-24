@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Device admin policy declaration.
+
+  Intentionally minimal: no <force-lock>, <wipe-data>, <disable-camera> or
+  password policies are requested. This build only needs the component to exist
+  so device owner can be provisioned and, more importantly, released again.
+  Capabilities are added alongside the enforcement that needs them.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies />
+</device-admin>
