@@ -89,6 +89,18 @@ checking in at 02:00 -- but it is not zero: a late shift that runs past
 23:00 still has to be checked out, and the alternative is an untracked day.
 Distraction risk is minimal for an app whose entire surface is one button.
 
+## Why com.kuhy.dufs_client is in the night list
+
+Client for the self-hosted dufs file server. Added 2026-08-25 at explicit
+request: allowed always, at home and inside the curfew window alike.
+
+Unlike `dev.kuhy.todo` and `com.kuhy.punchme` above, this is not only about
+keeping the deploy path open -- reaching your own files is treated as
+infrastructure rather than as a distraction, in the same category as the
+password manager (`com.kunzisoft.keepass.libre`), which is already allowed
+around the clock. It is a file browser against a server you host, not a
+content feed, so it has no endless surface to fall into at 02:00.
+
 ## Why the Play Store is blocked at home only
 
 Changed 2026-08-24. Play used to sit in the day list, geofenced *and*

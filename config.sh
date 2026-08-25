@@ -128,6 +128,7 @@ com.kunzisoft.keepass.libre
 
 # --- kuhy's own apps ---
 com.kuhy.diet_guard_app
+com.kuhy.dufs_client
 com.kuhy.home_inventory
 com.kuhy.lyricanki
 com.kuhy.punchme
@@ -201,6 +202,9 @@ dev.kuhy.todo
 # com.kuhy.punchme: same reason as dev.kuhy.todo -- keeps the deploy path
 # open. see docs/DOCS-policy-lists.md#why-comkuhypunchme-is-in-the-night-list
 com.kuhy.punchme
+# com.kuhy.dufs_client: always-allowed file access, day and night.
+# see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-in-the-night-list
+com.kuhy.dufs_client
 "
 
 # ============================================================
