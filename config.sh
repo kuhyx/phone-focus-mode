@@ -130,6 +130,7 @@ com.kunzisoft.keepass.libre
 com.kuhy.diet_guard_app
 com.kuhy.home_inventory
 com.kuhy.lyricanki
+com.kuhy.punchme
 com.kuhy.untools
 com.kuhy.wake_alarm_sync
 com.kuhy.workout_app
