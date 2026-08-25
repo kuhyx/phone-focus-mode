@@ -77,6 +77,18 @@ reach-a-bank / handle-an-emergency rule above -- writing an idea down at
 night is the one thing this app does, and losing the deploy path for six
 hours a day cost more than the distraction risk.
 
+## Why com.kuhy.punchme is in the night list
+
+Work-hours check-in/check-out tracker. Added 2026-08-25 for the same reason
+as `dev.kuhy.todo` above: it is in the day list, so a build shipped inside
+the curfew window would be installed and then silently removed by the
+enforcer, losing the deploy path for six hours a day.
+
+The night-usage case is weaker than todo's -- you are not meant to be
+checking in at 02:00 -- but it is not zero: a late shift that runs past
+23:00 still has to be checked out, and the alternative is an untracked day.
+Distraction risk is minimal for an app whose entire surface is one button.
+
 ## Why the Play Store is blocked at home only
 
 Changed 2026-08-24. Play used to sit in the day list, geofenced *and*

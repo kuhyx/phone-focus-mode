@@ -198,6 +198,9 @@ org.runnerup.free
 # dev.kuhy.todo: deliberate loosening of the night rule.
 # see docs/DOCS-policy-lists.md#why-devkuhytodo-is-in-the-night-list
 dev.kuhy.todo
+# com.kuhy.punchme: same reason as dev.kuhy.todo -- keeps the deploy path
+# open. see docs/DOCS-policy-lists.md#why-comkuhypunchme-is-in-the-night-list
+com.kuhy.punchme
 "
 
 # ============================================================
