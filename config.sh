@@ -165,12 +165,20 @@ org.runnerup.free
 export ALLOWED_PREFIXES="
 # Manga reader + its per-source extension apks.
 eu.kanade.tachiyomi
+# kuhy's own apps, day and night, including ones not written yet.
+# see docs/DOCS-policy-lists.md#why-every-comkuhy-devkuhy-package-is-allowed-by-prefix
+# NO TRAILING DOT: com.kuhy. matches nothing at all.
+com.kuhy
+dev.kuhy
 "
 
 # Prefixes that survive the curfew as well. Must be a subset of
 # $ALLOWED_PREFIXES, mirroring the NIGHT_WHITELIST/WHITELIST subset rule.
 export NIGHT_ALLOWED_PREFIXES="
 eu.kanade.tachiyomi
+# Same two prefixes as the day list: kuhy's apps stay reachable in the curfew.
+com.kuhy
+dev.kuhy
 "
 
 # NIGHT CURFEW WHITELIST -- what stays enabled at night and why, plus the
@@ -205,6 +213,9 @@ com.kuhy.punchme
 # com.kuhy.dufs_client: always-allowed file access, day and night.
 # see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-in-the-night-list
 com.kuhy.dufs_client
+# com.kuhy.workout_app: was day-only, so the curfew hid it. Covered by the
+# com.kuhy prefix above; listed here too so this stays a readable inventory.
+com.kuhy.workout_app
 "
 
 # ============================================================

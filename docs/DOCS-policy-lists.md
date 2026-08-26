@@ -27,12 +27,13 @@ These are the ONLY third-party apps that stay enabled during the curfew
 window (see NIGHT_CURFEW_* above). Everything else in $WHITELIST — browsers,
 social, messaging, email, stores, transit — is disabled.
 Allow-list by design: when in doubt, leave it OUT.
-EXCEPTION: $NIGHT_ALLOWED_PREFIXES is applied on top of this list, and it
-currently carries "eu.kanade.tachiyomi" — so manga IS available during the
-curfew, deliberately (chosen 2026-08-14). This paragraph used to say manga
-was disabled at night; it was true until that change. Do not "restore" it
-without also emptying $NIGHT_ALLOWED_PREFIXES, or the comment and the
-behaviour disagree again.
+EXCEPTION: $NIGHT_ALLOWED_PREFIXES is applied on top of this list. It carries
+"eu.kanade.tachiyomi" — so manga IS available during the curfew, deliberately
+(chosen 2026-08-14) — plus "com.kuhy" and "dev.kuhy" as of 2026-08-26, which
+make every app kuhy writes available at night (see the section below). This
+paragraph used to say manga was disabled at night; it was true until that
+change. Do not "restore" it without also emptying $NIGHT_ALLOWED_PREFIXES, or
+the comment and the behaviour disagree again.
 Parsed exactly like $WHITELIST (one package per line, '#' comments ignored).
 The sysprotect prefixes ($SYSTEM_NEVER_DISABLE) and the default-handler guard
 (dialer/SMS/home/browser/IME) still apply on TOP of this list, so the active
@@ -100,6 +101,74 @@ infrastructure rather than as a distraction, in the same category as the
 password manager (`com.kunzisoft.keepass.libre`), which is already allowed
 around the clock. It is a file browser against a server you host, not a
 content feed, so it has no endless surface to fall into at 02:00.
+
+## Why every com.kuhy / dev.kuhy package is allowed by prefix
+
+Added 2026-08-26. `com.kuhy` and `dev.kuhy` are in BOTH $ALLOWED_PREFIXES and
+$NIGHT_ALLOWED_PREFIXES, so every app kuhy writes is available at home, day and
+night, including apps that do not exist yet.
+
+This replaces a recurring chore with a rule. Three of the sections above
+(`dev.kuhy.todo`, `com.kuhy.punchme`, `com.kuhy.dufs_client`) exist because an
+app sat in the day list but not the night list, and a build shipped inside the
+curfew window was installed and then removed by the enforcer ~80ms later. That
+is not three incidents with three causes; it is one cause met three times.
+`com.kuhy.workout_app` was the fourth, fixed in this same change.
+`com.kuhy.focusstatus` was a fifth in waiting — referenced by four scripts and
+absent from both lists, so it would have been hidden the moment it was
+installed.
+
+The device settled the argument. When this change was verified during a real
+curfew (2026-08-26, 23:01), three installed apps turned out to be in NO list at
+all: `com.kuhy.macro_cam`, `dev.kuhy.kuhylog` and `dev.kuhy.octoforge`. The old
+exact-match policy was hiding them every night and nobody had noticed. They are
+allowed now purely by prefix, which is the whole point: the list had already
+drifted behind reality, and enumerating harder was never going to catch up.
+
+### Why this does not violate the narrow-prefix rule above
+
+"Allowed Package Prefixes" says prefixes are weaker by construction because they
+allow packages that do not yet exist, and to keep them narrow and
+vendor-specific. `com.kuhy` IS vendor-specific, and the usual danger does not
+apply here: there is no store on the device that can serve a `com.kuhy.*`
+package. Play is hidden at home, Aurora was removed, and installs are PC-side
+over `deploy.sh --sideload`. A package matching this prefix can only arrive by
+kuhy building and sideloading it — precisely the event this change exists to
+stop punishing. The prefix does not widen what can reach the device; it stops
+the enforcer deleting what was deliberately put there.
+
+Two prefixes rather than one because the apps use two vendor namespaces:
+`com.kuhy.*` for everything current, plus the older `dev.kuhy.todo`.
+
+### NO TRAILING DOT
+
+Write `com.kuhy`, never `com.kuhy.`. Matching is on whole labels
+(`FocusPolicy._matches_prefix`, mirrored in `FocusPolicy.kt`):
+
+    package == prefix || package.startswith(prefix + ".")
+
+A trailing dot therefore matches NOTHING — `com.kuhy.` fails even against
+`com.kuhy.workout_app` — and it fails silently, while still reading as correct.
+Whole-label matching is also why `com.kuhy` cannot leak to a lookalike vendor
+such as `com.kuhyevil.spy`.
+
+The explicit per-app entries in $WHITELIST and $NIGHT_WHITELIST are now
+redundant to the prefix and are kept on purpose: they are a readable inventory
+of what is actually installed, and they mean the lists do not depend solely on
+the prefix being right.
+
+`tests/test_policy_kuhy_apps.py` is the gate for all of the above, including the
+trailing-dot trap. A comment is not a gate.
+
+### One divergence, recorded rather than fixed
+
+`daemon_apps.sh` `is_allowed()` matches the whitelists with `grep -qxF` (exact)
+and applies prefixes only to `sysprotect.txt`, so that path ignores
+$ALLOWED_PREFIXES entirely. It does not affect the Pixel 6a, which is unrooted
+and enforced by `com.kuhy.focus_owner` as Device Owner reading the generated
+`policy.json`; the shell daemon is the rooted-device legacy path and is not
+running there. The divergence predates this change — `eu.kanade.tachiyomi` has
+the same blind spot — so bringing the two to parity is a separate change.
 
 ## Why the Play Store is blocked at home only
 

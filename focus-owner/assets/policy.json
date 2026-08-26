@@ -33,6 +33,8 @@
     "pl.nask.mobywatel"
   ],
   "allowed_prefixes": [
+    "com.kuhy",
+    "dev.kuhy",
     "eu.kanade.tachiyomi"
   ],
   "always_blocked_packages": [
@@ -117,6 +119,7 @@
     "com.kuhy.focus_owner",
     "com.kuhy.punchme",
     "com.kuhy.wake_alarm_sync",
+    "com.kuhy.workout_app",
     "com.kunzisoft.keepass.libre",
     "com.metrolist.music",
     "com.revolut.revolut",
@@ -131,6 +134,8 @@
     "pl.nask.mobywatel"
   ],
   "night_allowed_prefixes": [
+    "com.kuhy",
+    "dev.kuhy",
     "eu.kanade.tachiyomi"
   ],
   "private_dns_host": "",
