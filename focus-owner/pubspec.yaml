@@ -33,7 +33,7 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: 1.0.9
 
   # The shared palette. This app had drifted entirely off it -- a cool blue
   # accent while every other app is on the frozen gold -- so lib/theme.dart
@@ -41,7 +41,7 @@ dependencies:
   design_system:
     git:
       url: https://github.com/kuhyx/utils
-      ref: design_system-v0.1.0
+      ref: design_system-v0.2.1
       path: design_system
 
 dev_dependencies:
