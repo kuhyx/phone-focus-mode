@@ -75,14 +75,19 @@ newest available cache stale on every pass of an idle phone and block everything
 
 ## Policy
 
-Generated from `phone_focus_mode/config.sh`, never hand-edited:
+Generated from `config.sh`, never hand-edited. Run from the repo root:
 
 ```bash
-cd ~/testsAndMisc
-python3 -m python_pkg.focus_policy \
-  --config phone_focus_mode/config.sh \
-  --output focus_owner/assets/policy.json --redact-home
+python3 -m focus_policy --config config.sh --secrets config_secrets.sh \
+  --redact-home --output focus-owner/assets/policy.json
 ```
+
+`--secrets` is required even though `--redact-home` blanks the coordinates
+again: the loader refuses to start without `HOME_LAT`/`HOME_LON`. The file is
+untracked, so in CI (and on any machine that has never set a home location)
+point it at a throwaway containing any two numbers — the rendered output is
+identical either way. This is exactly what `tests/test_policy_asset_drift.py`
+does, and that test is the authority if this block ever drifts again.
 
 `--redact-home` is required — the committed asset must keep `latitude`/
 `longitude` null. Real coordinates live only in app-private storage, written by
@@ -102,7 +107,7 @@ in neither `packagesToHide` nor `packagesToShow`. Play Store is the live example
 ## Build and verify
 
 ```bash
-cd ~/testsAndMisc/focus_owner
+cd ~/phone-focus-mode/focus-owner
 flutter analyze && flutter test
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk (cd android && ./gradlew :app:testDebugUnitTest)
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --release
