@@ -118,6 +118,12 @@ org.fossify.phone
 org.fossify.messages
 org.fossify.contacts
 com.facebook.orca
+# org.thoughtcrime.securesms: added 2026-08-29. The signal-bot in ~/signal-bot
+# runs as a LINKED DEVICE of this account, and a linked device can only be
+# created by scanning a QR code in the phone app -- so hiding Signal makes the
+# bot unre-linkable, not merely inconvenient. Day list only: the link survives
+# the app being disabled, so it does not need a night exemption.
+org.thoughtcrime.securesms
 
 # --- Banking and identity (all device-paired over SMS; see docs) ---
 pl.mbank
