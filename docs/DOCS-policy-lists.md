@@ -102,6 +102,33 @@ password manager (`com.kunzisoft.keepass.libre`), which is already allowed
 around the clock. It is a file browser against a server you host, not a
 content feed, so it has no endless surface to fall into at 02:00.
 
+## Why org.thoughtcrime.securesms is in the night list
+
+Signal is messaging, and the curfew already keeps messaging reachable: the
+fossify phone, messages and contacts apps are all in the night list so you can
+still be called or texted at 02:00. Signal carries the same traffic for the
+people who use it, so excluding it made the curfew's own stated rule ("what is
+needed to answer the phone") true only for people who happen to text by SMS.
+
+**A correction, recorded rather than quietly fixed.** When Signal was first
+added to the day list on 2026-08-29 the comment justified it like this: the
+signal-bot in `~/signal-bot` runs as a *linked device* of this account, a
+linked device can only be created by scanning a QR code in the phone app, so
+hiding Signal would make the bot unre-linkable. It then concluded that the day
+list was enough, because "the link survives the app being disabled".
+
+That reasoning was wrong at both ends. The bot does not ride this account at
+all -- `scripts/register_bot.sh` registers it a **separate number** of its own,
+and `GET /v1/devices/<bot number>` returns exactly one device with `id: 1`.
+Device 1 is the primary; a linked device is 2 or higher. Verified 2026-08-29.
+So hiding Signal on this phone costs the bot nothing, and the entry is not
+load-bearing for it in either list.
+
+The real reasons Signal is whitelisted are narrower and worth stating plainly:
+it is kuhy's messaging app, and adding the bot to a *new* group has to be done
+from the phone app, because signal-cli cannot accept a group invitation
+addressed to a phone number.
+
 ## Why every com.kuhy / dev.kuhy package is allowed by prefix
 
 Added 2026-08-26. `com.kuhy` and `dev.kuhy` are in BOTH $ALLOWED_PREFIXES and

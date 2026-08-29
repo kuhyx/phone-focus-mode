@@ -118,11 +118,16 @@ org.fossify.phone
 org.fossify.messages
 org.fossify.contacts
 com.facebook.orca
-# org.thoughtcrime.securesms: added 2026-08-29. The signal-bot in ~/signal-bot
-# runs as a LINKED DEVICE of this account, and a linked device can only be
-# created by scanning a QR code in the phone app -- so hiding Signal makes the
-# bot unre-linkable, not merely inconvenient. Day list only: the link survives
-# the app being disabled, so it does not need a night exemption.
+# org.thoughtcrime.securesms: added 2026-08-29, night exemption added the same
+# day. Corrected on 2026-08-29: this entry used to say the signal-bot runs as a
+# LINKED DEVICE of this account and would become unre-linkable if Signal were
+# hidden. That is wrong. The bot has its OWN registered number and is its own
+# primary device -- GET /v1/devices for it returns a single device with id 1,
+# and a linked device would be id 2 or higher. Hiding Signal here costs the bot
+# nothing. It is whitelisted because it is kuhy's messaging app, in the same
+# category as the fossify phone/messages/contacts entries above, and because
+# adding the bot to a new group can only be done from the phone app.
+# see docs/DOCS-policy-lists.md#why-orgthoughtcrimesecuresms-is-in-the-night-list
 org.thoughtcrime.securesms
 
 # --- Banking and identity (all device-paired over SMS; see docs) ---
@@ -223,6 +228,11 @@ com.kuhy.dufs_client
 # com.kuhy.workout_app: was day-only, so the curfew hid it. Covered by the
 # com.kuhy prefix above; listed here too so this stays a readable inventory.
 com.kuhy.workout_app
+# org.thoughtcrime.securesms: messaging, same category as the fossify phone,
+# messages and contacts entries that are already here -- the curfew keeps you
+# reachable, and Signal is where kuhy is actually reached.
+# see docs/DOCS-policy-lists.md#why-orgthoughtcrimesecuresms-is-in-the-night-list
+org.thoughtcrime.securesms
 "
 
 # ============================================================
