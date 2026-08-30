@@ -93,6 +93,15 @@ does, and that test is the authority if this block ever drifts again.
 `longitude` null. Real coordinates live only in app-private storage, written by
 "Set home to current location" in the app.
 
+**Regenerating is only half of it.** `assets/policy.json` is a Flutter asset
+compiled *into the APK*; there is no push-only path for it, and
+`scripts/push_home_location.sh` moves coordinates rather than policy. So a
+whitelist change reaches the phone only after a rebuild **and** a reinstall.
+Editing `config.sh` and regenerating the asset changes nothing on the device
+until then — on 2026-08-29 that gap left Signal hidden through a whole night
+while the correct policy sat in the repo, because the enforcement pass was
+still reading the asset baked into the build from ten hours earlier.
+
 Allowlists are exact-match, plus `allowed_prefixes` / `night_allowed_prefixes`
 for apps that ship as a package family (Tachiyomi installs every source as its
 own apk). Prefixes match whole labels, so `eu.kanade.tachiyomi` covers
@@ -110,13 +119,21 @@ in neither `packagesToHide` nor `packagesToShow`. Play Store is the live example
 cd ~/phone-focus-mode/focus-owner
 flutter analyze && flutter test
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk (cd android && ./gradlew :app:testDebugUnitTest)
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --release
-adb -s 23181JEGR08034 install -r build/app/outputs/flutter-apk/app-release.apk
-adb -s 23181JEGR08034 shell am start -n com.kuhy.focus_owner/.MainActivity
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+  bash ~/.claude/scripts/phone_deploy.sh . --release --shot /tmp/focus-screen.png
 ```
 
 `JAVA_HOME` is required: the system default JDK 26 breaks the Android Gradle
 plugin's `jlink` transform.
+
+Build **through `phone_deploy.sh`**, not a bare `flutter build apk --release`.
+Flutter takes the build number from `pubspec.yaml`, which is still `1.0.0+1`,
+so a bare build stamps **versionCode 1** and the install is refused with
+`INSTALL_FAILED_VERSION_DOWNGRADE` against whatever is already on the phone
+(196 on 2026-08-29). The script reads the versionCode actually installed and
+passes `--build-number=<installed + 1>`, so it cannot regress; it also does the
+`install -r`, the launch and a screenshot. Building by hand means passing that
+flag yourself — never "fix" a downgrade error by uninstalling.
 
 Release build only — device owner refuses a debuggable one. Then tap **Run
 enforcement now** and read the status card; `EnforcementService` is not

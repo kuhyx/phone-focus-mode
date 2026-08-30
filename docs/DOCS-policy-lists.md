@@ -39,6 +39,14 @@ The sysprotect prefixes ($SYSTEM_NEVER_DISABLE) and the default-handler guard
 (dialer/SMS/home/browser/IME) still apply on TOP of this list, so the active
 keyboard and core system apps are protected even if omitted here.
 
+**NIGHT_WHITELIST must be a subset of WHITELIST.** The curfew list is a
+narrowing of the day list, never an addition to it, so a package added here
+has to be in WHITELIST too. This is an enforced invariant, not a convention:
+`focus_policy/model.py` raises `PolicyError: night_allowed_packages must be a
+subset of allowed_packages`, so violating it fails policy generation rather
+than shipping a phone that behaves oddly at 23:00. The same relationship holds
+for $NIGHT_ALLOWED_PREFIXES against $ALLOWED_PREFIXES.
+
 ## System packages that must never be disabled
 
 --- System / essential packages that must NEVER be disabled ---

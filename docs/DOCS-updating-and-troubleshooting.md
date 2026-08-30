@@ -2,6 +2,12 @@
 
 ## Updating
 
+> **This section is the rooted daemon path only.** On the Device Owner phone
+> (`focus-owner`) the policy is a Flutter asset compiled into the APK, so
+> pushing `config.sh` achieves nothing there — regenerate the asset, rebuild
+> and reinstall. See `focus-owner/README.md`, sections "Policy" and
+> "Build and verify".
+
 After editing `config.sh` (e.g. changing whitelist):
 
 ```bash
