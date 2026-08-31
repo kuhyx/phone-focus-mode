@@ -42,7 +42,9 @@
   "always_blocked_packages": [
     "com.android.chrome",
     "com.google.android.apps.youtube.music",
-    "com.google.android.youtube"
+    "com.google.android.youtube",
+    "com.ubercab",
+    "com.ubercab.eats"
   ],
   "always_on_vpn_package": "com.celzero.bravedns",
   "blockable_system_packages": [

@@ -88,6 +88,26 @@ ALWAYS_BLOCKED_PACKAGES = frozenset(
     },
 )
 
+# Third-party packages hidden everywhere, same geofence exemption as above.
+#
+# Separate from ALWAYS_BLOCKED_PACKAGES because the sweepability opt-in below
+# exists only for FLAG_SYSTEM apps, which the Kotlin runner skips. These are
+# ordinary installed apps: the runner already sees them, so requiring them in
+# BLOCKABLE_SYSTEM_PACKAGES would be wrong -- that set means "a system app we
+# have decided is safe to hide", which these are not.
+#
+# Added 2026-08-31: an Uber account deletion is in its 30-day grace window and
+# a single sign-in restores the account. The app is the likeliest relapse
+# route, so it stays hidden away from home too, where the geofence would
+# otherwise show it. Neither package is installed today; listing them is what
+# makes a reinstall-and-sign-in fail rather than succeed.
+ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES = frozenset(
+    {
+        "com.ubercab",
+        "com.ubercab.eats",
+    },
+)
+
 # The always-on VPN provider, pinned by the device owner on every pass.
 #
 # This is the network-level block: package hiding stops the YouTube app, but
@@ -126,10 +146,15 @@ VPN_LOCKDOWN = True
 # than the system Private DNS path, so a successful pin would carry no block.
 PRIVATE_DNS_HOST = ""
 
-# Every always-blocked package here is preinstalled, so it only ever reaches
-# the sweep by also being opted in above. Listing one without the other would
-# not error -- it would silently never be hidden, because the runner filters it
-# out of installedPackages before the decision layer sees it.
+# Every always-blocked package in ALWAYS_BLOCKED_PACKAGES is preinstalled, so it
+# only ever reaches the sweep by also being opted in above. Listing one without
+# the other would not error -- it would silently never be hidden, because the
+# runner filters it out of installedPackages before the decision layer sees it.
+#
+# ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES is deliberately NOT checked here: those
+# are not FLAG_SYSTEM, so the runner never filters them out and the opt-in does
+# not apply. Adding them to BLOCKABLE_SYSTEM_PACKAGES to satisfy this guard
+# would be a lie about what that set means.
 _UNSWEEPABLE = ALWAYS_BLOCKED_PACKAGES - BLOCKABLE_SYSTEM_PACKAGES
 if _UNSWEEPABLE:  # pragma: no cover - guards a constant, not a code path
     msg = (
@@ -199,7 +224,8 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         # `is_allowed` while still being emitted as always-blocked.
         "always_blocked_packages": sorted(
             pkg
-            for pkg in ALWAYS_BLOCKED_PACKAGES - {ENFORCER_PACKAGE}
+            for pkg in (ALWAYS_BLOCKED_PACKAGES | ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES)
+            - {ENFORCER_PACKAGE}
             if not policy.is_allowed(pkg)
         ),
         "vpn_lockdown": VPN_LOCKDOWN,

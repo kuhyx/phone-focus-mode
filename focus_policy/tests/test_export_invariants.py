@@ -41,17 +41,25 @@ def _policy(
     )
 
 
-def test_always_blocked_is_a_subset_of_blockable() -> None:
+def test_always_blocked_system_apps_are_a_subset_of_blockable() -> None:
     """An always-blocked system app the sweep cannot see would silently no-op.
 
     The runner filters FLAG_SYSTEM packages out of ``installedPackages``
     unless they are opted in, so the decision layer would never receive them.
-    """
-    payload = policy_to_dict(_policy())
 
-    assert set(payload["always_blocked_packages"]) <= set(
-        payload["blockable_system_packages"],
+    Scoped to the system set on purpose. Third-party always-blocked packages
+    are not FLAG_SYSTEM, so the runner never filters them and the opt-in does
+    not apply; asserting over the whole emitted list would force them into
+    BLOCKABLE_SYSTEM_PACKAGES, which would misstate what that set means.
+    """
+    from focus_policy.export import ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES
+
+    payload = policy_to_dict(_policy())
+    emitted_system = set(payload["always_blocked_packages"]) - (
+        ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES
     )
+
+    assert emitted_system <= set(payload["blockable_system_packages"])
 
 
 def test_always_blocked_never_contradicts_the_allowlist() -> None:
@@ -133,3 +141,27 @@ def test_redact_home_blanks_coordinates_but_keeps_geometry() -> None:
 def test_coordinates_survive_when_not_redacted() -> None:
     """The provisioning path still needs the real values."""
     assert '"latitude": 52.2297' in policy_to_json(_policy())
+
+
+def test_third_party_always_blocked_packages_reach_the_asset() -> None:
+    """Uber must be hidden away from home too, not just inside the geofence.
+
+    These are not FLAG_SYSTEM, so they are exempt from the
+    BLOCKABLE_SYSTEM_PACKAGES opt-in -- which means nothing else would catch it
+    if the union in `policy_to_dict` were dropped and they silently stopped
+    being emitted.
+    """
+    blocked = policy_to_dict(_policy())["always_blocked_packages"]
+
+    assert "com.ubercab" in blocked
+    assert "com.ubercab.eats" in blocked
+
+
+def test_third_party_always_blocked_are_not_claimed_to_be_system_apps() -> None:
+    """Satisfying the sweepability guard by lying about the set is the bug."""
+    from focus_policy.export import (
+        ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES,
+        BLOCKABLE_SYSTEM_PACKAGES,
+    )
+
+    assert not (ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES & BLOCKABLE_SYSTEM_PACKAGES)
