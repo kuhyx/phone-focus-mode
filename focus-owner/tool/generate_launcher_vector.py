@@ -35,7 +35,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RES = REPO_ROOT / "android" / "app" / "src" / "main" / "res"
-TESTS_AND_MISC = Path.home() / "testsAndMisc"
+TESTS_AND_MISC = Path.home() / "src/testsAndMisc"
 
 if str(TESTS_AND_MISC) not in sys.path:
     sys.path.insert(0, str(TESTS_AND_MISC))
