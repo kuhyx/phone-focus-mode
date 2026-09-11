@@ -120,7 +120,7 @@ needed to answer the phone") true only for people who happen to text by SMS.
 
 **A correction, recorded rather than quietly fixed.** When Signal was first
 added to the day list on 2026-08-29 the comment justified it like this: the
-signal-bot in `~/signal-bot` runs as a *linked device* of this account, a
+signal-bot in `~/src/signal-bot` runs as a *linked device* of this account, a
 linked device can only be created by scanning a QR code in the phone app, so
 hiding Signal would make the bot unre-linkable. It then concluded that the day
 list was enough, because "the link survives the app being disabled".

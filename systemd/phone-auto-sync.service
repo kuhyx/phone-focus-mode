@@ -4,6 +4,6 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/testsAndMisc/scripts/run_all/run_phone.sh auto
+ExecStart=%h/src/testsAndMisc/scripts/run_all/run_phone.sh auto
 StandardOutput=journal
 StandardError=journal

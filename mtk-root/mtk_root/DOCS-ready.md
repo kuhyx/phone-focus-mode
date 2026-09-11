@@ -5,7 +5,7 @@ existed on this desk. Read the status matrix before trusting any of it.
 
 ## Command sequence
 
-Run from `~/testsAndMisc/linux_configuration/scripts/mtk_root/`.
+Run from `~/src/testsAndMisc/linux_configuration/scripts/mtk_root/`.
 
 ```bash
 # 1. Confirm nothing rotted in transit. Expect "HOST READY".

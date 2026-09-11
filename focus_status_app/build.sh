@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
+SDK="${ANDROID_SDK_ROOT:-$HOME/sdk/Android/Sdk}"
 # Pick highest-numbered build-tools directory.
 # A glob into an array rather than parsing ls: a build-tools path containing a
 # space or newline would otherwise be split into garbage.

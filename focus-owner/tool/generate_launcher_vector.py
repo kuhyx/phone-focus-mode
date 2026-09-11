@@ -20,7 +20,7 @@ change to the glyph or to ``style.py``:
 
     python3 focus-owner/tool/generate_launcher_vector.py
 
-Requires ~/testsAndMisc on the path (the shared generator is not installed as
+Requires ~/src/testsAndMisc on the path (the shared generator is not installed as
 a package). Verified by ``flutter build apk --release``: if the conversion
 emits malformed pathData, AAPT fails the build rather than shipping a blank
 icon.
@@ -194,7 +194,7 @@ def _vector(colour: str, *, note: str) -> str:
         f"  {note}",
         "",
         f"  Glyph {APP.glyph!r} and accent {APP.accent} come from the shared icon",
-        "  family in ~/testsAndMisc/python_pkg/app_icons; this file is a",
+        "  family in ~/src/testsAndMisc/python_pkg/app_icons; this file is a",
         "  translation of that SVG into an Android vector drawable, taken",
         "  because this repo blocks binary mipmaps at commit time.",
         "-->",

@@ -44,7 +44,7 @@ source "${SCRIPT_DIR}/lib/adb_common.sh"
 # shellcheck source=lib/backup_capture.sh
 source "${SCRIPT_DIR}/lib/backup_capture.sh"
 
-OUT_ROOT="${HOME}/phone-backup"
+OUT_ROOT="${HOME}/data/phone-backup"
 PULL_APKS=1
 VERIFY_DIR=""
 

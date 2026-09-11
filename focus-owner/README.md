@@ -116,7 +116,7 @@ in neither `packagesToHide` nor `packagesToShow`. Play Store is the live example
 ## Build and verify
 
 ```bash
-cd ~/phone-focus-mode/focus-owner
+cd ~/src/phone-focus-mode/focus-owner
 flutter analyze && flutter test
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk (cd android && ./gradlew :app:testDebugUnitTest)
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk \

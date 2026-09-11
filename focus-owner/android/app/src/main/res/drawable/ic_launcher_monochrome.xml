@@ -4,7 +4,7 @@
   Android 13 themed layer; the system recolours flat white.
 
   Glyph 'padlock-closed' and accent #B8862E come from the shared icon
-  family in ~/testsAndMisc/python_pkg/app_icons; this file is a
+  family in ~/src/testsAndMisc/python_pkg/app_icons; this file is a
   translation of that SVG into an Android vector drawable, taken
   because this repo blocks binary mipmaps at commit time.
 -->

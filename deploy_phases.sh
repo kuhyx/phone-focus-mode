@@ -76,7 +76,7 @@ _deploy_stage_assets() {
 	# enforcement silently no-opped on every deploy instead of failing. The
 	# missing-generator branch is fatal now: a self-check that detects failure
 	# must gate, not warn. Override with HOSTS_GENERATOR to relocate it.
-	HOSTS_GENERATOR="${HOSTS_GENERATOR:-$HOME/hosts-blocker/generate_hosts_file.sh}"
+	HOSTS_GENERATOR="${HOSTS_GENERATOR:-$HOME/src/hosts-blocker/generate_hosts_file.sh}"
 	if [ ! -f "$HOSTS_GENERATOR" ]; then
 		echo "  ERROR: hosts generator not found at $HOSTS_GENERATOR" >&2
 		echo "         Clone github.com/kuhyx/hosts-blocker, or set HOSTS_GENERATOR." >&2
