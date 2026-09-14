@@ -61,8 +61,9 @@ class EnforcementService : Service() {
         // blocking the main thread for that long is an ANR. The foreground
         // notification is already showing, so the service is entitled to stay
         // alive for the few seconds this takes.
+        val freshFix = intent?.getBooleanExtra(EXTRA_FRESH_FIX, false) ?: false
         worker.execute {
-            runCatching { applyAndReschedule() }
+            runCatching { applyAndReschedule(freshFix) }
                 .onFailure {
                     Log.e(FocusDeviceAdminReceiver.TAG, "enforcement run failed", it)
                 }
@@ -93,7 +94,7 @@ class EnforcementService : Service() {
         false
     }
 
-    private fun applyAndReschedule() {
+    private fun applyAndReschedule(freshFix: Boolean) {
         val context = applicationContext
         // Genuinely scheduled FIRST, not merely in a finally. A finally covers
         // exceptions but not process death, and the pass now blocks up to
@@ -124,7 +125,10 @@ class EnforcementService : Service() {
             // pass timings from decide() through to the record apply() writes.
             // Constructing a second one silently discarded all of that.
             val runner = EnforcementRunner(context)
-            val decision = runner.decide()
+            val decision = runner.decide(
+                if (freshFix) LocationAcquisition.REFRESH_FRESH_WINDOW_MS
+                else EnforcementRunner.FRESH_WINDOW_MS,
+            )
             if (decision == null) {
                 Log.w(FocusDeviceAdminReceiver.TAG, "no decision - policy unreadable")
                 recordFailure(context, "policy unreadable - no decision made")
@@ -173,9 +177,13 @@ class EnforcementService : Service() {
         private const val CHANNEL_ID = "focus_enforcement"
         private const val NOTIFICATION_ID = 1
 
-        /** Starts one enforcement run. */
-        fun start(context: Context) {
+        /** Intent extra: acquire a fresh fix instead of trusting the cache. */
+        const val EXTRA_FRESH_FIX = "fresh_fix"
+
+        /** Starts one enforcement run; [freshFix] is what the refresh UI sets. */
+        fun start(context: Context, freshFix: Boolean = false) {
             val intent = Intent(context, EnforcementService::class.java)
+                .putExtra(EXTRA_FRESH_FIX, freshFix)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {

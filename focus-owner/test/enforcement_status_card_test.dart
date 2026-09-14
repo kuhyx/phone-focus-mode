@@ -16,33 +16,32 @@ EnforcementRecord _record({
   List<Object?> hidden = const [
     {'pkg': 'com.google.android.youtube', 'why': 'ALWAYS_BLOCKED'},
   ],
-}) =>
-    EnforcementRecord.fromJson({
-      'ts': DateTime.now()
-          .subtract(Duration(minutes: tsOffsetMinutes))
-          .millisecondsSinceEpoch,
-      'reason': reason,
-      'distance_m': distanceM,
-      'threshold_m': 180.0,
-      'inside_fence': true,
-      'home_configured': homeConfigured,
-      'fix': {
-        'age_ms': 45000,
-        'provider': 'gps',
-        'accuracy_m': fixAccuracyM,
-        'outcome': 'ACTIVE_OK',
-      },
-      'curfew_active': curfewActive,
-      'curfew_window': '23:00-05:00',
-      'counts': {
-        'to_hide': 3,
-        'to_show': 58,
-        'hid_delta': hidDelta,
-        'restored_delta': 0,
-      },
-      'hidden': hidden,
-      'failure': failure,
-    });
+}) => EnforcementRecord.fromJson({
+  'ts': DateTime.now()
+      .subtract(Duration(minutes: tsOffsetMinutes))
+      .millisecondsSinceEpoch,
+  'reason': reason,
+  'distance_m': distanceM,
+  'threshold_m': 180.0,
+  'inside_fence': true,
+  'home_configured': homeConfigured,
+  'fix': {
+    'age_ms': 45000,
+    'provider': 'gps',
+    'accuracy_m': fixAccuracyM,
+    'outcome': 'ACTIVE_OK',
+  },
+  'curfew_active': curfewActive,
+  'curfew_window': '23:00-05:00',
+  'counts': {
+    'to_hide': 3,
+    'to_show': 58,
+    'hid_delta': hidDelta,
+    'restored_delta': 0,
+  },
+  'hidden': hidden,
+  'failure': failure,
+});
 
 Future<void> _pump(WidgetTester tester, EnforcementRecord? record) =>
     tester.pumpWidget(
@@ -59,7 +58,10 @@ void main() {
   group('EnforcementStatusCard', () {
     testWidgets('says so when no pass has run yet', (tester) async {
       await _pump(tester, null);
-      expect(find.textContaining('No enforcement pass recorded'), findsOneWidget);
+      expect(
+        find.textContaining('No enforcement pass recorded'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows the reason, distance and curfew state', (tester) async {
@@ -70,8 +72,9 @@ void main() {
       expect(find.text('3 hidden, 58 available'), findsOneWidget);
     });
 
-    testWidgets('LOCATION_UNKNOWN is distinguishable from AT_HOME',
-        (tester) async {
+    testWidgets('LOCATION_UNKNOWN is distinguishable from AT_HOME', (
+      tester,
+    ) async {
       // The core of the bug being fixed: these two apply the identical sweep,
       // so without this the phone gives no way to tell them apart.
       await _pump(tester, _record(reason: 'LOCATION_UNKNOWN', distanceM: null));
@@ -80,8 +83,9 @@ void main() {
       expect(find.text('unknown - no location fix'), findsOneWidget);
     });
 
-    testWidgets('a missing home is called out rather than shown as AT_HOME',
-        (tester) async {
+    testWidgets('a missing home is called out rather than shown as AT_HOME', (
+      tester,
+    ) async {
       await _pump(tester, _record(homeConfigured: false));
       expect(find.text('NO HOME SET'), findsOneWidget);
       expect(find.text('no home set'), findsOneWidget);
@@ -108,8 +112,9 @@ void main() {
       expect(find.textContaining('schedule may have stalled'), findsOneWidget);
     });
 
-    testWidgets('changes made this pass are shown when non-zero',
-        (tester) async {
+    testWidgets('changes made this pass are shown when non-zero', (
+      tester,
+    ) async {
       await _pump(tester, _record(hidDelta: 2));
       expect(find.text('hid 2, restored 0'), findsOneWidget);
     });
@@ -127,8 +132,9 @@ void main() {
       expect(find.textContaining('Why these'), findsNothing);
     });
 
-    testWidgets('never renders anything that looks like a coordinate',
-        (tester) async {
+    testWidgets('never renders anything that looks like a coordinate', (
+      tester,
+    ) async {
       // The record carries no latitude/longitude by design; this pins that the
       // screen cannot start showing one.
       await _pump(tester, _record());
@@ -155,6 +161,35 @@ void main() {
       );
       await tester.tap(find.text('Debug log'));
       expect(opened, isTrue);
+    });
+
+    testWidgets('the location rows re-acquire a fix only when wired', (
+      tester,
+    ) async {
+      var tapped = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnforcementStatusCard(
+              record: _record(),
+              onOpenLog: () {},
+              onRefreshLocation: () => tapped++,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Location fix'));
+      await tester.tap(find.text('Distance from home'));
+      expect(tapped, 2);
+
+      // Without the callback the rows are plain text. Buttons elsewhere on
+      // the card own InkWells, so only the row's own ancestors count.
+      await _pump(tester, _record());
+      final rowInk = find.ancestor(
+        of: find.text('Location fix'),
+        matching: find.byType(InkWell),
+      );
+      expect(rowInk, findsNothing);
     });
   });
 

@@ -15,6 +15,7 @@ class _StatusBody extends StatelessWidget {
     required this.onRunNow,
     required this.onSetHome,
     required this.onLockVpn,
+    required this.onRefreshLocation,
     required this.hasHome,
     this.log = const [],
     this.onOpenLog,
@@ -28,6 +29,9 @@ class _StatusBody extends StatelessWidget {
   final Future<void> Function() onRunNow;
   final Future<void> Function() onSetHome;
   final Future<void> Function() onLockVpn;
+
+  /// Re-acquires a location fix; the card's location rows tap into it.
+  final Future<void> Function() onRefreshLocation;
 
   /// Whether home coordinates exist; without them enforcement is permanent.
   final bool hasHome;
@@ -48,6 +52,7 @@ class _StatusBody extends StatelessWidget {
         EnforcementStatusCard(
           record: log.isEmpty ? null : log.first,
           onOpenLog: onOpenLog ?? () {},
+          onRefreshLocation: busy ? null : onRefreshLocation,
         ),
         const SizedBox(height: kGap),
         _Row(label: 'Package', value: status.packageName),

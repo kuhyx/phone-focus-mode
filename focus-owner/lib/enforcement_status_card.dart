@@ -16,12 +16,18 @@ class EnforcementStatusCard extends StatelessWidget {
   const EnforcementStatusCard({
     required this.record,
     required this.onOpenLog,
+    this.onRefreshLocation,
     super.key,
   });
 
   /// The latest pass, or null when none has been recorded yet.
   final EnforcementRecord? record;
   final VoidCallback onOpenLog;
+
+  /// Tapping a location row re-acquires a fix. Null renders the rows
+  /// inert, both while a pass is already running and where there is no
+  /// pass to run.
+  final VoidCallback? onRefreshLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -63,15 +69,21 @@ class EnforcementStatusCard extends StatelessWidget {
             style: const TextStyle(color: kText, height: 1.35),
           ),
           const SizedBox(height: kGap),
-          _Field(label: 'Distance from home', value: latest.distanceLabel),
+          _Field(
+            label: 'Distance from home',
+            value: latest.distanceLabel,
+            onTap: onRefreshLocation,
+          ),
           _Field(
             label: 'Location fix',
             value: latest.fixLabel,
             danger: latest.fixLooksFuzzed,
+            onTap: onRefreshLocation,
           ),
           if (latest.fixLooksFuzzed)
             const _Note(
-              text: 'That accuracy is far wider than the fence, so the '
+              text:
+                  'That accuracy is far wider than the fence, so the '
                   'geofence cannot be trusted. Precise location is probably '
                   'not in effect.',
             ),
@@ -94,7 +106,8 @@ class EnforcementStatusCard extends StatelessWidget {
             ),
           if (_isStale(latest.timestamp))
             const _Note(
-              text: 'The last pass was over 30 minutes ago. Enforcement runs '
+              text:
+                  'The last pass was over 30 minutes ago. Enforcement runs '
                   'every 15 minutes, so the schedule may have stalled.',
               danger: true,
             ),

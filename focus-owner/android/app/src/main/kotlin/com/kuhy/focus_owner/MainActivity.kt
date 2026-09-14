@@ -89,7 +89,8 @@ class MainActivity : FlutterActivity() {
                         // Also the only way to arm the schedule on a device
                         // that has not rebooted since install: the service
                         // schedules the next run at the end of each pass.
-                        EnforcementService.start(applicationContext)
+                        val freshFix = call.argument<Boolean>("freshFix") ?: false
+                        EnforcementService.start(applicationContext, freshFix)
                         result.success(true)
                     }
                     "cancelEnforcement" -> {

@@ -35,8 +35,14 @@ class EnforcementRunner(private val context: Context) {
         val policy: FocusPolicy?,
     )
 
-    /** Builds the decision, or null when the policy cannot be read. */
-    fun decide(): EnforcementDecision? {
+    /**
+     * Builds the decision, or null when the policy cannot be read.
+     *
+     * [freshWindowMs] only steers the fetch (cache vs active request); the
+     * decision's own freshness test stays at [FRESH_WINDOW_MS] so a refresh
+     * whose active request times out decides exactly like an alarm pass.
+     */
+    fun decide(freshWindowMs: Long = FRESH_WINDOW_MS): EnforcementDecision? {
         val policy = try {
             FocusPolicy.load(context)
         } catch (e: Exception) {
@@ -51,7 +57,7 @@ class EnforcementRunner(private val context: Context) {
         // "never provisioned" apart from "could not get a fix" -- previously
         // both produced an identical LOCATION_UNKNOWN with nothing to
         // distinguish them.
-        val fix = acquireLocation()
+        val fix = acquireLocation(freshWindowMs = freshWindowMs)
         val fresh = fix.isFresh(FRESH_WINDOW_MS)
         pass = PassContext(fix = fix, homeConfigured = home != null, policy = policy)
         val calendar = Calendar.getInstance()

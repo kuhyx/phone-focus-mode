@@ -129,29 +129,37 @@ internal class LocationAcquisition(private val context: Context) {
      * the pass on a background executor for exactly this reason.
      */
     private fun requestCurrentFix(manager: LocationManager, timeoutMs: Long): LocationFix? {
-        val provider = PROVIDER_PREFERENCE.firstOrNull { manager.isProviderEnabled(it) }
-            ?: return null
+        val providers = PROVIDER_PREFERENCE.filter { manager.isProviderEnabled(it) }
+        if (providers.isEmpty()) return null
+        // Every enabled provider is asked at once and the first real answer
+        // wins. Asking only the preferred one (GPS) looked like a fallback
+        // chain but was not: indoors GPS never answered within the timeout,
+        // fused/network were never consulted, and a user-driven refresh came
+        // back as TIMEOUT with the same stale cache it was meant to replace.
         val latch = java.util.concurrent.CountDownLatch(1)
-        val holder = java.util.concurrent.atomic.AtomicReference<Location?>()
-        val signal = android.os.CancellationSignal()
+        val holder = java.util.concurrent.atomic.AtomicReference<LocationFix?>()
+        val pending = java.util.concurrent.atomic.AtomicInteger(providers.size)
+        val signals = providers.map { android.os.CancellationSignal() }
         // The main executor rather than a fresh one per call: the consumer
         // only stores a reference and counts down, so it does no work worth a
         // thread, and creating one per pass leaked ~96 threads a day.
-        manager.getCurrentLocation(
-            provider,
-            signal,
-            androidx.core.content.ContextCompat.getMainExecutor(context),
-        ) { location ->
-            holder.set(location)
-            latch.countDown()
+        val executor = androidx.core.content.ContextCompat.getMainExecutor(context)
+        providers.forEachIndexed { index, provider ->
+            manager.getCurrentLocation(provider, signals[index], executor) { location ->
+                val fix = location?.toFix(provider)
+                // Release as soon as one provider answers, or once all of
+                // them have said "nothing" -- no point sitting out the timeout.
+                if ((fix != null && holder.compareAndSet(null, fix)) ||
+                    pending.decrementAndGet() == 0
+                ) {
+                    latch.countDown()
+                }
+            }
         }
-        val answered = latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-        if (!answered) {
-            // Stop the provider working on a request nobody is waiting for.
-            runCatching { signal.cancel() }
-            return null
-        }
-        return holder.get()?.toFix(provider)
+        latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        // Stop providers working on a request nobody is waiting for.
+        signals.forEach { runCatching { it.cancel() } }
+        return holder.get()
     }
 
     /** Converts a platform [Location] into the fix the decision layer sees. */
@@ -183,11 +191,22 @@ internal class LocationAcquisition(private val context: Context) {
         const val FRESH_WINDOW_MS = 30L * 60L * 1000L
 
         /**
-         * Providers tried in order when requesting a fix.
+         * Cache window for a user-driven refresh.
          *
-         * GPS first because it is the only one accurate enough for a 150 m
-         * fence; fused and network are fallbacks that at least distinguish
-         * "same city" from "10 km away".
+         * The 30-minute window above is a battery trade-off for the alarm
+         * cadence. A tap on refresh means "where am I *now*": with the
+         * default window the pass handed back the same CACHED_FRESH fix
+         * and the card did not move, which read as the button doing
+         * nothing. Anything older than a few seconds goes to an active
+         * request instead.
+         */
+        const val REFRESH_FRESH_WINDOW_MS = 10_000L
+
+        /**
+         * Providers asked when requesting a fix -- all at once, first answer
+         * wins (see [requestCurrentFix]). GPS is the only one accurate enough
+         * for a 150 m fence; fused and network at least distinguish "same
+         * city" from "10 km away", and answer indoors where GPS does not.
          */
         private val PROVIDER_PREFERENCE = listOf(
             LocationManager.GPS_PROVIDER,

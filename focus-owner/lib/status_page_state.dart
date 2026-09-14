@@ -87,18 +87,29 @@ class _StatusPageState extends State<StatusPage> {
     }
   }
 
-  Future<void> _runNow() async {
+  /// Runs a pass and waits for its record. Also what the refresh icon and
+  /// the location rows do (with [freshFix]): re-reading the stored record
+  /// never acquired a fix, so the old refresh looked like a no-op.
+  Future<void> _runNow({bool freshFix = false}) async {
     setState(() => _busy = true);
-    final started = await widget.policy.runEnforcementNow();
-    if (started) await _awaitNewRecord();
+    var started = false;
+    try {
+      started = await widget.policy.runEnforcementNow(freshFix: freshFix);
+      if (started) await _awaitNewRecord();
+    } on PlatformException {
+      // Falls through to the "could not start" message.
+    } finally {
+      // Same reason as _refresh: a throwing channel must not wedge _busy.
+      if (mounted) setState(() => _busy = false);
+    }
     if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          started ? 'Enforcement run finished' : 'Could not start enforcement',
-        ),
-      ),
+    _showSnack(
+      context,
+      !started
+          ? 'Could not start enforcement'
+          : freshFix
+          ? 'Location refresh finished'
+          : 'Enforcement run finished',
     );
   }
 
@@ -132,12 +143,9 @@ class _StatusPageState extends State<StatusPage> {
     final failure = await widget.policy.setHomeToCurrentLocation();
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failure ?? 'Home set. Enforcement now applies here, not everywhere.',
-        ),
-      ),
+    _showSnack(
+      context,
+      failure ?? 'Home set. Enforcement now applies here, not everywhere.',
     );
     if (failure != null) {
       await _refresh();
@@ -166,12 +174,9 @@ class _StatusPageState extends State<StatusPage> {
     final ok = await widget.policy.setVpnConfigBlocked(blocked: true);
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok ? 'VPN configuration locked' : 'Could not lock - see logcat',
-        ),
-      ),
+    _showSnack(
+      context,
+      ok ? 'VPN configuration locked' : 'Could not lock - see logcat',
     );
     await _refresh();
   }
@@ -188,12 +193,9 @@ class _StatusPageState extends State<StatusPage> {
     final released = await widget.policy.releaseDeviceOwner();
     if (!mounted) return;
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          released ? 'Device owner released' : 'Release failed - see logcat',
-        ),
-      ),
+    _showSnack(
+      context,
+      released ? 'Device owner released' : 'Release failed - see logcat',
     );
     await _refresh();
   }
@@ -216,6 +218,7 @@ class _StatusPageState extends State<StatusPage> {
       busy: _busy,
       onRelease: _release,
       onRunNow: _runNow,
+      onRefreshLocation: () => _runNow(freshFix: true),
       onSetHome: _setHome,
       onLockVpn: _lockVpn,
       hasHome: _hasHome,
@@ -224,17 +227,9 @@ class _StatusPageState extends State<StatusPage> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: kField,
-        foregroundColor: kText,
-        title: const Text('Focus Owner'),
-        actions: [
-          IconButton(
-            onPressed: _busy ? null : _refresh,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-          ),
-        ],
+      appBar: _statusAppBar(
+        busy: _busy,
+        onRefresh: () => _runNow(freshFix: true),
       ),
       // Scrollable because the action list grew past a short screen: an
       // unreachable "Release device owner" button is the one control that

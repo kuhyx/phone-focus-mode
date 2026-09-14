@@ -16,6 +16,8 @@ part 'status_page_dialogs.dart';
 
 part 'status_body.dart';
 
+part 'status_app_bar.dart';
+
 void main() => runApp(const FocusOwnerApp());
 
 // The palette used to be duplicated here as `kField`…`kDanger`, byte for

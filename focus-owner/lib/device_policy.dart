@@ -51,15 +51,15 @@ class DevicePolicyStatus {
 class DevicePolicy {
   const DevicePolicy([this.channel = _defaultChannel]);
 
-  static const MethodChannel _defaultChannel =
-      MethodChannel('com.kuhy.focus_owner/device_policy');
+  static const MethodChannel _defaultChannel = MethodChannel(
+    'com.kuhy.focus_owner/device_policy',
+  );
 
   final MethodChannel channel;
 
   /// Reads the current provisioning state.
   Future<DevicePolicyStatus> status() async {
-    final result =
-        await channel.invokeMethod<Map<Object?, Object?>>('status');
+    final result = await channel.invokeMethod<Map<Object?, Object?>>('status');
     return DevicePolicyStatus.fromMap(result!);
   }
 
@@ -68,8 +68,16 @@ class DevicePolicy {
   /// The service schedules the following run at the end of each pass, so this
   /// is also how the chain is started on a device that has not rebooted since
   /// the app was installed.
-  Future<bool> runEnforcementNow() async =>
-      await channel.invokeMethod<bool>('runEnforcementNow') ?? false;
+  ///
+  /// [freshFix] makes the pass request a current location instead of
+  /// trusting a cached one. The alarm and the "Run now" button keep the
+  /// 30-minute cache window; the refresh UI sets this, because a refresh
+  /// that handed back the same cached fix looked like it did nothing.
+  Future<bool> runEnforcementNow({bool freshFix = false}) async =>
+      await channel.invokeMethod<bool>('runEnforcementNow', {
+        'freshFix': freshFix,
+      }) ??
+      false;
 
   /// Cancels any pending scheduled evaluation.
   Future<bool> cancelEnforcement() async =>
@@ -119,9 +127,8 @@ class DevicePolicy {
   /// Applied only after the VPN filter is confirmed working: pinning it over
   /// a broken configuration would lock the broken state in.
   Future<bool> setVpnConfigBlocked({required bool blocked}) async =>
-      await channel.invokeMethod<bool>(
-        'setVpnConfigBlocked',
-        {'blocked': blocked},
-      ) ??
+      await channel.invokeMethod<bool>('setVpnConfigBlocked', {
+        'blocked': blocked,
+      }) ??
       false;
 }
