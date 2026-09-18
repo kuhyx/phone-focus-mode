@@ -21,6 +21,8 @@ _deploy_push_scripts() {
 	adb_cmd push "$DEPLOY_DIR/config_curfew.sh" "/data/local/tmp/focus_stage/config_curfew.sh"
 	adb_cmd push "$DEPLOY_DIR/config_tether.sh" "/data/local/tmp/focus_stage/config_tether.sh"
 	adb_cmd push "$DEPLOY_DIR/config_launcher.sh" "/data/local/tmp/focus_stage/config_launcher.sh"
+	adb_cmd push "$DEPLOY_DIR/config_rethink.sh" "/data/local/tmp/focus_stage/config_rethink.sh"
+	adb_cmd push "$DEPLOY_DIR/config_whitelist.sh" "/data/local/tmp/focus_stage/config_whitelist.sh"
 	adb_cmd push "$DEPLOY_DIR/focus_daemon.sh" "/data/local/tmp/focus_stage/focus_daemon.sh"
 	adb_cmd push "$DEPLOY_DIR/daemon_location.sh" "/data/local/tmp/focus_stage/daemon_location.sh"
 	adb_cmd push "$DEPLOY_DIR/daemon_state.sh" "/data/local/tmp/focus_stage/daemon_state.sh"

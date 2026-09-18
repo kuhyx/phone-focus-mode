@@ -19,6 +19,8 @@ _deploy_install_files() {
 	adb_root "cp /data/local/tmp/focus_stage/config_curfew.sh      $REMOTE_DIR/config_curfew.sh"
 	adb_root "cp /data/local/tmp/focus_stage/config_tether.sh      $REMOTE_DIR/config_tether.sh"
 	adb_root "cp /data/local/tmp/focus_stage/config_launcher.sh    $REMOTE_DIR/config_launcher.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_rethink.sh     $REMOTE_DIR/config_rethink.sh"
+	adb_root "cp /data/local/tmp/focus_stage/config_whitelist.sh   $REMOTE_DIR/config_whitelist.sh"
 	adb_root "cp /data/local/tmp/focus_stage/focus_daemon.sh       $REMOTE_DIR/focus_daemon.sh"
 	adb_root "cp /data/local/tmp/focus_stage/daemon_location.sh    $REMOTE_DIR/daemon_location.sh"
 	adb_root "cp /data/local/tmp/focus_stage/daemon_state.sh       $REMOTE_DIR/daemon_state.sh"
