@@ -16,6 +16,8 @@ lib/              the libraries they source, split under a 250-line cap
 lib/tests/        35 shell suites
 focus_policy/     the Python half: parses config.sh into a typed policy and
                   exports the JSON asset that focus-owner consumes
+rethink_rules/    pushes config_rethink.sh's domains into RethinkDNS over
+                  adb/uiautomator (the app has no import path for rules)
 tests/            Python tests, plus mutation fixtures for the shell suites
 focus_status_app/ the on-phone status app
 docs/             design notes and policy lists
@@ -35,7 +37,7 @@ the enforcers simply behave as "not home" until it exists.
 ## Tests
 
 ```bash
-python -m pytest tests focus_policy -q     # 161 tests
+python -m pytest tests focus_policy rethink_rules -q
 for t in lib/tests/test_*.sh; do bash "$t"; done
 ```
 

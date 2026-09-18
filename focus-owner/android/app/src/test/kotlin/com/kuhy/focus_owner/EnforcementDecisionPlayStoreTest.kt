@@ -12,7 +12,7 @@
 // com.android.vending.licensing.ILicensingService, implemented INSIDE the
 // vending package. Hide Play and infakt refuses to start at all -- so the AWAY
 // branch is the window in which infakt can be used.
-// See docs/DOCS-policy-lists.md#why-the-play-store-is-blocked-at-home-only
+// See docs/DOCS-policy-play-store.md#why-the-play-store-is-blocked-at-home-only
 
 package com.kuhy.focus_owner
 import com.kuhy.focus_owner.EnforcementFixtures.homeLon

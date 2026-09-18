@@ -1,9 +1,9 @@
 [tool.pytest.ini_options]
-testpaths = ["tests", "focus_policy"]
+testpaths = ["tests", "focus_policy", "rethink_rules"]
 
 [tool.coverage.run]
 branch = true
-source = ["focus_policy"]
+source = ["focus_policy", "rethink_rules"]
 
 [tool.coverage.report]
 show_missing = true

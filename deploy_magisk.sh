@@ -125,7 +125,7 @@ do_sideload() {
 	echo "Sideloading $(basename "$apk")..."
 	if adb_cmd install -r "$apk"; then
 		echo "Installed. No store was involved, which is the point:"
-		echo "see docs/DOCS-policy-lists.md#installing-and-updating-apps-without-a-store"
+		echo "see docs/DOCS-policy-play-store.md#installing-and-updating-apps-without-a-store"
 	else
 		echo "ERROR: adb install failed for $apk"
 		return 1

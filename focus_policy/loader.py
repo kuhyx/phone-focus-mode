@@ -12,8 +12,8 @@ for policy, and raises rather than guessing at anything else.
 from __future__ import annotations
 
 from datetime import time
+from pathlib import Path
 import re
-from typing import TYPE_CHECKING
 
 from focus_policy.model import (
     CurfewWindow,
@@ -21,9 +21,6 @@ from focus_policy.model import (
     HomeLocation,
     PolicyError,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # Matches `export NAME="value"` / `NAME='value'` / `NAME=bare`, including the
 # multi-line quoted blocks config.sh uses for its package lists.
@@ -37,6 +34,37 @@ _HHMM_LEN = 4
 
 # A quoted value needs at least the opening and closing quote characters.
 _MIN_QUOTED_LEN = 2
+
+
+# `. "$SCRIPT_DIR/config_whitelist.sh"` at column 0 -- the unconditional include
+# form config.sh uses for its siblings. The secrets file is sourced INDENTED
+# inside an `if [ -f ... ]`, and is deliberately not matched: it is optional,
+# and load_policy reads it through its own ``secrets_path`` argument.
+_INCLUDE = re.compile(r'^\.\s+"\$SCRIPT_DIR/(?P<name>[A-Za-z0-9_.-]+)"\s*$', re.MULTILINE)
+
+
+def read_config_text(config_path: Path, *, _seen: frozenset[Path] = frozenset()) -> str:
+    """The file's text with every sibling it sources spliced in, in place.
+
+    config.sh grew past the 250-line cap and its lists were split into
+    config_*.sh siblings that it sources. The shell sees one namespace; this
+    makes the parser see the same one. Only an unconditional, column-0
+    ``. "$SCRIPT_DIR/x.sh"`` is followed, and a missing sibling is an error
+    rather than an empty list -- an empty WHITELIST would hide every app.
+    """
+    if config_path in _seen:
+        msg = f"{config_path}: config files source each other in a cycle"
+        raise PolicyError(msg)
+    text = config_path.read_text(encoding="utf-8")
+
+    def splice(match: re.Match[str]) -> str:
+        sibling = config_path.parent / match.group("name")
+        if not sibling.is_file():
+            msg = f"{config_path} sources {sibling.name}, which does not exist"
+            raise PolicyError(msg)
+        return read_config_text(sibling, _seen=_seen | {config_path})
+
+    return _INCLUDE.sub(splice, text)
 
 
 def parse_shell_assignments(text: str) -> dict[str, str]:
@@ -132,7 +160,7 @@ def load_policy(
     because it pins down where the user lives. It is read from a separate path
     and never embedded in this repository.
     """
-    values = parse_shell_assignments(config_path.read_text(encoding="utf-8"))
+    values = parse_shell_assignments(read_config_text(config_path))
 
     if secrets_path is None:
         secrets_path = config_path.parent / "config_secrets.sh"

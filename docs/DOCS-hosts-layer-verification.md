@@ -113,7 +113,7 @@ hiding packages) and by DNS. That is not a downgrade for the Play Store case in
 particular: Play is geofenced (hidden at home, shown away), and a static hosts
 file is one file identical in both places, so it could not express the geofence
 even with root. See `hosts_supplemental.txt`'s header and
-`DOCS-policy-lists.md#why-the-play-store-is-blocked-at-home-only`.
+`DOCS-policy-play-store.md#why-the-play-store-is-blocked-at-home-only`.
 
 `hosts_supplemental.txt` deliberately blocks nothing today. It is kept as the
 phone's hook for future phone-only blocks so the staging path and its guard

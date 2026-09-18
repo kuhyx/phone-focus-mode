@@ -1,7 +1,6 @@
 {
   "allowed_packages": [
     "com.celzero.bravedns",
-    "com.facebook.orca",
     "com.google.android.apps.maps",
     "com.google.android.apps.nexuslauncher",
     "com.google.android.calendar",
@@ -43,10 +42,14 @@
   ],
   "always_blocked_packages": [
     "com.android.chrome",
+    "com.bolt.deliveryclient",
+    "com.glovo",
     "com.google.android.apps.youtube.music",
     "com.google.android.youtube",
     "com.ubercab",
-    "com.ubercab.eats"
+    "com.ubercab.eats",
+    "com.wolt.android",
+    "com.yourdelivery.pyszne"
   ],
   "always_on_vpn_package": "com.celzero.bravedns",
   "blockable_system_packages": [

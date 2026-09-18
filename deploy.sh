@@ -160,7 +160,7 @@ HOSTS_MODULE_REBOOT_WAIT_SECS=180
 #
 #   ./deploy.sh <ip> --sideload /path/to/app.apk
 #
-# See docs/DOCS-policy-lists.md#installing-and-updating-apps-without-a-store
+# See docs/DOCS-policy-play-store.md#installing-and-updating-apps-without-a-store
 # for the infakt update procedure, which is the case this has to serve.
 
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from focus_policy.loader import load_policy
+from focus_policy.loader import load_policy, read_config_text
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONFIG = REPO_ROOT / "config.sh"
@@ -57,8 +57,9 @@ def _policy(tmp_path: pathlib.Path):
 
 
 def _declared_packages() -> set[str]:
-    """Return every kuhy-owned package named anywhere in config.sh."""
-    return set(_PACKAGE_RE.findall(CONFIG.read_text(encoding="utf-8")))
+    """Return every kuhy-owned package named anywhere in config.sh or the
+    siblings it sources (the allowlists moved to config_whitelist.sh)."""
+    return set(_PACKAGE_RE.findall(read_config_text(CONFIG)))
 
 
 def test_config_declares_the_apps_we_expect() -> None:

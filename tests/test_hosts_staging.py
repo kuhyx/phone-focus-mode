@@ -202,6 +202,8 @@ def test_missing_supplemental_fails_closed(tmp_path: pathlib.Path) -> None:
         "config_tether.sh",
         "config_dns.sh",
         "config_launcher.sh",
+        "config_rethink.sh",
+        "config_whitelist.sh",
         "deploy_phases.sh",
         "deploy_magisk.sh",
         "strip_workout_hosts.py",

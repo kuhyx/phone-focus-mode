@@ -81,7 +81,7 @@ jobs:
           python-version: "3.x"
       - run: pip install pytest
       - name: python tests
-        run: python -m pytest tests focus_policy -q
+        run: python -m pytest tests focus_policy rethink_rules -q
 
   flutter:
     # focus-owner's job, unchanged. It is the one absorbed suite that needs a
