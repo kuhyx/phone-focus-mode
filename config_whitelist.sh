@@ -63,6 +63,10 @@ com.kuhy.signalbot_remote
 com.kuhy.untools
 com.kuhy.wake_alarm_sync
 com.kuhy.workout_app
+# com.kuhy.workout_app.sandbox: the workout app's sandbox flavor -- its own
+# package and data, so a whole workout can be driven on the phone without
+# touching the real one. Deployed by phone_deploy.sh --flavor sandbox.
+com.kuhy.workout_app.sandbox
 dev.kuhy.todo
 
 # --- Daily utility ---
@@ -144,6 +148,8 @@ com.kuhy.dufs_client
 # com.kuhy.workout_app: was day-only, so the curfew hid it. Covered by the
 # com.kuhy prefix above; listed here too so this stays a readable inventory.
 com.kuhy.workout_app
+# com.kuhy.workout_app.sandbox: same as above, for the sandbox flavor.
+com.kuhy.workout_app.sandbox
 # org.thoughtcrime.securesms: messaging, same category as the fossify phone,
 # messages and contacts entries that are already here -- the curfew keeps you
 # reachable, and Signal is where kuhy is actually reached.
