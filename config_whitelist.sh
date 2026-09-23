@@ -58,6 +58,10 @@ com.kuhy.home_guard
 com.kuhy.home_inventory
 com.kuhy.lyricanki
 com.kuhy.punchme
+# com.kuhy.punchme.sandbox: the punchme app's sandbox flavor -- its own
+# package and data, so test punches never reach the real synced timesheet.
+# Deployed by phone_deploy.sh --flavor sandbox.
+com.kuhy.punchme.sandbox
 com.kuhy.restaurant_rater
 com.kuhy.signalbot_remote
 com.kuhy.untools
@@ -142,6 +146,8 @@ dev.kuhy.todo
 # com.kuhy.punchme: same reason as dev.kuhy.todo -- keeps the deploy path
 # open. see docs/DOCS-policy-lists.md#why-comkuhypunchme-is-in-the-night-list
 com.kuhy.punchme
+# com.kuhy.punchme.sandbox: same as above, for the sandbox flavor.
+com.kuhy.punchme.sandbox
 # com.kuhy.dufs_client is deliberately NOT here. It is night-blocked instead
 # by the NIGHT_BLOCKED_PACKAGES list further down this file (no dollar sign
 # here -- see the NEVER-put-a-dollar-sign warning above).
