@@ -1,14 +1,25 @@
-"""Gate: every app kuhy writes stays available, day and night.
+"""Gate: every app kuhy writes stays available, day and night --
+
+with one deliberate, named exception.
 
 `config.sh` allows `com.kuhy` and `dev.kuhy` as PREFIXES, so an app kuhy has
 not written yet is allowed the moment it is installed. That guarantee is the
 point of the prefix, and a comment cannot enforce it -- these tests can.
 
-Four of these apps have already been bitten. `dev.kuhy.todo`,
-`com.kuhy.punchme` and `com.kuhy.dufs_client` each earned their own section in
-docs/DOCS-policy-lists.md after a build shipped inside the curfew window was
-installed and then removed by the enforcer; `com.kuhy.workout_app` was the
-fourth. One cause, met four times, which is what the prefix replaces.
+Four apps have already been bitten by the day-list-but-not-night-list version
+of this bug. `dev.kuhy.todo`, `com.kuhy.punchme` and `com.kuhy.dufs_client`
+each earned their own section in docs/DOCS-policy-lists.md after a build
+shipped inside the curfew window was installed and then removed by the
+enforcer; `com.kuhy.workout_app` was the fourth. One cause, met four times,
+which is what the prefix replaces.
+
+`com.kuhy.dufs_client` is now the ONE deliberate exception to the night half
+of the guarantee: it is in `NIGHT_BLOCKED_PACKAGES`
+(docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-night-blocked), a policy
+tier that wins over the `com.kuhy` night prefix for that one package without
+touching the prefix itself. `test_every_kuhy_app_is_allowed_day_and_night`
+below asserts the general guarantee for every kuhy app EXCEPT this one, and a
+separate test pins the exception down explicitly so it cannot silently grow.
 
 The trailing-dot assertion is the important one. Matching is on whole labels::
 
@@ -43,6 +54,11 @@ HYPOTHETICAL = ("com.kuhy.does_not_exist_yet", "dev.kuhy.does_not_exist_yet")
 # Whole-label matching must not let a lookalike vendor in on the prefix.
 LOOKALIKES = ("com.kuhyevil.spy", "dev.kuhyevil.spy", "com.kuhysomething")
 
+# The one deliberate, documented exception to "every kuhy app, day and
+# night": night-blocked despite matching the com.kuhy night prefix.
+# see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-night-blocked
+NIGHT_BLOCKED_EXCEPTION = "com.kuhy.dufs_client"
+
 
 def _policy(tmp_path: pathlib.Path):
     """Load the real config.sh, with throwaway coordinates for the secrets.
@@ -72,13 +88,30 @@ def test_config_declares_the_apps_we_expect() -> None:
 
 
 def test_every_kuhy_app_is_allowed_day_and_night(tmp_path: pathlib.Path) -> None:
-    """Every kuhy-owned package in config.sh survives both branches."""
+    """Every kuhy-owned package in config.sh survives both branches, except
+    the one documented night-blocked exception."""
     policy = _policy(tmp_path)
-    for package in sorted(_declared_packages()):
+    for package in sorted(_declared_packages() - {NIGHT_BLOCKED_EXCEPTION}):
         assert policy.is_allowed(package), f"{package} is hidden during the day"
         assert policy.is_allowed(package, during_curfew=True), (
             f"{package} is hidden by the night curfew"
         )
+
+
+def test_night_blocked_exception_is_day_allowed_but_night_blocked(
+    tmp_path: pathlib.Path,
+) -> None:
+    """com.kuhy.dufs_client stays available all day and away from home, but
+    is denied during curfew despite matching the com.kuhy night prefix."""
+    policy = _policy(tmp_path)
+    assert NIGHT_BLOCKED_EXCEPTION in _declared_packages()
+    assert NIGHT_BLOCKED_EXCEPTION in policy.night_blocked_packages
+    assert policy.is_allowed(NIGHT_BLOCKED_EXCEPTION), (
+        f"{NIGHT_BLOCKED_EXCEPTION} must stay allowed during the day"
+    )
+    assert not policy.is_allowed(NIGHT_BLOCKED_EXCEPTION, during_curfew=True), (
+        f"{NIGHT_BLOCKED_EXCEPTION} must be denied during curfew"
+    )
 
 
 def test_future_kuhy_apps_are_allowed_before_they_are_listed(

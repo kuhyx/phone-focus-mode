@@ -11,9 +11,9 @@ for policy, and raises rather than guessing at anything else.
 
 from __future__ import annotations
 
+import re
 from datetime import time
 from pathlib import Path
-import re
 
 from focus_policy.model import (
     CurfewWindow,
@@ -40,7 +40,9 @@ _MIN_QUOTED_LEN = 2
 # form config.sh uses for its siblings. The secrets file is sourced INDENTED
 # inside an `if [ -f ... ]`, and is deliberately not matched: it is optional,
 # and load_policy reads it through its own ``secrets_path`` argument.
-_INCLUDE = re.compile(r'^\.\s+"\$SCRIPT_DIR/(?P<name>[A-Za-z0-9_.-]+)"\s*$', re.MULTILINE)
+_INCLUDE = re.compile(
+    r'^\.\s+"\$SCRIPT_DIR/(?P<name>[A-Za-z0-9_.-]+)"\s*$', re.MULTILINE
+)
 
 
 def read_config_text(config_path: Path, *, _seen: frozenset[Path] = frozenset()) -> str:
@@ -207,5 +209,8 @@ def load_policy(
         ),
         night_allowed_prefixes=tuple(
             sorted(parse_package_list(values.get("NIGHT_ALLOWED_PREFIXES", "")))
+        ),
+        night_blocked_packages=parse_package_list(
+            values.get("NIGHT_BLOCKED_PACKAGES", "")
         ),
     )

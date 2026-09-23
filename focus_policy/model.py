@@ -10,102 +10,15 @@ a form any backend can load.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 from typing import TYPE_CHECKING
+
+from focus_policy.geometry import CurfewWindow, HomeLocation, PolicyError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from datetime import time
 
-
-_MAX_LATITUDE = 90.0
-_MAX_LONGITUDE = 180.0
-_EARTH_RADIUS_M = 6_371_000.0
-
-
-class PolicyError(ValueError):
-    """Raised when a policy value is missing, malformed, or self-contradictory."""
-
-
-@dataclass(frozen=True)
-class HomeLocation:
-    """The coordinate that focus mode is anchored to.
-
-    ``radius_m`` is the distance at which restrictions switch on.
-    ``hysteresis_m`` is added to the radius before restrictions switch back
-    *off*, so that GPS jitter at exactly the boundary cannot cause the enforcer
-    to flap between states many times a minute.
-    """
-
-    latitude: float
-    longitude: float
-    radius_m: float = 150.0
-    hysteresis_m: float = 30.0
-
-    def __post_init__(self) -> None:
-        """Reject coordinates and distances that cannot describe a real place."""
-        if not -_MAX_LATITUDE <= self.latitude <= _MAX_LATITUDE:
-            msg = f"latitude {self.latitude} outside [-90, 90]"
-            raise PolicyError(msg)
-        if not -_MAX_LONGITUDE <= self.longitude <= _MAX_LONGITUDE:
-            msg = f"longitude {self.longitude} outside [-180, 180]"
-            raise PolicyError(msg)
-        if self.radius_m <= 0:
-            msg = f"radius_m must be positive, got {self.radius_m}"
-            raise PolicyError(msg)
-        if self.hysteresis_m < 0:
-            msg = f"hysteresis_m must not be negative, got {self.hysteresis_m}"
-            raise PolicyError(msg)
-
-    def distance_m(self, latitude: float, longitude: float) -> float:
-        """Return great-circle metres from home to the given point.
-
-        Mirrors the Haversine formula in ``focus_daemon.sh`` so that the Python
-        policy layer and the shell enforcer agree on the same boundary.
-        """
-        lat1, lat2 = math.radians(self.latitude), math.radians(latitude)
-        delta_lat = math.radians(latitude - self.latitude)
-        delta_lon = math.radians(longitude - self.longitude)
-        haversine = (
-            math.sin(delta_lat / 2) ** 2
-            + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
-        )
-        return 2 * _EARTH_RADIUS_M * math.asin(math.sqrt(haversine))
-
-    def is_inside(
-        self,
-        latitude: float,
-        longitude: float,
-        *,
-        currently_focused: bool,
-    ) -> bool:
-        """Return whether this point counts as "at home", honouring hysteresis.
-
-        The threshold depends on the current state: leaving requires travelling
-        ``hysteresis_m`` further than arriving did. Without this a reading that
-        hovers on the radius toggles enforcement on every poll.
-        """
-        threshold = self.radius_m + (self.hysteresis_m if currently_focused else 0.0)
-        return self.distance_m(latitude, longitude) <= threshold
-
-
-@dataclass(frozen=True)
-class CurfewWindow:
-    """A nightly window that wraps midnight (e.g. 23:00 -> 05:00)."""
-
-    start: time
-    end: time
-
-    def contains(self, moment: time) -> bool:
-        """Return whether ``moment`` falls inside the window.
-
-        Handles both same-day windows (09:00-17:00) and the wrapping windows
-        focus mode actually uses (23:00-05:00), where "inside" means at or after
-        the start *or* strictly before the end.
-        """
-        if self.start <= self.end:
-            return self.start <= moment < self.end
-        return moment >= self.start or moment < self.end
+__all__ = ["CurfewWindow", "FocusPolicy", "HomeLocation", "PolicyError"]
 
 
 @dataclass(frozen=True)
@@ -125,6 +38,13 @@ class FocusPolicy:
     # stale the moment a new extension is installed.
     allowed_prefixes: tuple[str, ...] = ()
     night_allowed_prefixes: tuple[str, ...] = ()
+    # Packages that stay day-allowed but are denied during curfew even though
+    # they match allowed_prefixes/night_allowed_prefixes. Exists because a
+    # prefix (e.g. com.kuhy) is a blanket guarantee for a whole vendor
+    # namespace, and a single app within it (com.kuhy.dufs_client) can need a
+    # narrower night rule without weakening that guarantee for every other app
+    # under the same prefix. See docs/DOCS-policy-lists.md#why-comkuhydufs-client-is-night-blocked.
+    night_blocked_packages: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         """Reject policies that would lock the user out of the device."""
@@ -149,6 +69,45 @@ class FocusPolicy:
             msg = (
                 "night_allowed_prefixes must be a subset of allowed_prefixes; "
                 f"unknown at day level: {sorted(prefix_orphans)}"
+            )
+            raise PolicyError(msg)
+        # Day-allowed means either the exact list or a day prefix match, since
+        # a package like com.kuhy.dufs_client is only exact-listed by
+        # convention -- a package allowed purely through allowed_prefixes must
+        # be nameable here too.
+        night_blocked_unknown = {
+            pkg for pkg in self.night_blocked_packages if not self.is_allowed(pkg)
+        }
+        if night_blocked_unknown:
+            msg = (
+                "night_blocked_packages must be day-allowed (exact or prefix); "
+                f"unknown at day level: {sorted(night_blocked_unknown)}"
+            )
+            raise PolicyError(msg)
+        night_blocked_conflict = (
+            self.night_blocked_packages & self.night_allowed_packages
+        )
+        if night_blocked_conflict:
+            msg = (
+                "night_blocked_packages contradicts night_allowed_packages: "
+                f"{sorted(night_blocked_conflict)}"
+            )
+            raise PolicyError(msg)
+        if self.launcher_package in self.night_blocked_packages:
+            msg = (
+                f"launcher {self.launcher_package!r} must not be in "
+                "night_blocked_packages; enforcing this policy would leave the "
+                "device with no home screen during curfew"
+            )
+            raise PolicyError(msg)
+        night_blocked_protected = {
+            pkg for pkg in self.night_blocked_packages if self.is_protected(pkg)
+        }
+        if night_blocked_protected:
+            msg = (
+                "night_blocked_packages must not include protected packages "
+                f"(never_disable_prefixes already guarantees them): "
+                f"{sorted(night_blocked_protected)}"
             )
             raise PolicyError(msg)
 
@@ -185,6 +144,8 @@ class FocusPolicy:
         if self.is_protected(package):
             return True
         if during_curfew:
+            if package in self.night_blocked_packages:
+                return False
             return package in self.night_allowed_packages or self._matches_prefix(
                 package,
                 self.night_allowed_prefixes,

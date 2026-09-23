@@ -142,9 +142,10 @@ dev.kuhy.todo
 # com.kuhy.punchme: same reason as dev.kuhy.todo -- keeps the deploy path
 # open. see docs/DOCS-policy-lists.md#why-comkuhypunchme-is-in-the-night-list
 com.kuhy.punchme
-# com.kuhy.dufs_client: always-allowed file access, day and night.
-# see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-in-the-night-list
-com.kuhy.dufs_client
+# com.kuhy.dufs_client is deliberately NOT here. It is night-blocked instead
+# by the NIGHT_BLOCKED_PACKAGES list further down this file (no dollar sign
+# here -- see the NEVER-put-a-dollar-sign warning above).
+# docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-night-blocked
 # com.kuhy.workout_app: was day-only, so the curfew hid it. Covered by the
 # com.kuhy prefix above; listed here too so this stays a readable inventory.
 com.kuhy.workout_app
@@ -155,4 +156,14 @@ com.kuhy.workout_app.sandbox
 # reachable, and Signal is where kuhy is actually reached.
 # see docs/DOCS-policy-lists.md#why-orgthoughtcrimesecuresms-is-in-the-night-list
 org.thoughtcrime.securesms
+"
+
+# NIGHT-BLOCKED PACKAGES -- day-allowed apps denied during curfew even though
+# $ALLOWED_PREFIXES / $NIGHT_ALLOWED_PREFIXES would otherwise cover them.
+# Exists because com.kuhy is a blanket night guarantee for every app kuhy
+# writes, present or future, and a single app within it can need a narrower
+# night rule without weakening that guarantee for the rest.
+# see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-night-blocked
+export NIGHT_BLOCKED_PACKAGES="
+com.kuhy.dufs_client
 "

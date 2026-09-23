@@ -125,7 +125,6 @@
     "com.celzero.bravedns",
     "com.google.android.apps.nexuslauncher",
     "com.google.android.deskclock",
-    "com.kuhy.dufs_client",
     "com.kuhy.focus_owner",
     "com.kuhy.punchme",
     "com.kuhy.wake_alarm_sync",
@@ -149,6 +148,9 @@
     "com.kuhy",
     "dev.kuhy",
     "eu.kanade.tachiyomi"
+  ],
+  "night_blocked_packages": [
+    "com.kuhy.dufs_client"
   ],
   "private_dns_host": "",
   "schema_version": 1,

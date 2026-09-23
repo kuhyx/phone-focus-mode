@@ -98,17 +98,49 @@ checking in at 02:00 -- but it is not zero: a late shift that runs past
 23:00 still has to be checked out, and the alternative is an untracked day.
 Distraction risk is minimal for an app whose entire surface is one button.
 
-## Why com.kuhy.dufs_client is in the night list
+## Why com.kuhy.dufs_client is night-blocked
 
-Client for the self-hosted dufs file server. Added 2026-08-25 at explicit
-request: allowed always, at home and inside the curfew window alike.
+Client for the self-hosted dufs file server. Added to `WHITELIST` (day list)
+2026-08-25, and to `NIGHT_WHITELIST` the same day at explicit request: allowed
+always, at home and inside the curfew window alike, reasoning it as
+infrastructure in the same category as the password manager
+(`com.kunzisoft.keepass.libre`).
 
-Unlike `dev.kuhy.todo` and `com.kuhy.punchme` above, this is not only about
-keeping the deploy path open -- reaching your own files is treated as
-infrastructure rather than as a distraction, in the same category as the
-password manager (`com.kunzisoft.keepass.libre`), which is already allowed
-around the clock. It is a file browser against a server you host, not a
-content feed, so it has no endless surface to fall into at 02:00.
+**Reversed 2026-09-23, at explicit request.** dufs is still allowed at home
+during the day and away from home at any hour -- only the curfew branch
+changed. The app is now in `NIGHT_BLOCKED_PACKAGES`
+(`focus_policy.model.FocusPolicy.night_blocked_packages`), a new policy tier
+that wins over both `NIGHT_WHITELIST` and a matching entry in
+`NIGHT_ALLOWED_PREFIXES`.
+
+That last part is why a new tier was needed rather than just deleting the
+`NIGHT_WHITELIST` line: `com.kuhy.dufs_client` also matches the `com.kuhy`
+prefix in `NIGHT_ALLOWED_PREFIXES` (see below), which by itself would still
+have kept it visible at night. Removing `com.kuhy` from the night prefix list
+instead was rejected -- that prefix exists specifically so an app kuhy has not
+written yet is allowed the moment it is installed, and dropping it would
+resurrect the exact bug it was added to fix on 2026-08-26 (new `com.kuhy.*`
+apps silently hidden every night until someone remembered to list them). One
+named app now gets a narrower rule without weakening that guarantee for every
+other app under the same prefix.
+
+Enforcement precedence during curfew, both in `focus_policy.model.FocusPolicy`
+and its Kotlin mirror `FocusPolicy.kt`: a protected system package (never
+disabled) always wins; then `night_blocked_packages` (deny); then
+`night_allowed_packages` or a `night_allowed_prefixes` match (allow); anything
+else is denied. `night_blocked_packages` must be a subset of the day
+`allowed_packages`, must not also appear in `night_allowed_packages`, and must
+not name the launcher or any protected package -- `FocusPolicy.__post_init__`
+raises `PolicyError` rather than accept a self-contradictory or
+lock-out-capable policy.
+
+On the Pixel 6a, "hidden" is `DevicePolicyManager.setApplicationHidden`, not
+an uninstall -- reversible, no data loss, just unreachable from 23:00 to
+05:00 while at home (`focus-owner/.../PolicyPinning.kt`). The rooted legacy
+shell path (`daemon_apps.sh`) needs no equivalent change: it matches
+`NIGHT_WHITELIST` exactly and ignores `$NIGHT_ALLOWED_PREFIXES` and
+`$NIGHT_BLOCKED_PACKAGES` entirely (see "One divergence" below), so removing
+the `NIGHT_WHITELIST` entry was already enough there.
 
 ## Why org.thoughtcrime.securesms is in the night list
 

@@ -38,6 +38,17 @@ data class FocusPolicy(
     val allowedPrefixes: Set<String> = emptySet(),
     /** Prefixes that survive the curfew. Subset of [allowedPrefixes]. */
     val nightAllowedPrefixes: Set<String> = emptySet(),
+    /**
+     * Packages denied during curfew even when a prefix in [nightAllowedPrefixes]
+     * would otherwise cover them.
+     *
+     * A prefix like `com.kuhy` is a blanket night guarantee for a whole vendor
+     * namespace; this is the narrow per-app exception that guarantee cannot
+     * express on its own. Checked before both [nightAllowedPackages] and the
+     * prefix match. Absent from an older asset parses to the empty set, which
+     * restores today's behaviour of never overriding the prefix.
+     */
+    val nightBlockedPackages: Set<String> = emptySet(),
     val workoutUnblockDomains: Set<String>,
     val curfew: CurfewWindow?,
     val launcherPackage: String?,
@@ -98,6 +109,7 @@ data class FocusPolicy(
     fun isAllowed(packageName: String, duringCurfew: Boolean): Boolean {
         if (isProtected(packageName)) return true
         if (packageName == launcherPackage) return true
+        if (duringCurfew && packageName in nightBlockedPackages) return false
         val allowed = if (duringCurfew) nightAllowedPackages else allowedPackages
         if (packageName in allowed) return true
         val prefixes = if (duringCurfew) nightAllowedPrefixes else allowedPrefixes
@@ -179,6 +191,7 @@ data class FocusPolicy(
                 neverDisablePrefixes = json.stringSet("never_disable_prefixes"),
                 allowedPrefixes = json.optionalStringSet("allowed_prefixes"),
                 nightAllowedPrefixes = json.optionalStringSet("night_allowed_prefixes"),
+                nightBlockedPackages = json.optionalStringSet("night_blocked_packages"),
                 workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
                 blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
                 alwaysBlockedPackages = json.optionalStringSet("always_blocked_packages"),

@@ -42,6 +42,7 @@ __all__ = [
     "policy_to_json",
 ]
 
+
 def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
     """Return a JSON-serialisable representation of ``policy``."""
     curfew: dict[str, str] | None = None
@@ -71,6 +72,13 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         # exactly the previous exact-match-only behaviour.
         "allowed_prefixes": sorted(policy.allowed_prefixes),
         "night_allowed_prefixes": sorted(policy.night_allowed_prefixes),
+        # Packages that win over both night_allowed_packages and a matching
+        # prefix during curfew -- the narrow exception a vendor-wide prefix
+        # like com.kuhy cannot express on its own. The enforcer is subtracted
+        # defensively; FocusPolicy already refuses to construct with it here.
+        "night_blocked_packages": sorted(
+            policy.night_blocked_packages - {ENFORCER_PACKAGE},
+        ),
         "workout_unblock_domains": sorted(policy.workout_unblock_domains),
         "browser_packages": sorted(policy.browser_packages),
         # Absent from an older asset, so the Kotlin loader must treat a

@@ -25,6 +25,7 @@ def _policy(
     launcher_package: str | None = None,
     allowed_prefixes: tuple[str, ...] = (),
     night_allowed_prefixes: tuple[str, ...] = (),
+    night_blocked_packages: frozenset[str] = frozenset(),
 ) -> FocusPolicy:
     """Build a small policy, overriding individual fields per test."""
     return FocusPolicy(
@@ -44,6 +45,7 @@ def _policy(
         launcher_package=launcher_package,
         allowed_prefixes=allowed_prefixes,
         night_allowed_prefixes=night_allowed_prefixes,
+        night_blocked_packages=night_blocked_packages,
     )
 
 
@@ -166,3 +168,61 @@ class TestFocusPolicy:
         assert policy.packages_to_block(installed, during_curfew=True) == frozenset(
             {"com.good"},
         )
+
+    def test_night_blocked_package_wins_over_a_matching_night_prefix(self) -> None:
+        """A single package can be denied at night even though a whole-vendor
+        prefix would otherwise cover it -- the com.kuhy.dufs_client case."""
+        policy = _policy(
+            allowed_packages=frozenset({"com.good", "pl.mbank", "com.launcher"}),
+            allowed_prefixes=("com.vendor",),
+            night_allowed_prefixes=("com.vendor",),
+            night_blocked_packages=frozenset({"com.vendor.blocked"}),
+        )
+        # Allowed by day list too so the subset invariant is satisfied.
+        assert policy.is_allowed("com.vendor.blocked")
+        assert policy.is_allowed("com.vendor.other", during_curfew=True)
+        assert not policy.is_allowed("com.vendor.blocked", during_curfew=True)
+
+    def test_night_blocked_wins_even_via_the_exact_day_list(self) -> None:
+        """Day allowance alone is not enough at night once night-blocked."""
+        policy = _policy(night_blocked_packages=frozenset({"com.good"}))
+        assert policy.is_allowed("com.good")
+        assert not policy.is_allowed("com.good", during_curfew=True)
+
+    def test_protected_packages_ignore_night_blocked(self) -> None:
+        """A protected system package cannot be locked out via this tier."""
+        policy = _policy()
+        assert policy.is_allowed("com.android.settings", during_curfew=True)
+
+    def test_night_blocked_must_be_a_subset_of_day_allowed(self) -> None:
+        """Blocking a package the day policy never allowed is contradictory."""
+        with pytest.raises(PolicyError, match="night_blocked_packages"):
+            _policy(night_blocked_packages=frozenset({"com.unknown"}))
+
+    def test_night_blocked_must_not_contradict_night_allowed(self) -> None:
+        """A package cannot be both night-allowed and night-blocked."""
+        with pytest.raises(PolicyError, match="night_blocked_packages"):
+            _policy(
+                night_allowed_packages=frozenset({"pl.mbank", "com.good"}),
+                allowed_packages=frozenset({"com.good", "pl.mbank", "com.launcher"}),
+                night_blocked_packages=frozenset({"com.good"}),
+            )
+
+    def test_night_blocked_must_not_include_the_launcher(self) -> None:
+        """Night-blocking the launcher would leave no home screen at night."""
+        with pytest.raises(PolicyError, match="no home screen"):
+            _policy(
+                launcher_package="com.launcher",
+                night_blocked_packages=frozenset({"com.launcher"}),
+            )
+
+    def test_night_blocked_must_not_include_a_protected_package(self) -> None:
+        """never_disable_prefixes already guarantees a protected package;
+        naming it here too would be a self-contradiction."""
+        with pytest.raises(PolicyError, match="night_blocked_packages"):
+            _policy(
+                allowed_packages=frozenset(
+                    {"com.good", "pl.mbank", "com.launcher", "com.android.settings"},
+                ),
+                night_blocked_packages=frozenset({"com.android.settings"}),
+            )
