@@ -93,6 +93,7 @@ data class EnforcementDecision(
             // Computed before the AWAY return so every branch can report it.
             // The window is a property of the clock, not of where the phone is.
             val duringCurfew = policy.isCurfewActive(inputs.minutesSinceMidnight)
+            val lockdown = inputs.lockdownActive
 
             // Exempt from every branch below, including AWAY and WORKOUT.
             // Restricted to packages actually present, so the sets stay a
@@ -102,7 +103,10 @@ data class EnforcementDecision(
                 .filterNot { policy.isProtected(it) }
                 .toSet()
 
-            if (hasFix && !atHome) {
+            // A workday lockdown beats AWAY: being at the office is not an
+            // exemption from a morning that was skipped, so unlike every
+            // other branch this one is NOT gated on hasFix/atHome.
+            if (hasFix && !atHome && !lockdown) {
                 return EnforcementDecision(
                     reason = EnforcementReason.AWAY,
                     packagesToHide = alwaysBlocked,
@@ -116,10 +120,14 @@ data class EnforcementDecision(
             }
 
             val reason = when {
+                lockdown -> EnforcementReason.WORKDAY_LOCKDOWN
                 !hasFix -> EnforcementReason.LOCATION_UNKNOWN
                 duringCurfew -> EnforcementReason.CURFEW
                 else -> EnforcementReason.AT_HOME
             }
+            // Lockdown applies the same strict (night-style) allowlist a
+            // curfew does, regardless of the actual curfew window.
+            val strict = duringCurfew || lockdown
 
             val hide = mutableSetOf<String>()
             val show = mutableSetOf<String>()
@@ -128,11 +136,11 @@ data class EnforcementDecision(
                 if (pkg in alwaysBlocked) {
                     hide.add(pkg)
                     why[pkg] = HideReason.ALWAYS_BLOCKED
-                } else if (policy.isAllowed(pkg, duringCurfew)) {
+                } else if (policy.isAllowed(pkg, strict)) {
                     show.add(pkg)
                 } else {
                     hide.add(pkg)
-                    why[pkg] = if (duringCurfew) {
+                    why[pkg] = if (strict) {
                         HideReason.NOT_IN_NIGHT_ALLOWLIST
                     } else {
                         HideReason.NOT_IN_ALLOWLIST

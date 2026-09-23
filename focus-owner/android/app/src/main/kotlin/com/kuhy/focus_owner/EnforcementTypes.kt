@@ -35,6 +35,9 @@ enum class EnforcementReason {
     CURFEW,
     WORKOUT,
     LOCATION_UNKNOWN,
+
+    /** A missed workday wake-alarm; see [WorkdayLockdown]. Beats AWAY and location. */
+    WORKDAY_LOCKDOWN,
 }
 
 /** Inputs to one enforcement decision. */
@@ -51,6 +54,14 @@ data class EnforcementInputs(
      */
     val currentlyEnforcing: Boolean = false,
     val workoutActive: Boolean = false,
+    /**
+     * Whether [WorkdayLockdown] has today marked as a missed-alarm day.
+     *
+     * Forces the strict (night-style) allowlist regardless of location or
+     * curfew, and overrides AWAY -- being at the office is not an exemption
+     * from a morning that was skipped.
+     */
+    val lockdownActive: Boolean = false,
     /**
      * The fix these coordinates came from, carried for the log only.
      *

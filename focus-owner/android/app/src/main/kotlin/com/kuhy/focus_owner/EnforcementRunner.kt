@@ -93,6 +93,7 @@ class EnforcementRunner(private val context: Context) {
                 // hysteresis -- biasing every borderline call toward AT_HOME.
                 currentlyEnforcing = wasInsideFence(),
                 workoutActive = false,
+                lockdownActive = WorkdayLockdown.isActiveToday(context),
                 fix = fix,
             ),
         )
