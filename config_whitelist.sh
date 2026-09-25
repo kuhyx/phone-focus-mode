@@ -53,8 +53,8 @@ com.kunzisoft.keepass.libre
 
 # --- kuhy's own apps ---
 # com.kuhy.a11ydump: android_ui's test-only helper (no UI, no network, never
-# launched). `am instrument` runs it to read a session's virtual display by
-# element; hidden, every `android_ui --display` call fails. It has no
+# launched). am instrument runs it to read a session's virtual display by
+# element; hidden, every android_ui --display call fails. It has no
 # launcher icon, but the sweep covers all installed apps, not launchable ones.
 com.kuhy.a11ydump
 com.kuhy.diet_guard_app
