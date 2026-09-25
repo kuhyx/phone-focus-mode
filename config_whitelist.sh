@@ -64,6 +64,7 @@ com.kuhy.punchme
 com.kuhy.punchme.sandbox
 com.kuhy.restaurant_rater
 com.kuhy.signalbot_remote
+com.kuhy.umbrella
 com.kuhy.untools
 com.kuhy.wake_alarm_sync
 com.kuhy.workout_app
