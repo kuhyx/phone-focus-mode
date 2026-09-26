@@ -57,6 +57,7 @@ com.kunzisoft.keepass.libre
 # element; hidden, every android_ui --display call fails. It has no
 # launcher icon, but the sweep covers all installed apps, not launchable ones.
 com.kuhy.a11ydump
+com.kuhy.book_guard_app
 com.kuhy.diet_guard_app
 com.kuhy.dufs_client
 com.kuhy.home_guard
