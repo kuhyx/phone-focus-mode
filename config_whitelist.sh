@@ -97,6 +97,9 @@ eu.kanade.tachiyomi.sy
 # see docs/DOCS-policy-play-store.md#why-it-is-not-blocked-away-from-home-and-cannot-be
 com.xiaomi.smarthome
 com.mervio.viomi
+# Home Assistant companion (F-Droid minimal flavour, no Play Services): the FOSS
+# UI for the PC-hosted Home Assistant that drives the vacuum over the LAN.
+io.homeassistant.companion.android.minimal
 
 # com.android.vending is NOT here and must not be re-added. Play is hidden at
 # home, day and night, and shown only on the AWAY branch -- absence from this
