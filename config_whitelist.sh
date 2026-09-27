@@ -89,6 +89,15 @@ com.ichi2.anki
 com.metrolist.music
 eu.kanade.tachiyomi.sy
 
+# --- Home appliances (Viomi V3 robot vacuum; no abuse potential) ---
+# Both installed from Play-stamped APKs: Xiaomi Home pairs the robot and holds
+# the cloud token; com.mervio.viomi is Viomi's own app (Mervio = Viomi overseas).
+# com.mervio.viomi is PairIP-wrapped like infakt, so it only starts where Play
+# is visible (AWAY branch); at home it shows a Check that Google Play is enabled dialog.
+# see docs/DOCS-policy-play-store.md#why-it-is-not-blocked-away-from-home-and-cannot-be
+com.xiaomi.smarthome
+com.mervio.viomi
+
 # com.android.vending is NOT here and must not be re-added. Play is hidden at
 # home, day and night, and shown only on the AWAY branch -- absence from this
 # list AND from NIGHT_WHITELIST is what produces that. It is NOT in
