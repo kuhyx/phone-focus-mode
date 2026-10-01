@@ -1,6 +1,6 @@
 #!/bin/bash
 # config_whitelist.sh -- the app allowlists: WHITELIST (day), NIGHT_WHITELIST
-# (curfew) and the prefix lists. Split out of config.sh on 2026-09-18 for the
+# (curfew), LOCKDOWN_WHITELIST (missed-workday lockdown) and the prefix lists. Split out of config.sh on 2026-09-18 for the
 # 250-line cap; the content and its rationale comments are unchanged.
 #
 # Sourced by config.sh, which exports SCRIPT_DIR first. focus_policy.loader
@@ -191,4 +191,38 @@ org.thoughtcrime.securesms
 # see docs/DOCS-policy-lists.md#why-comkuhydufs_client-is-night-blocked
 export NIGHT_BLOCKED_PACKAGES="
 com.kuhy.dufs_client
+"
+
+# WORKDAY LOCKDOWN WHITELIST -- what stays enabled while wake-alarm's
+# missed-workday lockdown is in force (LOCKDOWN_UNTIL_EOD, possibly several
+# days, home or away). Narrower than the night list: calls, SMS, Signal, maps,
+# banking + the password manager that holds the TOTP seeds, wake-alarm, todo,
+# RunnerUp and punchme.
+# Exact names only -- the com.kuhy / dev.kuhy prefixes deliberately do NOT
+# apply here, or every kuhy app would survive the lockdown. Must be a subset
+# of WHITELIST. SYSTEM_NEVER_DISABLE and the launcher still apply on top.
+# No transit/ticket app is installed, so none is listed.
+# see docs/DOCS-workday-lockdown.md
+export LOCKDOWN_WHITELIST="
+com.google.android.apps.nexuslauncher
+com.kuhy.focus_owner
+org.fossify.phone
+org.fossify.messages
+org.fossify.contacts
+org.thoughtcrime.securesms
+com.google.android.apps.maps
+pl.mbank
+com.revolut.revolut
+pl.infakt.infakt
+pl.nask.mobywatel
+com.kunzisoft.keepass.libre
+com.kuhy.wake_alarm_sync
+dev.kuhy.todo
+# Kept on purpose: the lockdown targets distractions, not obligations.
+# RunnerUp exports the TCX that screen-locker's workout verification reads;
+# punchme is the work-hours tracker, needed on exactly the workdays a lockdown
+# hits. Only the real punchme -- its .sandbox flavor is for test punches.
+org.runnerup
+org.runnerup.free
+com.kuhy.punchme
 "

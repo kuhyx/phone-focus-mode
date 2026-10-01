@@ -125,9 +125,14 @@ data class EnforcementDecision(
                 duringCurfew -> EnforcementReason.CURFEW
                 else -> EnforcementReason.AT_HOME
             }
-            // Lockdown applies the same strict (night-style) allowlist a
-            // curfew does, regardless of the actual curfew window.
-            val strict = duringCurfew || lockdown
+            // Lockdown has its own list and beats the curfew one: at 23:30
+            // under a lockdown the reason is WORKDAY_LOCKDOWN, so the list
+            // applied must be the one that reason names.
+            val tier = when {
+                lockdown -> AllowlistTier.LOCKDOWN
+                duringCurfew -> AllowlistTier.NIGHT
+                else -> AllowlistTier.DAY
+            }
 
             val hide = mutableSetOf<String>()
             val show = mutableSetOf<String>()
@@ -136,15 +141,11 @@ data class EnforcementDecision(
                 if (pkg in alwaysBlocked) {
                     hide.add(pkg)
                     why[pkg] = HideReason.ALWAYS_BLOCKED
-                } else if (policy.isAllowed(pkg, strict)) {
+                } else if (policy.isAllowed(pkg, tier)) {
                     show.add(pkg)
                 } else {
                     hide.add(pkg)
-                    why[pkg] = if (strict) {
-                        HideReason.NOT_IN_NIGHT_ALLOWLIST
-                    } else {
-                        HideReason.NOT_IN_ALLOWLIST
-                    }
+                    why[pkg] = tier.hideReason
                 }
             }
 

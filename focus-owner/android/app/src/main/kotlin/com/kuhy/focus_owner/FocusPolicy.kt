@@ -1,7 +1,6 @@
 package com.kuhy.focus_owner
 
 import android.content.Context
-import org.json.JSONObject
 import java.io.File
 
 /**
@@ -95,6 +94,16 @@ data class FocusPolicy(
      * and no device owner API can stop that.
      */
     val privateDnsHost: String? = null,
+    /**
+     * Exact-match allowlist for wake-alarm's workday lockdown, or null when
+     * the asset predates it -- in which case the lockdown keeps applying the
+     * night list, which is what it did before this tier existed. Never read
+     * as "allow nothing": that would hide the dialer for days.
+     *
+     * No prefix list on purpose. `com.kuhy` would keep every kuhy app visible
+     * through a lockdown that exists to take them away.
+     */
+    val lockdownAllowedPackages: Set<String>? = null,
 ) {
     /**
      * Whether a package must never be hidden.
@@ -106,9 +115,22 @@ data class FocusPolicy(
         matchesPrefix(packageName, neverDisablePrefixes)
 
     /** Whether a package may run under the given conditions. */
-    fun isAllowed(packageName: String, duringCurfew: Boolean): Boolean {
+    fun isAllowed(packageName: String, duringCurfew: Boolean): Boolean =
+        isAllowed(packageName, if (duringCurfew) AllowlistTier.NIGHT else AllowlistTier.DAY)
+
+    /**
+     * Whether a package may run under [tier].
+     *
+     * Protected packages and the launcher win in every tier, the lockdown one
+     * included, so a lockdown can never take away the home screen or settings.
+     */
+    fun isAllowed(packageName: String, tier: AllowlistTier): Boolean {
         if (isProtected(packageName)) return true
         if (packageName == launcherPackage) return true
+        if (tier == AllowlistTier.LOCKDOWN && lockdownAllowedPackages != null) {
+            return packageName in lockdownAllowedPackages
+        }
+        val duringCurfew = tier != AllowlistTier.DAY
         if (duringCurfew && packageName in nightBlockedPackages) return false
         val allowed = if (duringCurfew) nightAllowedPackages else allowedPackages
         if (packageName in allowed) return true
@@ -164,88 +186,7 @@ data class FocusPolicy(
         /** Reads a policy from a file, for tests and for overrides. */
         fun loadFile(file: File): FocusPolicy = parse(file.readText())
 
-        /** Parses a rendered policy document. */
-        fun parse(text: String): FocusPolicy {
-            val json = JSONObject(text)
-            val version = json.optInt("schema_version", -1)
-            if (version != SUPPORTED_SCHEMA_VERSION) {
-                // Accepting a newer schema would mean enforcing a policy this
-                // code has misread, and a misread allowlist blocks the dialer.
-                throw PolicyFormatException(
-                    "unsupported schema_version $version " +
-                        "(this build understands $SUPPORTED_SCHEMA_VERSION)",
-                )
-            }
-            val home = json.optJSONObject("home")
-                ?: throw PolicyFormatException("missing \"home\" object")
-            val curfewJson = json.optJSONObject("curfew")
-            return FocusPolicy(
-                home = HomeLocation(
-                    latitude = if (home.isNull("latitude")) null else home.getDouble("latitude"),
-                    longitude = if (home.isNull("longitude")) null else home.getDouble("longitude"),
-                    radiusM = home.getDouble("radius_m"),
-                    hysteresisM = home.getDouble("hysteresis_m"),
-                ),
-                allowedPackages = json.stringSet("allowed_packages"),
-                nightAllowedPackages = json.stringSet("night_allowed_packages"),
-                neverDisablePrefixes = json.stringSet("never_disable_prefixes"),
-                allowedPrefixes = json.optionalStringSet("allowed_prefixes"),
-                nightAllowedPrefixes = json.optionalStringSet("night_allowed_prefixes"),
-                nightBlockedPackages = json.optionalStringSet("night_blocked_packages"),
-                workoutUnblockDomains = json.stringSet("workout_unblock_domains"),
-                blockableSystemPackages = json.optionalStringSet("blockable_system_packages"),
-                alwaysBlockedPackages = json.optionalStringSet("always_blocked_packages"),
-                // Empty string means "not configured", which is what the
-                // exporter writes when the provider is not sweep-protected.
-                alwaysOnVpnPackage = json.optString("always_on_vpn_package")
-                    .takeIf { it.isNotEmpty() },
-                vpnLockdown = json.optBoolean("vpn_lockdown", false),
-                privateDnsHost = json.optString("private_dns_host")
-                    .takeIf { it.isNotEmpty() },
-                curfew = curfewJson?.let {
-                    CurfewWindow(
-                        startMinutes = parseHhMm(it.getString("start"), "curfew.start"),
-                        endMinutes = parseHhMm(it.getString("end"), "curfew.end"),
-                    )
-                },
-                launcherPackage = if (json.isNull("launcher_package")) {
-                    null
-                } else {
-                    json.getString("launcher_package")
-                },
-            )
-        }
-
-        private fun JSONObject.stringSet(field: String): Set<String> {
-            val array = optJSONArray(field)
-                ?: throw PolicyFormatException("\"$field\" must be a list")
-            return (0 until array.length()).mapTo(mutableSetOf()) { array.getString(it) }
-        }
-
-        /**
-         * A list that may be absent, read as empty.
-         *
-         * Used for fields added after assets were already shipped. The strict
-         * [stringSet] would throw, and an unparsable policy makes the runner
-         * skip the pass entirely — safe, but it silently disables enforcement
-         * rather than degrading to the previous behaviour. A present-but-wrong
-         * type is still an error, since that is a real mistake.
-         */
-        private fun JSONObject.optionalStringSet(field: String): Set<String> {
-            if (!has(field)) return emptySet()
-            return stringSet(field)
-        }
-
-        private fun parseHhMm(value: String, field: String): Int {
-            val parts = value.split(":")
-            val hour = parts.getOrNull(0)?.toIntOrNull()
-            val minute = parts.getOrNull(1)?.toIntOrNull()
-            if (parts.size != 2 || hour == null || minute == null ||
-                hour > 23 || minute > 59 || hour < 0 || minute < 0
-            ) {
-                throw PolicyFormatException("\"$field\" is not a valid time: \"$value\"")
-            }
-            return hour * 60 + minute
-        }
+        /** Parses a rendered policy document; see [FocusPolicyParser]. */
+        fun parse(text: String): FocusPolicy = FocusPolicyParser.parse(text)
     }
 }

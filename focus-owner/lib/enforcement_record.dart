@@ -1,27 +1,8 @@
 import 'dart:convert';
 
-/// Why a package is hidden, mirroring Kotlin's `HideReason`.
-enum HideReason {
-  alwaysBlocked,
-  notInAllowlist,
-  notInNightAllowlist,
-  unknown;
+import 'package:focus_owner/hide_reason.dart';
 
-  static HideReason parse(String? raw) => switch (raw) {
-        'ALWAYS_BLOCKED' => HideReason.alwaysBlocked,
-        'NOT_IN_ALLOWLIST' => HideReason.notInAllowlist,
-        'NOT_IN_NIGHT_ALLOWLIST' => HideReason.notInNightAllowlist,
-        _ => HideReason.unknown,
-      };
-
-  /// Plain-English explanation shown next to a hidden app.
-  String get explanation => switch (this) {
-        HideReason.alwaysBlocked => 'always blocked, everywhere',
-        HideReason.notInAllowlist => 'not on the day allowlist',
-        HideReason.notInNightAllowlist => 'not on the curfew allowlist',
-        HideReason.unknown => 'reason not recorded',
-      };
-}
+export 'package:focus_owner/hide_reason.dart';
 
 /// One hidden package and why.
 class HiddenPackage {
@@ -62,15 +43,19 @@ class EnforcementRecord {
     required this.restoredNow,
     required this.hidden,
     required this.failure,
+    this.lockdownThrough,
   });
 
   /// Parses one JSON-lines record.
   factory EnforcementRecord.fromJson(Map<String, Object?> json) {
     final fix = json['fix'];
-    final fixMap = fix is Map<String, Object?> ? fix : const <String, Object?>{};
+    final fixMap = fix is Map<String, Object?>
+        ? fix
+        : const <String, Object?>{};
     final counts = json['counts'];
-    final countMap =
-        counts is Map<String, Object?> ? counts : const <String, Object?>{};
+    final countMap = counts is Map<String, Object?>
+        ? counts
+        : const <String, Object?>{};
     return EnforcementRecord(
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         (json['ts'] as num?)?.toInt() ?? 0,
@@ -92,7 +77,22 @@ class EnforcementRecord {
       restoredNow: (countMap['restored_delta'] as num?)?.toInt() ?? 0,
       hidden: _parseHidden(json['hidden']),
       failure: json['failure'] as String?,
+      lockdownThrough: switch (json['lockdown']) {
+        {'through': final String through} => through,
+        _ => null,
+      },
     );
+  }
+
+  /// The newest record that is an enforcement pass, skipping lockdown events.
+  ///
+  /// A lockdown signal is logged a moment before the pass it triggers, and
+  /// the status card must describe the pass, not the event.
+  static EnforcementRecord? latestPass(List<EnforcementRecord> records) {
+    for (final record in records) {
+      if (!record.isLockdownEvent) return record;
+    }
+    return null;
   }
 
   /// Parses the raw lines returned by the platform channel, newest first.
@@ -154,6 +154,12 @@ class EnforcementRecord {
   final List<HiddenPackage> hidden;
   final String? failure;
 
+  /// Through-date of a lockdown event record, or null.
+  final String? lockdownThrough;
+
+  /// Whether this is a lockdown activate/extend/lift entry, not a pass.
+  bool get isLockdownEvent => reason.startsWith('LOCKDOWN_');
+
   /// Whether this pass could not place the phone.
   bool get locationUnknown => reason == 'LOCATION_UNKNOWN';
 
@@ -172,11 +178,22 @@ class EnforcementRecord {
           'Use "Set home to current location" while you are at home.';
     }
     return switch (reason) {
-      'AWAY' => 'Away from home. Everything is available except the '
-          'always-blocked apps, which stay hidden wherever you are.',
+      'AWAY' =>
+        'Away from home. Everything is available except the '
+            'always-blocked apps, which stay hidden wherever you are.',
       'AT_HOME' => 'At home. Only allowlisted apps are available.',
       'CURFEW' => 'Night curfew. The shorter night allowlist applies.',
       'WORKOUT' => 'Workout in progress, so the workout exceptions apply.',
+      'WORKDAY_LOCKDOWN' =>
+        'Missed workday alarm. Only the lockdown '
+            'allowlist is available, wherever you are.',
+      'LOCKDOWN_ACTIVATED' =>
+        'Workday lockdown started, through $lockdownThrough.',
+      'LOCKDOWN_EXTENDED' =>
+        'Workday lockdown extended through $lockdownThrough.',
+      'LOCKDOWN_UNCHANGED' =>
+        'Lockdown signal received; already locked through $lockdownThrough.',
+      'LOCKDOWN_LIFTED' => 'Workday lockdown lifted.',
       'LOCATION_UNKNOWN' =>
         'No usable location fix, so the phone is blocking as if you were at '
             'home. Losing GPS must not become a way to switch enforcement off.',
@@ -190,8 +207,9 @@ class EnforcementRecord {
     final metres = distanceM;
     if (metres == null) return 'unknown - no location fix';
     final threshold = thresholdM;
-    final distance =
-        metres >= 1000 ? '${(metres / 1000).toStringAsFixed(1)} km' : '${metres.round()} m';
+    final distance = metres >= 1000
+        ? '${(metres / 1000).toStringAsFixed(1)} km'
+        : '${metres.round()} m';
     if (threshold == null) return distance;
     return '$distance (fence ${threshold.round()} m)';
   }
@@ -201,7 +219,9 @@ class EnforcementRecord {
     final age = fixAgeMs;
     if (age == null) return fixOutcome?.toLowerCase() ?? 'no fix';
     final seconds = age ~/ 1000;
-    final agePart = seconds >= 60 ? '${seconds ~/ 60} min old' : '$seconds s old';
+    final agePart = seconds >= 60
+        ? '${seconds ~/ 60} min old'
+        : '$seconds s old';
     final parts = <String>[
       agePart,
       ?fixProvider,

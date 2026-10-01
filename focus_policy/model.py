@@ -45,6 +45,11 @@ class FocusPolicy:
     # narrower night rule without weakening that guarantee for every other app
     # under the same prefix. See docs/DOCS-policy-lists.md#why-comkuhydufs-client-is-night-blocked.
     night_blocked_packages: frozenset[str] = frozenset()
+    # Exact-match allowlist for wake-alarm's missed-workday lockdown. None means
+    # "not configured": the enforcer then falls back to the night list, which
+    # is what it applied before this tier existed. No prefixes, on purpose --
+    # com.kuhy would otherwise keep every kuhy app visible through a lockdown.
+    lockdown_allowed_packages: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         """Reject policies that would lock the user out of the device."""
@@ -91,6 +96,18 @@ class FocusPolicy:
             msg = (
                 "night_blocked_packages contradicts night_allowed_packages: "
                 f"{sorted(night_blocked_conflict)}"
+            )
+            raise PolicyError(msg)
+        # Narrower than the day list, never an addition to it -- same rule as
+        # the night list. Not a subset of the NIGHT list: maps is day-only and
+        # is exactly what a lockdown spent away from home needs.
+        lockdown_orphans = (self.lockdown_allowed_packages or frozenset()) - (
+            self.allowed_packages
+        )
+        if lockdown_orphans:
+            msg = (
+                "lockdown_allowed_packages must be a subset of allowed_packages; "
+                f"unknown at day level: {sorted(lockdown_orphans)}"
             )
             raise PolicyError(msg)
         if self.launcher_package in self.night_blocked_packages:

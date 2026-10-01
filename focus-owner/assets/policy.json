@@ -82,6 +82,25 @@
     "radius_m": 150.0
   },
   "launcher_package": "com.google.android.apps.nexuslauncher",
+  "lockdown_allowed_packages": [
+    "com.google.android.apps.maps",
+    "com.google.android.apps.nexuslauncher",
+    "com.kuhy.focus_owner",
+    "com.kuhy.punchme",
+    "com.kuhy.wake_alarm_sync",
+    "com.kunzisoft.keepass.libre",
+    "com.revolut.revolut",
+    "dev.kuhy.todo",
+    "org.fossify.contacts",
+    "org.fossify.messages",
+    "org.fossify.phone",
+    "org.runnerup",
+    "org.runnerup.free",
+    "org.thoughtcrime.securesms",
+    "pl.infakt.infakt",
+    "pl.mbank",
+    "pl.nask.mobywatel"
+  ],
   "never_disable_prefixes": [
     "android",
     "com.android.bluetooth",

@@ -52,7 +52,7 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
             "end": policy.curfew.end.strftime("%H:%M"),
         }
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "home": {
             "latitude": policy.home.latitude,
@@ -124,6 +124,15 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
             ALWAYS_ON_VPN_PACKAGE if policy.is_protected(ALWAYS_ON_VPN_PACKAGE) else ""
         ),
     }
+    # Emitted only when configured. A missing key makes the enforcer fall back
+    # to the night list; an emitted empty list would instead hide everything
+    # unprotected, the dialer included. The enforcer is added like the other
+    # allowlists, since hiding it takes the escape hatch with it.
+    if policy.lockdown_allowed_packages is not None:
+        payload["lockdown_allowed_packages"] = sorted(
+            {*policy.lockdown_allowed_packages, ENFORCER_PACKAGE},
+        )
+    return payload
 
 
 def policy_to_json(policy: FocusPolicy, *, redact_home: bool = False) -> str:

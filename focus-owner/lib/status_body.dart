@@ -50,7 +50,7 @@ class _StatusBody extends StatelessWidget {
         // Everything below is provisioning detail that only matters once this
         // question is answered.
         EnforcementStatusCard(
-          record: log.isEmpty ? null : log.first,
+          record: EnforcementRecord.latestPass(log),
           onOpenLog: onOpenLog ?? () {},
           onRefreshLocation: busy ? null : onRefreshLocation,
         ),
@@ -64,7 +64,7 @@ class _StatusBody extends StatelessWidget {
         // is whether the last recorded pass hid anything.
         _Row(
           label: 'Enforcing',
-          value: switch (log.isEmpty ? null : log.first.hideCount) {
+          value: switch (EnforcementRecord.latestPass(log)?.hideCount) {
             null => 'no pass recorded yet',
             0 => 'nothing hidden',
             final int n => '$n apps hidden',

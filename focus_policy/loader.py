@@ -213,4 +213,11 @@ def load_policy(
         night_blocked_packages=parse_package_list(
             values.get("NIGHT_BLOCKED_PACKAGES", "")
         ),
+        # Absent means "not configured" (None), never "allow nothing": an
+        # empty lockdown list would hide the dialer during a lockdown.
+        lockdown_allowed_packages=(
+            parse_package_list(values["LOCKDOWN_WHITELIST"])
+            if "LOCKDOWN_WHITELIST" in values
+            else None
+        ),
     )

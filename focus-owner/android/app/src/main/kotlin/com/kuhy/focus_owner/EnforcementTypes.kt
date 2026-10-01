@@ -18,6 +18,23 @@ enum class HideReason {
 
     /** On the day allowlist but not the shorter curfew one. */
     NOT_IN_NIGHT_ALLOWLIST,
+
+    /** Not on the workday-lockdown allowlist; see [WorkdayLockdown]. */
+    NOT_IN_LOCKDOWN_ALLOWLIST,
+}
+
+/**
+ * Which allowlist a pass applies, and the reason it records for a package
+ * that list leaves out.
+ *
+ * A lockdown has its own tier rather than reusing the night one: it is
+ * narrower (no music, no com.kuhy prefix) yet keeps maps, which the night
+ * list drops, because a lockdown is spent away from home as often as not.
+ */
+enum class AllowlistTier(val hideReason: HideReason) {
+    DAY(HideReason.NOT_IN_ALLOWLIST),
+    NIGHT(HideReason.NOT_IN_NIGHT_ALLOWLIST),
+    LOCKDOWN(HideReason.NOT_IN_LOCKDOWN_ALLOWLIST),
 }
 
 /** The fence geometry behind one decision. */
@@ -55,11 +72,11 @@ data class EnforcementInputs(
     val currentlyEnforcing: Boolean = false,
     val workoutActive: Boolean = false,
     /**
-     * Whether [WorkdayLockdown] has today marked as a missed-alarm day.
+     * Whether [WorkdayLockdown] has a through-date of today or later.
      *
-     * Forces the strict (night-style) allowlist regardless of location or
-     * curfew, and overrides AWAY -- being at the office is not an exemption
-     * from a morning that was skipped.
+     * Forces the lockdown allowlist regardless of location or curfew, and
+     * overrides AWAY -- being at the office is not an exemption from a
+     * morning that was skipped.
      */
     val lockdownActive: Boolean = false,
     /**

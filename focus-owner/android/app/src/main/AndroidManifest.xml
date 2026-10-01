@@ -97,15 +97,17 @@
             android:name=".EnforcementAlarmReceiver"
             android:exported="false" />
 
-        <!-- Cross-app signal from wake-alarm's phone_app; see
-             LockdownSignalReceiver. Exported so the other app's process can
-             reach it, but gated by the signature permission declared above. -->
+        <!-- Cross-app signals from wake-alarm's phone_app (lock down through a
+             date / lift the lockdown); see LockdownSignalReceiver. Exported so
+             the other app's process can reach it, but gated by the signature
+             permission declared above. -->
         <receiver
             android:name=".LockdownSignalReceiver"
             android:exported="true"
             android:permission="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN">
             <intent-filter>
                 <action android:name="com.kuhy.focus_owner.action.LOCKDOWN_UNTIL_EOD" />
+                <action android:name="com.kuhy.focus_owner.action.LIFT_LOCKDOWN" />
             </intent-filter>
         </receiver>
 
