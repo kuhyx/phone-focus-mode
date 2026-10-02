@@ -84,6 +84,14 @@ cmd_auto() {
         exit 0
     fi
 
+    # Unattended (phone-auto-sync.timer): act only on an enrolled, rooted phone.
+    # An explicit ADB_SERIAL keeps the interactive fail-loudly behaviour.
+    if [[ -z "${ADB_SERIAL:-}" ]] && ! ADB_SERIAL="$(adb_find_auto_target)"; then
+        _info "auto: no enrolled rooted phone connected ($(adb_list_ready_serials | tr '\n' ' ')); nothing to do."
+        exit 0
+    fi
+    export ADB_SERIAL
+
     _setup_common
 
     # Detect fresh format FIRST and exit immediately if detected.

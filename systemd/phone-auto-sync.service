@@ -4,6 +4,9 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/src/testsAndMisc/scripts/run_all/run_phone.sh auto
+# The orchestrator moved out of testsAndMisc when phone-focus-mode was
+# extracted; the old scripts/run_all path no longer exists. `auto` is a logged
+# no-op (exit 0) unless an enrolled, rooted phone is connected.
+ExecStart=%h/src/phone-focus-mode/run_phone.sh auto
 StandardOutput=journal
 StandardError=journal

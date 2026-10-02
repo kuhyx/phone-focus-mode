@@ -158,3 +158,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adb_trusted.sh"
 # so every existing consumer keeps getting the whole API from one source line.
 # shellcheck source=adb_locking.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adb_locking.sh"
+
+# Unattended target selection for the timer-driven `auto` run.
+# shellcheck source=adb_auto_target.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adb_auto_target.sh"
