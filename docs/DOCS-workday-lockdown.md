@@ -24,6 +24,11 @@ is in force (`LOCKDOWN_UNTIL_EOD` with an inclusive `until` date; lifted by
   (`com.kuhy.punchme`) is the work-hours tracker, needed on exactly the
   workdays a lockdown hits. `com.kuhy.punchme.sandbox` is the test-punch
   flavour and stays hidden.
+- **One deliberate distraction.** kuhy's own game, Kado no Akari
+  (`com.kadonoakari.game`), is on this list and on the day and curfew lists
+  by his explicit request (2026-10-03: "whitelist permanently everywhere and
+  always"). It weakens the lockdown on purpose; `tests/test_policy_own_game.py`
+  pins it so a rewrite of the lists cannot drop it silently.
 - **Length is capped.** One signal can lock through today + 4 days at most
   (5 calendar days, `MAX_LOCKDOWN_DAYS` in `WorkdayLockdown.kt`, matching
   `STICK_LOCKDOWN_MAX_DAYS` in wake-alarm). A later `until` is clamped, so a

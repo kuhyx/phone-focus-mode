@@ -79,6 +79,8 @@ com.kuhy.workout_app
 # touching the real one. Deployed by phone_deploy.sh --flavor sandbox.
 com.kuhy.workout_app.sandbox
 dev.kuhy.todo
+# kuhy 2026-10-03: his own game, allowed always (also night + lockdown lists).
+com.kadonoakari.game
 
 # --- Daily utility ---
 com.google.android.calendar
@@ -125,6 +127,8 @@ eu.kanade.tachiyomi
 # NO TRAILING DOT: com.kuhy. matches nothing at all.
 com.kuhy
 dev.kuhy
+# kuhy 2026-10-03: his own game (Kado no Akari), allowed always.
+com.kadonoakari
 "
 
 # Prefixes that survive the curfew as well. Must be a subset of
@@ -134,6 +138,8 @@ eu.kanade.tachiyomi
 # Same two prefixes as the day list: kuhy's apps stay reachable in the curfew.
 com.kuhy
 dev.kuhy
+# kuhy 2026-10-03: his own game (Kado no Akari), allowed always.
+com.kadonoakari
 "
 
 # NIGHT CURFEW WHITELIST -- what stays enabled at night and why, plus the
@@ -181,6 +187,8 @@ com.kuhy.workout_app.sandbox
 # reachable, and Signal is where kuhy is actually reached.
 # see docs/DOCS-policy-lists.md#why-orgthoughtcrimesecuresms-is-in-the-night-list
 org.thoughtcrime.securesms
+# kuhy 2026-10-03: his own game, allowed always -- a deliberate exception to the curfew rule.
+com.kadonoakari.game
 "
 
 # NIGHT-BLOCKED PACKAGES -- day-allowed apps denied during curfew even though
@@ -225,4 +233,6 @@ dev.kuhy.todo
 org.runnerup
 org.runnerup.free
 com.kuhy.punchme
+# kuhy 2026-10-03: his own game, allowed always -- a deliberate exception to the distraction rule.
+com.kadonoakari.game
 "

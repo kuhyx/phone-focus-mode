@@ -6,6 +6,7 @@
     "com.google.android.calendar",
     "com.google.android.deskclock",
     "com.ichi2.anki",
+    "com.kadonoakari.game",
     "com.kuhy.a11ydump",
     "com.kuhy.book_guard_app",
     "com.kuhy.diet_guard_app",
@@ -44,6 +45,7 @@
     "pl.nask.mobywatel"
   ],
   "allowed_prefixes": [
+    "com.kadonoakari",
     "com.kuhy",
     "dev.kuhy",
     "eu.kanade.tachiyomi"
@@ -85,6 +87,7 @@
   "lockdown_allowed_packages": [
     "com.google.android.apps.maps",
     "com.google.android.apps.nexuslauncher",
+    "com.kadonoakari.game",
     "com.kuhy.focus_owner",
     "com.kuhy.punchme",
     "com.kuhy.wake_alarm_sync",
@@ -151,6 +154,7 @@
     "com.celzero.bravedns",
     "com.google.android.apps.nexuslauncher",
     "com.google.android.deskclock",
+    "com.kadonoakari.game",
     "com.kuhy.focus_owner",
     "com.kuhy.punchme",
     "com.kuhy.punchme.sandbox",
@@ -172,6 +176,7 @@
     "pl.nask.mobywatel"
   ],
   "night_allowed_prefixes": [
+    "com.kadonoakari",
     "com.kuhy",
     "dev.kuhy",
     "eu.kanade.tachiyomi"
