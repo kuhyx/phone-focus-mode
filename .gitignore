@@ -18,3 +18,5 @@ __pycache__/
 # match, so they stay where they were written.
 #
 # mtk-root and android-guardian shipped no .gitignore of their own.
+
+.coverage
