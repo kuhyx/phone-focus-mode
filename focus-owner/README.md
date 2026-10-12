@@ -126,7 +126,15 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
 `JAVA_HOME` is required: the system default JDK 26 breaks the Android Gradle
 plugin's `jlink` transform.
 
-Build **through `phone_deploy.sh`**, not a bare `flutter build apk --release`.
+Inside an agent session (60 s per action) build in five steps instead, each
+< 30 s, arm64 only, then `adb -s <serial> install -r
+build/app/outputs/flutter-apk/app-release.apk`:
+`scripts/build_apk.sh prep --phone <serial>`, then `dart`, `jvm`, `r8`, `apk`
+(one per call, via `~/.claude/scripts/capped.sh`). `prep` derives the
+versionCode from the phone the same way `phone_deploy.sh` does; `apk` fails
+unless the signer is the kuhy key and the policy asset is bundled.
+
+Otherwise build **through `phone_deploy.sh`**, not a bare `flutter build apk --release`.
 Flutter takes the build number from `pubspec.yaml`, which is still `1.0.0+1`,
 so a bare build stamps **versionCode 1** and the install is refused with
 `INSTALL_FAILED_VERSION_DOWNGRADE` against whatever is already on the phone
