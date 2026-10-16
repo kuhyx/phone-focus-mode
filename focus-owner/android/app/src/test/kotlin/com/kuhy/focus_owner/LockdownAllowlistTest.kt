@@ -104,5 +104,6 @@ class LockdownAllowlistTest {
         assertFalse("com.kuhy.book_guard_app" in list)
         assertFalse(shipped.isAllowed("com.kuhy.book_guard_app", AllowlistTier.LOCKDOWN))
         assertFalse(shipped.isAllowed("com.metrolist.music", AllowlistTier.LOCKDOWN))
+        assertFalse(shipped.isAllowed("com.kuhy.tunedeck", AllowlistTier.LOCKDOWN))
     }
 }

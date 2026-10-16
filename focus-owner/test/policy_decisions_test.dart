@@ -153,6 +153,8 @@ void main() {
     expect(policy.home.hasCoordinates, isFalse,
         reason: 'committed policy.json must not carry home coordinates');
     expect(policy.curfew, isNotNull);
+    // kuhy's own music app (Metrolist replacement) is allowed like Metrolist.
+    expect(policy.allowedPackages, contains('com.kuhy.tunedeck'));
   });
 }
 

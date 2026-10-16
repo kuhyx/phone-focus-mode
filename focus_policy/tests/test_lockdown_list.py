@@ -106,3 +106,13 @@ def test_real_config_lockdown_list_excludes_distractions(tmp_path: Path) -> None
     for dropped in ("com.metrolist.music", "com.kuhy.punchme.sandbox"):
         assert dropped not in lockdown
     assert lockdown <= policy.allowed_packages
+
+
+def test_real_config_tunedeck_mirrors_metrolist(tmp_path: Path) -> None:
+    """tunedeck (kuhy's Metrolist replacement) is day+night allowed, not lockdown."""
+    secrets = tmp_path / "config_secrets.sh"
+    secrets.write_text("export HOME_LAT=52.0\nexport HOME_LON=21.0\n", encoding="utf-8")
+    policy = load_policy(REPO_ROOT / "config.sh", secrets)
+    assert "com.kuhy.tunedeck" in policy.allowed_packages
+    assert "com.kuhy.tunedeck" in policy.night_allowed_packages
+    assert "com.kuhy.tunedeck" not in (policy.lockdown_allowed_packages or frozenset())

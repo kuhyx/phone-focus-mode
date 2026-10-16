@@ -91,6 +91,7 @@ com.google.android.apps.maps
 com.sosauce.cutecalc
 com.ichi2.anki
 com.metrolist.music
+com.kuhy.tunedeck
 eu.kanade.tachiyomi.sy
 
 # --- Home appliances (Viomi V3 robot vacuum; no abuse potential) ---
@@ -165,6 +166,7 @@ com.kunzisoft.keepass.libre
 com.kuhy.wake_alarm_sync
 com.google.android.deskclock
 com.metrolist.music
+com.kuhy.tunedeck
 org.runnerup
 org.runnerup.free
 # dev.kuhy.todo: deliberate loosening of the night rule.
