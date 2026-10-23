@@ -71,6 +71,7 @@ com.kuhy.punchme
 com.kuhy.punchme.sandbox
 com.kuhy.restaurant_rater
 com.kuhy.signalbot_remote
+com.kuhy.sufler
 com.kuhy.tutor
 com.kuhy.umbrella
 com.kuhy.untools
