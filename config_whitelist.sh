@@ -62,6 +62,7 @@ com.kuhy.daily_limits
 com.kuhy.diet_guard_app
 com.kuhy.dufs_client
 com.kuhy.home_guard
+com.kuhy.leetcode_guard
 com.kuhy.home_inventory
 com.kuhy.lyricanki
 com.kuhy.punchme
