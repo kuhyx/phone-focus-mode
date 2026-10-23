@@ -35,7 +35,7 @@
     <!-- Needed to enumerate installed packages for the allowlist sweep. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application
-        android:label="focus_owner"
+        android:label="Focuser"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

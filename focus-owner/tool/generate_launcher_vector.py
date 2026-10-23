@@ -14,7 +14,7 @@ glyph fragment as every other app in the family, translated into
 ``<vector>`` drawables that live in the repo as text.
 
 This is a translation, not a second source of truth. The glyph geometry,
-accent, field colour and safe-box maths all come from
+accent, field colour and ink-circle placement all come from
 ``python_pkg.app_icons``; nothing here is hand-drawn. Re-run it after any
 change to the glyph or to ``style.py``:
 
@@ -28,7 +28,6 @@ icon.
 
 from __future__ import annotations
 
-import math
 import re
 import sys
 from pathlib import Path
@@ -40,87 +39,45 @@ TESTS_AND_MISC = Path.home() / "src/testsAndMisc"
 if str(TESTS_AND_MISC) not in sys.path:
     sys.path.insert(0, str(TESTS_AND_MISC))
 
-from python_pkg.app_icons import style
+from python_pkg.app_icons import fit, style
 from python_pkg.app_icons.apps import APPS
 from python_pkg.app_icons.glyphs import get_glyph
-from python_pkg.app_icons.render import centre_offset
 
 APP = APPS["focus_owner"]
 
-# Android adaptive icons are authored on a 108x108dp canvas whose inner 72x72
-# is the safe zone. The family's master canvas is 1024 with a SAFE_BOX of 560.
-# Emitting the vector with viewportWidth=1024 and letting Android scale is
-# wrong: 560/1024 = 54.7% of the canvas, but the adaptive safe zone is
-# 72/108 = 66.7%, so the glyph would render noticeably small. Scale the
-# family's safe box onto the adaptive safe box instead.
+# Android adaptive icons are authored on a 108x108dp canvas.
 VIEWPORT = 108.0
-ADAPTIVE_SAFE = 72.0
 
-# Android masks an adaptive icon to a CIRCLE of the inner 72dp (and launchers
-# apply rounder masks than that). The family's SAFE_BOX is a square, so mapping
-# it onto the 72dp box is not sufficient on its own: the square's corners fall
-# outside the inscribed circle. Measured on device before this was fixed, the
-# padlock body's lower corners sat at r=41.2 against a safe radius of 36 --
-# visible as the body touching the mask edge in a launcher screenshot.
-#
-# Rather than shrink by the square's diagonal (a 29% penalty that would make
-# focus_owner visibly smaller than its siblings), scale by THIS glyph's own
-# furthest point, so the icon is as large as it can be while provably unclipped.
-_SAFE_RADIUS = ADAPTIVE_SAFE / 2
-
-
-def _extreme_radius(paths: list[str], dx: float, dy: float, scale: float) -> float:
-    """Return the glyph's furthest rendered point from the canvas centre.
-
-    Includes half the stroke width, since a stroked path's ink extends beyond
-    its centreline -- the shackle is stroked, so ignoring that would under-
-    measure it.
-    """
-    worst = 0.0
-    for data in paths:
-        tokens = data.replace(",", " ").split()
-        i = 0
-        while i < len(tokens):
-            tok = tokens[i]
-            if tok in {"M", "L"}:
-                coords = [(float(tokens[i + 1]), float(tokens[i + 2]))]
-                i += 3
-            elif tok == "A":
-                coords = [(float(tokens[i + 6]), float(tokens[i + 7]))]
-                i += 8
-            elif tok.upper() == "Z":
-                i += 1
-                continue
-            else:  # pragma: no cover - the family uses only M/L/A/Z
-                i += 1
-                continue
-            for x, y in coords:
-                rx = (x + dx - style.CENTRE) * scale
-                ry = (y + dy - style.CENTRE) * scale
-                worst = max(worst, math.hypot(rx, ry))
-    return worst + (style.STROKE_WIDTH * scale) / 2
+# Every icon in the family fills the same circle: fit.placement centres the
+# glyph on the 1024px master canvas and scales it so its furthest inked pixel,
+# stroke included, sits style.INK_RADIUS from the centre. The PNG path
+# (flutter_launcher_icons) then maps that canvas onto style.ADAPTIVE_CANVAS_DP
+# of the adaptive canvas (its default 16% foreground inset), so the ink lands
+# at style.INK_RADIUS_DP. This vector uses the very same mapping, which is what
+# keeps focus_owner the size of its PNG-built siblings on the home screen.
+# (It used to scale the glyph out to the 36dp mask edge, which made the padlock
+# visibly bigger than every other icon.)
+_PLACEMENT = fit.placement(get_glyph(APP.glyph), APP.accent)
+DP_PER_PX = style.ADAPTIVE_CANVAS_DP / style.CANVAS
+# render.build_svg divides the group stroke by the placement scale, so on the
+# master canvas every stroke stays style.STROKE_WIDTH whatever the glyph scale.
+STROKE_DP = style.STROKE_WIDTH * DP_PER_PX
 
 
-def _compute_scale() -> float:
-    """Return the canvas scale that just fits this glyph inside the safe circle."""
-    glyph = get_glyph(APP.glyph)
-    dx, dy = centre_offset(glyph, APP.accent)
-    raw = [
-        m.group(1).replace("\\\n", " ")
-        for m in re.finditer(r'd="([^"]+)"', glyph.body)
-    ]
-    naive = ADAPTIVE_SAFE / style.SAFE_BOX
-    reach = _extreme_radius(raw, dx, dy, naive)
-    return naive * (_SAFE_RADIUS / reach) if reach > _SAFE_RADIUS else naive
-
-
-SCALE = _compute_scale()
+def _map(x: float, y: float) -> tuple[float, float]:
+    """Map a glyph-fragment point through the placement onto the dp viewport."""
+    cx = _PLACEMENT.scale * x + _PLACEMENT.dx
+    cy = _PLACEMENT.scale * y + _PLACEMENT.dy
+    return (
+        (cx - style.CENTRE) * DP_PER_PX + VIEWPORT / 2,
+        (cy - style.CENTRE) * DP_PER_PX + VIEWPORT / 2,
+    )
 
 
 _NUM = re.compile(r"-?\d+(?:\.\d+)?")
 
 
-def _scale_path(data: str, dx: float, dy: float) -> str:
+def _scale_path(data: str) -> str:
     """Map one SVG path's coordinates from the 1024 canvas onto the viewport.
 
     Every command used by the family's glyphs (M, L, A, Z) takes coordinates
@@ -140,16 +97,14 @@ def _scale_path(data: str, dx: float, dy: float) -> str:
     while i < len(out):
         tok = out[i]
         if tok in {"M", "L"}:
-            x = (float(out[i + 1]) + dx - style.CENTRE) * SCALE + VIEWPORT / 2
-            y = (float(out[i + 2]) + dy - style.CENTRE) * SCALE + VIEWPORT / 2
+            x, y = _map(float(out[i + 1]), float(out[i + 2]))
             result.append(f"{tok}{x:.3f},{y:.3f}")
             i += 3
         elif tok == "A":
-            rx = float(out[i + 1]) * SCALE
-            ry = float(out[i + 2]) * SCALE
+            rx = float(out[i + 1]) * _PLACEMENT.scale * DP_PER_PX
+            ry = float(out[i + 2]) * _PLACEMENT.scale * DP_PER_PX
             rot, large, sweep = out[i + 3], out[i + 4], out[i + 5]
-            x = (float(out[i + 6]) + dx - style.CENTRE) * SCALE + VIEWPORT / 2
-            y = (float(out[i + 7]) + dy - style.CENTRE) * SCALE + VIEWPORT / 2
+            x, y = _map(float(out[i + 6]), float(out[i + 7]))
             result.append(f"A{rx:.3f},{ry:.3f} {rot} {large},{sweep} {x:.3f},{y:.3f}")
             i += 8
         elif tok.upper() == "Z":
@@ -168,7 +123,6 @@ def _paths(colour: str) -> list[tuple[str, str, str | None]]:
     its evenodd fill so the keyhole stays punched out.
     """
     glyph = get_glyph(APP.glyph)
-    dx, dy = centre_offset(glyph, APP.accent)
     body = glyph.body.replace(style.ACCENT_MARKER, colour)
 
     out: list[tuple[str, str, str | None]] = []
@@ -177,7 +131,7 @@ def _paths(colour: str) -> list[tuple[str, str, str | None]]:
         data_match = re.search(r'd="([^"]+)"', attrs)
         if data_match is None:  # pragma: no cover - every path has a d
             continue
-        scaled = _scale_path(data_match.group(1).replace("\\\n", " "), dx, dy)
+        scaled = _scale_path(data_match.group(1).replace("\\\n", " "))
         if 'stroke="none"' in attrs:
             out.append((scaled, colour, None))
         else:
@@ -211,9 +165,7 @@ def _vector(colour: str, *, note: str) -> str:
             lines.append('        android:fillType="evenOdd"')
         else:
             lines.append(f'        android:strokeColor="{stroke}"')
-            lines.append(
-                f'        android:strokeWidth="{style.STROKE_WIDTH * SCALE:.3f}"'
-            )
+            lines.append(f'        android:strokeWidth="{STROKE_DP:.3f}"')
             lines.append('        android:strokeLineCap="round"')
             lines.append('        android:strokeLineJoin="round"')
         lines.append(f'        android:pathData="{data}" />')
