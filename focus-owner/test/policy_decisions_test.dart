@@ -155,6 +155,13 @@ void main() {
     expect(policy.curfew, isNotNull);
     // kuhy's own music app (Metrolist replacement) is allowed like Metrolist.
     expect(policy.allowedPackages, contains('com.kuhy.tunedeck'));
+    // The one approved FOSS browser (OAuth sign-in): day only; Chrome stays out.
+    expect(policy.isAllowed('org.mozilla.fennec_fdroid'), isTrue);
+    expect(
+      policy.isAllowed('org.mozilla.fennec_fdroid', duringCurfew: true),
+      isFalse,
+    );
+    expect(policy.isAllowed('com.android.chrome'), isFalse);
   });
 }
 
