@@ -80,10 +80,10 @@ void main() {
     test('allowed prefixes cover a family of packages', () {
       final prefixed = FocusPolicy.fromJson(
         _doc()
-          ..['allowed_prefixes'] = ['eu.kanade.tachiyomi']
-          ..['night_allowed_prefixes'] = ['eu.kanade.tachiyomi'],
+          ..['allowed_prefixes'] = ['com.kuhy', 'eu.kanade.tachiyomi']
+          ..['night_allowed_prefixes'] = ['com.kuhy', 'eu.kanade.tachiyomi'],
       );
-      expect(prefixed.isAllowed('eu.kanade.tachiyomi.sy'), isTrue);
+      expect(prefixed.isAllowed('com.kuhy.kartka'), isTrue);
       expect(
         prefixed.isAllowed('eu.kanade.tachiyomi.extension.all.mangadex'),
         isTrue,
@@ -92,18 +92,18 @@ void main() {
       expect(prefixed.isAllowed('eu.kanade.tachiyomisomething'), isFalse);
       // Chosen 2026-08-14: manga stays available during the curfew.
       expect(
-        prefixed.isAllowed('eu.kanade.tachiyomi.sy', duringCurfew: true),
+        prefixed.isAllowed('com.kuhy.kartka', duringCurfew: true),
         isTrue,
       );
     });
 
     test('a day-only prefix is blocked during curfew', () {
       final dayOnly = FocusPolicy.fromJson(
-        _doc()..['allowed_prefixes'] = ['eu.kanade.tachiyomi'],
+        _doc()..['allowed_prefixes'] = ['com.kuhy', 'eu.kanade.tachiyomi'],
       );
-      expect(dayOnly.isAllowed('eu.kanade.tachiyomi.sy'), isTrue);
+      expect(dayOnly.isAllowed('com.kuhy.kartka'), isTrue);
       expect(
-        dayOnly.isAllowed('eu.kanade.tachiyomi.sy', duringCurfew: true),
+        dayOnly.isAllowed('com.kuhy.kartka', duringCurfew: true),
         isFalse,
       );
     });

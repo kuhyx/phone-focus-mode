@@ -112,29 +112,29 @@ class TestFocusPolicy:
         An exact list goes stale the moment a new extension is installed, which
         looks exactly like a bug from the phone.
         """
-        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
+        policy = _policy(allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"))
         assert policy.is_allowed("eu.kanade.tachiyomi")
-        assert policy.is_allowed("eu.kanade.tachiyomi.sy")
+        assert policy.is_allowed("com.kuhy.kartka")
         assert policy.is_allowed("eu.kanade.tachiyomi.extension.all.mangadex")
 
     def test_allowed_prefix_matches_whole_labels_only(self) -> None:
         """A bare string prefix would allow an unrelated package."""
-        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
+        policy = _policy(allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"))
         assert not policy.is_allowed("eu.kanade.tachiyomisomething")
 
     def test_a_day_only_prefix_is_blocked_during_curfew(self) -> None:
         """The night list narrows the prefixes too, not just the packages."""
-        policy = _policy(allowed_prefixes=("eu.kanade.tachiyomi",))
-        assert policy.is_allowed("eu.kanade.tachiyomi.sy")
-        assert not policy.is_allowed("eu.kanade.tachiyomi.sy", during_curfew=True)
+        policy = _policy(allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"))
+        assert policy.is_allowed("com.kuhy.kartka")
+        assert not policy.is_allowed("com.kuhy.kartka", during_curfew=True)
 
     def test_a_night_prefix_survives_the_curfew(self) -> None:
         """Manga is deliberately available at night (chosen 2026-08-14)."""
         policy = _policy(
-            allowed_prefixes=("eu.kanade.tachiyomi",),
-            night_allowed_prefixes=("eu.kanade.tachiyomi",),
+            allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"),
+            night_allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"),
         )
-        assert policy.is_allowed("eu.kanade.tachiyomi.sy", during_curfew=True)
+        assert policy.is_allowed("com.kuhy.kartka", during_curfew=True)
         assert policy.is_allowed(
             "eu.kanade.tachiyomi.extension.all.mangadex",
             during_curfew=True,
@@ -143,7 +143,7 @@ class TestFocusPolicy:
     def test_night_prefixes_must_be_a_subset_of_day_prefixes(self) -> None:
         """The curfew tightens the day policy; it must never widen it."""
         with pytest.raises(PolicyError, match="night_allowed_prefixes"):
-            _policy(night_allowed_prefixes=("eu.kanade.tachiyomi",))
+            _policy(night_allowed_prefixes=("com.kuhy", "eu.kanade.tachiyomi"))
 
     def test_is_curfew_active_without_window_is_false(self) -> None:
         """A policy with no curfew is never in curfew."""

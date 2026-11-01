@@ -198,16 +198,16 @@ class EnforcementDecisionCurfewTest {
               "night_allowed_packages": ["com.launcher"],
               "never_disable_prefixes": [],
               "workout_unblock_domains": [],
-              "allowed_prefixes": ["eu.kanade.tachiyomi"],
-              "night_allowed_prefixes": ["eu.kanade.tachiyomi"],
+              "allowed_prefixes": ["com.kuhy", "eu.kanade.tachiyomi"],
+              "night_allowed_prefixes": ["com.kuhy", "eu.kanade.tachiyomi"],
               "browser_packages": []
             }
             """.trimIndent(),
         )
-        assertTrue(p.isAllowed("eu.kanade.tachiyomi.sy", false))
+        assertTrue(p.isAllowed("com.kuhy.kartka", false))
         assertTrue(p.isAllowed("eu.kanade.tachiyomi.extension.all.mangadex", false))
         // Chosen 2026-08-14: manga stays available during the curfew.
-        assertTrue(p.isAllowed("eu.kanade.tachiyomi.sy", true))
+        assertTrue(p.isAllowed("com.kuhy.kartka", true))
         // Whole labels only.
         assertFalse(p.isAllowed("eu.kanade.tachiyomisomething", false))
     }

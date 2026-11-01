@@ -10,10 +10,11 @@ empty.
 
 ALLOWED PACKAGE PREFIXES
 Matched as prefixes on whole labels, exactly like $SYSTEM_NEVER_DISABLE:
-"eu.kanade.tachiyomi" covers "eu.kanade.tachiyomi.sy" and
+"eu.kanade.tachiyomi" covers
 "eu.kanade.tachiyomi.extension.all.mangadex", but not
 "eu.kanade.tachiyomisomething".
-This exists because Tachiyomi installs every source as its OWN apk. Listing
+This exists because Tachiyomi extensions install every source as their OWN apk
+(the reader app itself was dropped for kuhy's own com.kuhy.kartka, 2026-11). Listing
 them individually means each newly installed extension is invisible until
 this file is edited and the policy regenerated -- a recurring chore that
 looks exactly like a bug from the phone.
@@ -28,7 +29,7 @@ window (see NIGHT_CURFEW_* above). Everything else in $WHITELIST — browsers,
 social, messaging, email, stores, transit — is disabled.
 Allow-list by design: when in doubt, leave it OUT.
 EXCEPTION: $NIGHT_ALLOWED_PREFIXES is applied on top of this list. It carries
-"eu.kanade.tachiyomi" — so manga IS available during the curfew, deliberately
+"eu.kanade.tachiyomi" — so the manga extensions stay available during the curfew, deliberately
 (chosen 2026-08-14) — plus "com.kuhy" and "dev.kuhy" as of 2026-08-26, which
 make every app kuhy writes available at night (see the section below). This
 paragraph used to say manga was disabled at night; it was true until that

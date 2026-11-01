@@ -64,6 +64,7 @@ com.kuhy.dufs_client
 com.kuhy.home_guard
 com.kuhy.leetcode_guard
 com.kuhy.home_inventory
+com.kuhy.kartka
 com.kuhy.lyricanki
 com.kuhy.punchme
 # com.kuhy.punchme.sandbox: the punchme app's sandbox flavor -- its own
@@ -94,7 +95,6 @@ com.sosauce.cutecalc
 com.ichi2.anki
 com.metrolist.music
 com.kuhy.tunedeck
-eu.kanade.tachiyomi.sy
 
 # --- Home appliances (Viomi V3 robot vacuum; no abuse potential) ---
 # Both installed from Play-stamped APKs: Xiaomi Home pairs the robot and holds
@@ -125,7 +125,7 @@ org.runnerup.free
 # see docs/DOCS-policy-lists.md#allowed-package-prefixes
 
 export ALLOWED_PREFIXES="
-# Manga reader + its per-source extension apks.
+# Tachiyomi per-source extension apks (the reader app itself is gone).
 eu.kanade.tachiyomi
 # kuhy's own apps, day and night, including ones not written yet.
 # see docs/DOCS-policy-lists.md#why-every-comkuhy-devkuhy-package-is-allowed-by-prefix
