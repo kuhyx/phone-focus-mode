@@ -95,11 +95,6 @@ com.sosauce.cutecalc
 com.ichi2.anki
 com.metrolist.music
 com.kuhy.tunedeck
-# org.mozilla.fennec_fdroid: the ONE browser (Fennec F-Droid, MPL-2.0), allowed
-# by day only (kuhy 2026-11-01) so his apps can open a Google OAuth sign-in page
-# (PKCE, Custom Tab). Not in NIGHT_WHITELIST on purpose; Chrome stays hidden.
-# Do NOT add it to BROWSER_PACKAGES (hosts-flush list) or any blocked list.
-org.mozilla.fennec_fdroid
 
 # --- Home appliances (Viomi V3 robot vacuum; no abuse potential) ---
 # Both installed from Play-stamped APKs: Xiaomi Home pairs the robot and holds
