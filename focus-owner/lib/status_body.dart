@@ -54,91 +54,78 @@ class _StatusBody extends StatelessWidget {
           onOpenLog: onOpenLog ?? () {},
           onRefreshLocation: busy ? null : onRefreshLocation,
         ),
-        const SizedBox(height: kGap),
-        _Row(label: 'Package', value: status.packageName),
-        _Row(label: 'Device owner', value: status.isDeviceOwner ? 'yes' : 'no'),
-        _Row(label: 'Admin active', value: status.isAdminActive ? 'yes' : 'no'),
-        _Row(label: 'Android SDK', value: '${status.sdkInt}'),
-        // "none (inert build)" was a leftover from when this app really did
-        // apply nothing. It has been enforcing for weeks, so the honest value
-        // is whether the last recorded pass hid anything.
-        _Row(
-          label: 'Enforcing',
-          value: switch (EnforcementRecord.latestPass(log)?.hideCount) {
-            null => 'no pass recorded yet',
-            0 => 'nothing hidden',
-            final int n => '$n apps hidden',
-          },
-        ),
-        const SizedBox(height: kGap),
-        const Divider(color: kMuted),
         const SizedBox(height: kGap / 2),
+        // The rows that decide whether the enforcer applies stay on screen (what it
+        // last did is the card above);
+        // the rest of the provisioning detail is one tap away in a sheet, so
+        // this page fits one phone screen without scrolling.
+        InkWell(
+          onTap: () => _showDetailsSheet(
+            context,
+            status: status,
+            policy: policy,
+            policyError: policyError,
+            log: log,
+            hasHome: hasHome,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    _Row(
+                      label: 'Device owner',
+                      value: status.isDeviceOwner ? 'yes' : 'no',
+                    ),
+                    if (policyError == null && policy != null)
+                      _Row(label: 'Geofence', value: _geofenceLabel(hasHome)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.expand_less, color: kMuted),
+            ],
+          ),
+        ),
         if (policyError != null)
           _Message(text: 'Policy: $policyError', color: kDanger)
         else if (policy == null)
-          const _Message(text: 'Policy: loading...', color: kMuted)
-        else ...[
-          _Row(
-            label: 'Allowed apps',
-            value:
-                '${policy.allowedPackages.length}'
-                ' (${policy.nightAllowedPackages.length} at night)',
-          ),
-          _Row(
-            label: 'Curfew',
-            value: policy.curfew == null
-                ? 'disabled'
-                : '${_hhmm(policy.curfew!.startMinutes)}'
-                      '-${_hhmm(policy.curfew!.endMinutes)}',
-          ),
-          _Row(
-            label: 'Home radius',
-            value: policy.home.hasCoordinates
-                ? '${policy.home.radiusM.round()} m'
-                : '${policy.home.radiusM.round()} m (coords redacted)',
-          ),
-          _Row(
-            label: 'Workout domains',
-            value: '${policy.workoutUnblockDomains.length}',
-          ),
-          // The distinction that decides whether enforcement is geofenced or
-          // permanent, so it belongs on screen rather than only in logcat.
-          _Row(
-            label: 'Geofence',
-            value: hasHome ? 'active' : 'no home set - enforcing everywhere',
-          ),
-        ],
-        const SizedBox(height: kGap * 2),
-        OutlinedButton(
-          onPressed: busy ? null : onRunNow,
-          child: const Text('Run enforcement now'),
-        ),
+          const _Message(text: 'Policy: loading...', color: kMuted),
         const SizedBox(height: kGap),
-        if (status.isDeviceOwner) ...[
-          OutlinedButton(
-            onPressed: busy ? null : onSetHome,
-            child: Text(
-              hasHome ? 'Update home to here' : 'Set home to current location',
+        _ActionGrid(
+          children: [
+            OutlinedButton(
+              onPressed: busy ? null : onRunNow,
+              child: const Text('Run enforcement now'),
             ),
-          ),
+            if (status.isDeviceOwner) ...[
+              OutlinedButton(
+                onPressed: busy ? null : onSetHome,
+                child: Text(
+                  hasHome
+                      ? 'Update home to here'
+                      : 'Set home to current location',
+                ),
+              ),
+              OutlinedButton(
+                onPressed: busy ? null : onLockVpn,
+                child: const Text('Lock VPN configuration'),
+              ),
+              FilledButton(
+                onPressed: busy ? null : onRelease,
+                style: FilledButton.styleFrom(backgroundColor: kDanger),
+                child: const Text('Release device owner'),
+              ),
+            ],
+          ],
+        ),
+        if (!status.isDeviceOwner) ...[
           const SizedBox(height: kGap),
-          OutlinedButton(
-            onPressed: busy ? null : onLockVpn,
-            child: const Text('Lock VPN configuration'),
-          ),
-          const SizedBox(height: kGap),
-        ],
-        if (status.isDeviceOwner)
-          FilledButton(
-            onPressed: busy ? null : onRelease,
-            style: FilledButton.styleFrom(backgroundColor: kDanger),
-            child: const Text('Release device owner'),
-          )
-        else
           const _Message(
             text: 'Not provisioned as device owner. Nothing is enforced.',
             color: kMuted,
           ),
+        ],
       ],
     );
   }

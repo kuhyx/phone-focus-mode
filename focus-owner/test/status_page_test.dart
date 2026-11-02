@@ -93,7 +93,14 @@ void main() {
       // enforced anything, and it stayed on screen for weeks while YouTube was
       // in fact being hidden. With no pass recorded the honest answer is that
       // nothing is known yet, not that nothing is applied.
+      // That row now lives in the details sheet, one tap away.
+      expect(find.text('no pass recorded yet'), findsNothing);
+      await tester.tap(find.byIcon(Icons.expand_less));
+      await tester.pumpAndSettle();
       expect(find.text('no pass recorded yet'), findsOneWidget);
+      expect(find.text('Package'), findsOneWidget);
+      expect(find.text('Allowed apps'), findsOneWidget);
+      expect(find.text('Workout domains'), findsOneWidget);
     });
 
     testWidgets('reports when no home is set, since that means everywhere',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:focus_owner/enforcement_record.dart';
@@ -97,13 +99,10 @@ class EnforcementStatusCard extends StatelessWidget {
           ),
           _Field(
             label: 'Apps',
-            value: '${latest.hideCount} hidden, ${latest.showCount} available',
+            value:
+                '${latest.hideCount} hidden, ${latest.showCount} available'
+                '${_changes(latest)}',
           ),
-          if (latest.hidNow > 0 || latest.restoredNow > 0)
-            _Field(
-              label: 'Changed this pass',
-              value: 'hid ${latest.hidNow}, restored ${latest.restoredNow}',
-            ),
           if (_isStale(latest.timestamp))
             const _Note(
               text:
@@ -111,17 +110,18 @@ class EnforcementStatusCard extends StatelessWidget {
                   'every 15 minutes, so the schedule may have stalled.',
               danger: true,
             ),
-          if (latest.hidden.isNotEmpty) ...[
-            const SizedBox(height: kGap / 2),
-            _HiddenList(hidden: latest.hidden),
-          ],
           const SizedBox(height: kGap / 2),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: onOpenLog,
-              child: const Text('Debug log'),
-            ),
+          // One row: the hidden-apps sheet link and the debug log.
+          Row(
+            children: [
+              if (latest.hidden.isNotEmpty)
+                Flexible(child: _HiddenList(hidden: latest.hidden)),
+              const Spacer(),
+              TextButton(
+                onPressed: onOpenLog,
+                child: const Text('Debug log'),
+              ),
+            ],
           ),
         ],
       ),
@@ -144,6 +144,11 @@ class EnforcementStatusCard extends StatelessWidget {
       _ => kAccent,
     };
   }
+
+  /// Appended to the Apps value only when this pass changed something.
+  String _changes(EnforcementRecord r) => r.hidNow > 0 || r.restoredNow > 0
+      ? ' (hid ${r.hidNow}, restored ${r.restoredNow})'
+      : '';
 
   String _window(EnforcementRecord r) =>
       r.curfewWindow == null ? '' : ' (${r.curfewWindow})';

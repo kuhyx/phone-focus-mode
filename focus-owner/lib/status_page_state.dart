@@ -234,9 +234,15 @@ class _StatusPageState extends State<StatusPage> {
       // Scrollable because the action list grew past a short screen: an
       // unreachable "Release device owner" button is the one control that
       // must never be clipped off the bottom.
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(kGap),
-        child: body,
+      // The body is laid out to fit one phone screen; the scroll view is
+      // only the safety net for a small display or a large system font.
+      // SafeArea keeps the last action clear of the gesture/nav bar.
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(kGap),
+          child: body,
+        ),
       ),
     );
   }

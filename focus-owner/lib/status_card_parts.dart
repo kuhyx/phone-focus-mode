@@ -5,7 +5,9 @@
 
 part of 'enforcement_status_card.dart';
 
-/// The hidden apps, each with the rule that hid it.
+/// A link that opens the hidden apps, each with the rule that hid it, in a
+/// sheet. A sheet rather than an in-place expansion: dozens of apps would
+/// push the page's actions off the screen.
 class _HiddenList extends StatelessWidget {
   const _HiddenList({required this.hidden});
 
@@ -13,40 +15,55 @@ class _HiddenList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Text(
-          'Why these ${hidden.length} apps are hidden',
-          style: const TextStyle(color: kAccent, fontSize: 14),
-        ),
-        children: [
-          for (final entry in hidden)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      entry.package,
-                      style: const TextStyle(color: kText, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(width: kGap / 2),
-                  Text(
-                    entry.reason.explanation,
-                    style: TextStyle(
-                      color: entry.reason == HideReason.alwaysBlocked
-                          ? kDanger
-                          : kMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+    return TextButton(
+      onPressed: () => unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          backgroundColor: kSurface,
+          isScrollControlled: true,
+          builder: (context) => SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.all(kGap),
+              children: [for (final entry in hidden) _HiddenEntry(entry)],
             ),
+          ),
+        ),
+      ),
+      child: Text(
+        'Why these ${hidden.length} apps are hidden',
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14),
+      ),
+    );
+  }
+}
+
+class _HiddenEntry extends StatelessWidget {
+  const _HiddenEntry(this.entry);
+
+  final HiddenPackage entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              entry.package,
+              style: const TextStyle(color: kText, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: kGap / 2),
+          Text(
+            entry.reason.explanation,
+            style: TextStyle(
+              color: entry.reason == HideReason.alwaysBlocked ? kDanger : kMuted,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );

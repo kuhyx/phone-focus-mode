@@ -116,7 +116,7 @@ void main() {
       tester,
     ) async {
       await _pump(tester, _record(hidDelta: 2));
-      expect(find.text('hid 2, restored 0'), findsOneWidget);
+      expect(find.textContaining('(hid 2, restored 0)'), findsOneWidget);
     });
 
     testWidgets('each hidden app can be expanded to show why', (tester) async {
