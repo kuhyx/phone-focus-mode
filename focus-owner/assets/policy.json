@@ -192,6 +192,9 @@
   ],
   "private_dns_host": "",
   "schema_version": 1,
+  "uninstall_blocked_packages": [
+    "com.kuhy.workout_app"
+  ],
   "vpn_lockdown": true,
   "workout_unblock_domains": [
     "googlevideo.com",

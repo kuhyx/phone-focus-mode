@@ -21,6 +21,7 @@ from focus_policy.packages import (
     BLOCKABLE_SYSTEM_PACKAGES,
     ENFORCER_PACKAGE,
     PRIVATE_DNS_HOST,
+    UNINSTALL_BLOCKED_PACKAGES,
     VPN_LOCKDOWN,
 )
 
@@ -37,6 +38,7 @@ __all__ = [
     "ENFORCER_PACKAGE",
     "PRIVATE_DNS_HOST",
     "SCHEMA_VERSION",
+    "UNINSTALL_BLOCKED_PACKAGES",
     "VPN_LOCKDOWN",
     "policy_to_dict",
     "policy_to_json",
@@ -113,6 +115,12 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
             for pkg in (ALWAYS_BLOCKED_PACKAGES | ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES)
             - {ENFORCER_PACKAGE}
             if not policy.is_allowed(pkg)
+        ),
+        # Absent from an older asset, so the Kotlin loader reads a missing key
+        # as the empty set. Never the enforcer: blocking its own uninstall is
+        # setSelfUninstallBlocked's job, tied to the decision.
+        "uninstall_blocked_packages": sorted(
+            set(UNINSTALL_BLOCKED_PACKAGES) - {ENFORCER_PACKAGE},
         ),
         "vpn_lockdown": VPN_LOCKDOWN,
         "private_dns_host": PRIVATE_DNS_HOST,

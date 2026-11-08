@@ -87,6 +87,11 @@ data class FocusPolicy(
      */
     val vpnLockdown: Boolean = false,
     /**
+     * Packages whose uninstall the device owner blocks on every pass, beside
+     * the VPN provider. An asset predating the field parses to the empty set.
+     */
+    val uninstallBlockedPackages: Set<String> = emptySet(),
+    /**
      * Private DNS host to pin, or null to leave the setting alone.
      *
      * The domain rules live on this resolver rather than in the VPN app,

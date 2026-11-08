@@ -27,10 +27,15 @@ internal fun pinPolicyToDevice(
         bridge.setAlwaysOnVpn(vpn, lockdown = policy.vpnLockdown)?.let { failure ->
             Log.w(FocusDeviceAdminReceiver.TAG, "always-on VPN not pinned: $failure")
         }
-        // Measured hole: `pm uninstall --user 0` removed the provider
-        // while it was pinned, taking the network filter with it and
-        // leaving the pin aimed at a package that no longer existed.
-        bridge.setPackageUninstallBlocked(vpn, true)
+    }
+
+    // Measured hole: `pm uninstall --user 0` removed the VPN provider while
+    // it was pinned, taking the network filter with it and leaving the pin
+    // aimed at a package that no longer existed. The policy's own
+    // uninstall_blocked_packages (kuhy's running workout app) are pinned the
+    // same way, every pass, whatever the geofence says.
+    for (pkg in uninstallBlockTargets(policy)) {
+        bridge.setPackageUninstallBlocked(pkg, true)
     }
 
     // Pinned every pass for the same reason as the VPN: this is where the
@@ -50,6 +55,12 @@ internal fun pinPolicyToDevice(
     // from home lifts it, which keeps the app removable in exactly the
     // state where enforcement is already off.
     bridge.setSelfUninstallBlocked(decision.isEnforcing)
+}
+
+/** Every package the device owner pins against uninstall: listed ones plus the VPN provider. */
+internal fun uninstallBlockTargets(policy: FocusPolicy?): Set<String> {
+    if (policy == null) return emptySet()
+    return policy.uninstallBlockedPackages + listOfNotNull(policy.alwaysOnVpnPackage)
 }
 
 /** The packages actually changed by [applyVisibilitySweep], named not counted. */

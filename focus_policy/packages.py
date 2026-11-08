@@ -117,6 +117,14 @@ ALWAYS_BLOCKED_THIRD_PARTY_PACKAGES = frozenset(
 # the asset stays the single description of the policy.
 ALWAYS_ON_VPN_PACKAGE = "com.celzero.bravedns"
 
+# Packages the device owner pins against `pm uninstall` / `adb uninstall`
+# (setUninstallBlocked) on every pass, alongside the VPN provider.
+#
+# Decided 2026-11-08: kuhy's running workout app must survive any Claude
+# session. phone_deploy.sh refuses it with exit 46, but raw adb never goes
+# through a script; this is the backstop that does not depend on discipline.
+UNINSTALL_BLOCKED_PACKAGES = ("com.kuhy.workout_app",)
+
 # Whether the pinned VPN runs in lockdown mode: no traffic at all leaves the
 # device unless it goes through the tunnel.
 #

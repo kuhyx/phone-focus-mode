@@ -185,3 +185,15 @@ def test_private_dns_host_is_exported_for_pinning() -> None:
     # (PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING).
     assert payload["private_dns_host"] == ""
     assert payload["vpn_lockdown"] is True
+
+
+def test_uninstall_blocked_packages_are_exported_for_pinning() -> None:
+    """kuhy's running workout app is pinned against `pm uninstall` (2026-11-08).
+
+    The Device Owner calls setUninstallBlocked(admin, pkg, true) for each name
+    on every pass: the backstop under the phone_deploy exit-46 guard, for raw
+    adb that never goes through a script.
+    """
+    payload = policy_to_dict(_policy())
+
+    assert payload["uninstall_blocked_packages"] == ["com.kuhy.workout_app"]

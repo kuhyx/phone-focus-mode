@@ -102,6 +102,12 @@ until then — on 2026-08-29 that gap left Signal hidden through a whole night
 while the correct policy sat in the repo, because the enforcement pass was
 still reading the asset baked into the build from ten hours earlier.
 
+`uninstall_blocked_packages` (from `UNINSTALL_BLOCKED_PACKAGES` in
+`focus_policy/packages.py`, default `com.kuhy.workout_app`) are pinned with
+`setUninstallBlocked` on every pass, beside the VPN provider: the backstop under
+`phone_deploy.sh`'s exit 46 for raw `adb uninstall`. Check it read-only with
+`adb shell dumpsys device_policy | grep -i -A3 uninstall`.
+
 Allowlists are exact-match, plus `allowed_prefixes` / `night_allowed_prefixes`
 for apps that ship as a package family (Tachiyomi installs every source as its
 own apk). Prefixes match whole labels, so `eu.kanade.tachiyomi` covers
