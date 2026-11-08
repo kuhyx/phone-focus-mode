@@ -49,7 +49,13 @@ _PACKAGE_RE = re.compile(r"\b(?:com|dev)\.kuhy\.[A-Za-z0-9_.]+")
 # Not yet written, and deliberately not in any list: the prefix is what has to
 # allow these. This is the "and the ones that will exist in the future" half of
 # the guarantee, which enumerating installed packages cannot test.
-HYPOTHETICAL = ("com.kuhy.does_not_exist_yet", "dev.kuhy.does_not_exist_yet")
+# com.kuhy.slotN are phone_slot.sh scratch ids (~/.claude/scripts/phone_slot.sh): covered by the com.kuhy prefix.
+HYPOTHETICAL = (
+    "com.kuhy.does_not_exist_yet",
+    "dev.kuhy.does_not_exist_yet",
+    "com.kuhy.slot1",
+    "com.kuhy.slot42",
+)
 
 # Whole-label matching must not let a lookalike vendor in on the prefix.
 LOOKALIKES = ("com.kuhyevil.spy", "dev.kuhyevil.spy", "com.kuhysomething")
