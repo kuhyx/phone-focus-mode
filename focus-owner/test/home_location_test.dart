@@ -9,9 +9,7 @@ void main() {
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('home_loc_test');
-    store = HomeLocationStore(
-      File('${dir.path}/${HomeLocationStore.fileName}'),
-    );
+    store = HomeLocationStore(File('${dir.path}/${HomeLocationStore.fileName}'));
   });
 
   tearDown(() => dir.deleteSync(recursive: true));
@@ -48,9 +46,8 @@ void main() {
     test('returns null when a coordinate is not a number', () async {
       // This is the shape the shipped REDACTED_* placeholder would produce if
       // it ever reached the device.
-      await store.file.writeAsString(
-        '{"latitude": "REDACTED_LAT", "longitude": 21.0}',
-      );
+      await store.file
+          .writeAsString('{"latitude": "REDACTED_LAT", "longitude": 21.0}');
       expect(await store.read(), isNull);
     });
 

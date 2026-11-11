@@ -11,29 +11,35 @@ Map<String, Object?> _doc({
   Object? curfewActive = false,
   Object? homeConfigured = true,
   Object? failure,
-}) => {
-  'v': 1,
-  'ts': 1786000000000,
-  'reason': reason,
-  'distance_m': distanceM,
-  'threshold_m': 180.0,
-  'inside_fence': true,
-  'home_configured': homeConfigured,
-  'fix': {
-    'age_ms': fixAgeMs,
-    'provider': 'gps',
-    'accuracy_m': fixAccuracyM,
-    'outcome': 'ACTIVE_OK',
-  },
-  'curfew_active': curfewActive,
-  'curfew_window': '23:00-05:00',
-  'counts': {'to_hide': 12, 'to_show': 30, 'hid_delta': 1, 'restored_delta': 0},
-  'hidden': [
-    {'pkg': 'com.google.android.youtube', 'why': 'ALWAYS_BLOCKED'},
-    {'pkg': 'org.mozilla.fenix', 'why': 'NOT_IN_ALLOWLIST'},
-  ],
-  'failure': failure,
-};
+}) =>
+    {
+      'v': 1,
+      'ts': 1786000000000,
+      'reason': reason,
+      'distance_m': distanceM,
+      'threshold_m': 180.0,
+      'inside_fence': true,
+      'home_configured': homeConfigured,
+      'fix': {
+        'age_ms': fixAgeMs,
+        'provider': 'gps',
+        'accuracy_m': fixAccuracyM,
+        'outcome': 'ACTIVE_OK',
+      },
+      'curfew_active': curfewActive,
+      'curfew_window': '23:00-05:00',
+      'counts': {
+        'to_hide': 12,
+        'to_show': 30,
+        'hid_delta': 1,
+        'restored_delta': 0,
+      },
+      'hidden': [
+        {'pkg': 'com.google.android.youtube', 'why': 'ALWAYS_BLOCKED'},
+        {'pkg': 'org.mozilla.fenix', 'why': 'NOT_IN_ALLOWLIST'},
+      ],
+      'failure': failure,
+    };
 
 void main() {
   group('EnforcementRecord.fromJson', () {

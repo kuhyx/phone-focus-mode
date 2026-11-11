@@ -91,7 +91,7 @@ does, and that test is the authority if this block ever drifts again.
 
 `--redact-home` is required — the committed asset must keep `latitude`/
 `longitude` null. Real coordinates live only in app-private storage, written by
-"Set home to current location" in the app.
+the app's set-home button (the house-with-plus icon).
 
 **Regenerating is only half of it.** `assets/policy.json` is a Flutter asset
 compiled *into the APK*; there is no push-only path for it, and

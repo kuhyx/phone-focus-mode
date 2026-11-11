@@ -1,3 +1,4 @@
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/device_policy.dart';
@@ -14,22 +15,24 @@ import 'package:focus_owner/device_policy.dart';
   final stubs = {'hasHomeLocation': false, ...responses};
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (!stubs.containsKey(call.method)) {
-          throw PlatformException(code: 'unimplemented', message: 'no stub');
-        }
-        return stubs[call.method];
-      });
+    calls.add(call);
+    if (!stubs.containsKey(call.method)) {
+      throw PlatformException(code: 'unimplemented', message: 'no stub');
+    }
+    return stubs[call.method];
+  });
   return (channel: channel, calls: calls);
 }
 
 Map<String, Object?> _statusMap({bool isDeviceOwner = false}) => {
-  'packageName': 'com.kuhy.focus_owner',
-  'isDeviceOwner': isDeviceOwner,
-  'isAdminActive': isDeviceOwner,
-  'sdkInt': 36,
-  'restrictionsApplied': false,
-};
+      'packageName': 'com.kuhy.focus_owner',
+      'isDeviceOwner': isDeviceOwner,
+      'isAdminActive': isDeviceOwner,
+      'sdkInt': 36,
+      'restrictionsApplied': false,
+    };
+
+
 
 void main() {
   // Explicit since the split moved the testWidgets() group that used to
@@ -38,9 +41,7 @@ void main() {
 
   group('DevicePolicyStatus', () {
     test('parses the native status map', () {
-      final status = DevicePolicyStatus.fromMap(
-        _statusMap(isDeviceOwner: true),
-      );
+      final status = DevicePolicyStatus.fromMap(_statusMap(isDeviceOwner: true));
       expect(status.packageName, 'com.kuhy.focus_owner');
       expect(status.isDeviceOwner, isTrue);
       expect(status.sdkInt, 36);

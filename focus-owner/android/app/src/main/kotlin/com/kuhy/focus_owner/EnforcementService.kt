@@ -158,15 +158,17 @@ class EnforcementService : Service() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "Focus enforcement",
+                    // Channel name = app label only (textgate decision 4).
+                    "Focuser",
                     // Low: this notification exists because a foreground
                     // service requires one, not because it needs attention.
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )
         }
+        // No title or body (textgate): Android already shows the app label
+        // in the notification header, and the lock glyph says the rest.
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Focus Owner")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setOngoing(true)
             .build()

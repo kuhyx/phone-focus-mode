@@ -12,22 +12,23 @@ Map<String, Object?> _doc({
   Object? curfew = const {'start': '23:00', 'end': '05:00'},
   double? latitude,
   double? longitude,
-}) => {
-  'schema_version': schemaVersion,
-  'home': {
-    'latitude': latitude,
-    'longitude': longitude,
-    'radius_m': 150.0,
-    'hysteresis_m': 30.0,
-  },
-  'curfew': curfew,
-  'launcher_package': 'com.qqlabs.minimalistlauncher',
-  'allowed_packages': ['com.good', 'pl.mbank'],
-  'night_allowed_packages': ['pl.mbank'],
-  'never_disable_prefixes': ['com.android.providers'],
-  'workout_unblock_domains': ['youtube.com'],
-  'browser_packages': <String>[],
-};
+}) =>
+    {
+      'schema_version': schemaVersion,
+      'home': {
+        'latitude': latitude,
+        'longitude': longitude,
+        'radius_m': 150.0,
+        'hysteresis_m': 30.0,
+      },
+      'curfew': curfew,
+      'launcher_package': 'com.qqlabs.minimalistlauncher',
+      'allowed_packages': ['com.good', 'pl.mbank'],
+      'night_allowed_packages': ['pl.mbank'],
+      'never_disable_prefixes': ['com.android.providers'],
+      'workout_unblock_domains': ['youtube.com'],
+      'browser_packages': <String>[],
+    };
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -90,7 +91,10 @@ void main() {
       // Whole labels only, so an unrelated package is not swept in.
       expect(prefixed.isAllowed('eu.kanade.tachiyomisomething'), isFalse);
       // Chosen 2026-08-14: manga stays available during the curfew.
-      expect(prefixed.isAllowed('com.kuhy.kartka', duringCurfew: true), isTrue);
+      expect(
+        prefixed.isAllowed('com.kuhy.kartka', duringCurfew: true),
+        isTrue,
+      );
     });
 
     test('a day-only prefix is blocked during curfew', () {
@@ -98,7 +102,10 @@ void main() {
         _doc()..['allowed_prefixes'] = ['com.kuhy', 'eu.kanade.tachiyomi'],
       );
       expect(dayOnly.isAllowed('com.kuhy.kartka'), isTrue);
-      expect(dayOnly.isAllowed('com.kuhy.kartka', duringCurfew: true), isFalse);
+      expect(
+        dayOnly.isAllowed('com.kuhy.kartka', duringCurfew: true),
+        isFalse,
+      );
     });
 
     test('a prefix list of the wrong type is still an error', () {
@@ -143,11 +150,8 @@ void main() {
     // The launcher must survive enforcement or the device has no home screen.
     expect(policy.launcherPackage, isNotNull);
     expect(policy.allowedPackages, contains(policy.launcherPackage));
-    expect(
-      policy.home.hasCoordinates,
-      isFalse,
-      reason: 'committed policy.json must not carry home coordinates',
-    );
+    expect(policy.home.hasCoordinates, isFalse,
+        reason: 'committed policy.json must not carry home coordinates');
     expect(policy.curfew, isNotNull);
     // kuhy's own music app (Metrolist replacement) is allowed like Metrolist.
     expect(policy.allowedPackages, contains('com.kuhy.tunedeck'));

@@ -6,6 +6,7 @@
 
 part of 'policy.dart';
 
+
 /// The device-independent focus policy, as generated from `config.sh`.
 class FocusPolicy {
   const FocusPolicy({
@@ -37,10 +38,8 @@ class FocusPolicy {
     return FocusPolicy(
       home: HomeLocation.fromJson(home),
       allowedPackages: _stringSet(json['allowed_packages'], 'allowed_packages'),
-      nightAllowedPackages: _stringSet(
-        json['night_allowed_packages'],
-        'night_allowed_packages',
-      ),
+      nightAllowedPackages:
+          _stringSet(json['night_allowed_packages'], 'night_allowed_packages'),
       neverDisablePrefixes: _stringSet(
         json['never_disable_prefixes'],
         'never_disable_prefixes',
@@ -56,8 +55,14 @@ class FocusPolicy {
       // Optional: absent from an asset rendered before prefixes existed, and
       // reading a missing key as empty restores exactly the old exact-match
       // behaviour rather than failing to parse the whole policy.
-      allowedPrefixes: _optionalStringSet(json, 'allowed_prefixes'),
-      nightAllowedPrefixes: _optionalStringSet(json, 'night_allowed_prefixes'),
+      allowedPrefixes: _optionalStringSet(
+        json,
+        'allowed_prefixes',
+      ),
+      nightAllowedPrefixes: _optionalStringSet(
+        json,
+        'night_allowed_prefixes',
+      ),
     );
   }
 
@@ -96,8 +101,10 @@ class FocusPolicy {
   /// Matched on whole labels, so `com.android.providers` covers
   /// `com.android.providers.telephony` but not `com.android.providersomething`.
   /// Shared by every prefix list so the boundary rule cannot drift.
-  static bool _matchesPrefix(String package, Set<String> prefixes) => prefixes
-      .any((prefix) => package == prefix || package.startsWith('$prefix.'));
+  static bool _matchesPrefix(String package, Set<String> prefixes) =>
+      prefixes.any(
+        (prefix) => package == prefix || package.startsWith('$prefix.'),
+      );
 
   /// Whether a package must never be disabled.
   bool isProtected(String package) =>
