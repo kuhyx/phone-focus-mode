@@ -16,6 +16,8 @@ import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/main.dart';
 import 'package:focus_owner/policy.dart';
 
+part 'text_free_fixtures.dart';
+
 final RegExp _packageName = RegExp(r'\b[a-z][a-z0-9_]*(\.[a-z0-9_]+)+\b');
 final RegExp _unit = RegExp(r'\b(km|min)\b');
 final RegExp _word = RegExp('[A-Za-z]{2,}');
@@ -36,83 +38,6 @@ List<String> _wordsOnScreen(WidgetTester tester) =>
 void _expectNoWords(WidgetTester tester, String screen) {
   expect(_wordsOnScreen(tester), isEmpty, reason: screen);
 }
-
-String _record({
-  String reason = 'AT_HOME',
-  String? failure,
-  bool? homeConfigured = true,
-  double? accuracy = 12,
-  int ageMinutes = 0,
-  bool withHidden = true,
-}) => jsonEncode({
-  'ts': DateTime.now()
-      .subtract(Duration(minutes: ageMinutes))
-      .millisecondsSinceEpoch,
-  'reason': reason,
-  'distance_m': 1766.0,
-  'threshold_m': 150.0,
-  'inside_fence': false,
-  'home_configured': homeConfigured,
-  'fix': {
-    'age_ms': 75000,
-    'provider': 'gps',
-    'accuracy_m': accuracy,
-    'outcome': 'TIMEOUT',
-  },
-  'curfew_active': true,
-  'curfew_window': '23:00-05:00',
-  'counts': {'to_hide': 3, 'to_show': 40, 'hid_delta': 1, 'restored_delta': 2},
-  'hidden': withHidden
-      ? [
-          {'pkg': 'com.bad.app', 'why': 'ALWAYS_BLOCKED'},
-          {'pkg': 'com.day.app', 'why': 'NOT_IN_ALLOWLIST'},
-          {'pkg': 'com.night.app', 'why': 'NOT_IN_NIGHT_ALLOWLIST'},
-          {'pkg': 'com.lock.app', 'why': 'NOT_IN_LOCKDOWN_ALLOWLIST'},
-          {'pkg': 'com.odd.app', 'why': 'SOMETHING_NEW'},
-        ]
-      : <Object>[],
-  'failure': ?failure,
-});
-
-MethodChannel _channel(Map<String, Object?> stubs) {
-  const channel = MethodChannel('test/text_free');
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(channel, (call) async {
-        if (!stubs.containsKey(call.method)) {
-          throw PlatformException(code: 'x', message: 'no stub for this call');
-        }
-        return stubs[call.method];
-      });
-  return channel;
-}
-
-Map<String, Object?> _status({required bool owner}) => {
-  'packageName': 'com.kuhy.focus_owner',
-  'isDeviceOwner': owner,
-  'isAdminActive': owner,
-  'sdkInt': 36,
-  'restrictionsApplied': false,
-};
-
-Future<FocusPolicy> _policy() async => FocusPolicy.fromJson({
-  'schema_version': kSupportedSchemaVersion,
-  'home': {
-    'latitude': null,
-    'longitude': null,
-    'radius_m': 150.0,
-    'hysteresis_m': 30.0,
-  },
-  'curfew': {'start': '23:00', 'end': '05:00'},
-  'launcher_package': 'com.launcher',
-  'allowed_packages': ['com.good'],
-  'night_allowed_packages': <String>[],
-  'never_disable_prefixes': <String>[],
-  'workout_unblock_domains': ['youtube.com'],
-  'browser_packages': <String>[],
-});
-
-Future<FocusPolicy> _brokenPolicy() async =>
-    throw const PolicyFormatException('schema mismatch in asset');
 
 Future<void> _pumpPage(
   WidgetTester tester,
