@@ -61,6 +61,7 @@ com.kuhy.book_guard_app
 com.kuhy.daily_limits
 com.kuhy.diet_guard_app
 com.kuhy.dufs_client
+com.kuhy.epopeja_karta
 com.kuhy.home_guard
 com.kuhy.leetcode_guard
 com.kuhy.home_inventory
