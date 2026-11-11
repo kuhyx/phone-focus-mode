@@ -41,7 +41,7 @@ dependencies:
   design_system:
     git:
       url: https://github.com/kuhyx/utils
-      ref: design_system-v0.2.1
+      ref: design_system-v0.3.1
       path: design_system
 
 dev_dependencies:
