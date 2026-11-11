@@ -17,7 +17,6 @@ PreferredSizeWidget _statusAppBar({
   return AppBar(
     backgroundColor: kField,
     foregroundColor: kText,
-    title: const Text('Focus Owner'),
     actions: [
       if (busy)
         const Padding(
@@ -31,13 +30,46 @@ PreferredSizeWidget _statusAppBar({
       else
         IconButton(
           onPressed: onRefresh,
-          icon: const Icon(Icons.refresh),
-          tooltip: 'Refresh',
+          icon: const Icon(Icons.refresh, semanticLabel: 'Refresh'),
         ),
     ],
   );
 }
 
-void _showSnack(BuildContext context, String text) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+/// Opens the debug log over the status page.
+void _openLogPage(BuildContext context, List<EnforcementRecord> log) =>
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => DebugLogPage(records: log)),
+      ),
+    );
+
+/// Confirms an action as a picture: the action's own icon, then a check
+/// (accent) or a cross (danger). [spoken] is the old sentence, kept for
+/// TalkBack and for platform failure reasons, which are never painted.
+void _showSnack(
+  BuildContext context, {
+  required IconData action,
+  required bool ok,
+  required String spoken,
+}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Semantics(
+        label: spoken,
+        excludeSemantics: true,
+        child: Row(
+          key: Key(ok ? 'snack-ok' : 'snack-fail'),
+          children: [
+            Icon(action, color: kText),
+            const SizedBox(width: kGap / 2),
+            Icon(
+              ok ? Icons.check_circle : Icons.cancel,
+              color: ok ? kAccent : kDanger,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

@@ -167,7 +167,6 @@ class EnforcementService : Service() {
         }
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Focus Owner")
-            .setContentText("Applying focus policy")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setOngoing(true)
             .build()

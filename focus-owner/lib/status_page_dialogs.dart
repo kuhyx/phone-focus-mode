@@ -23,7 +23,15 @@ Widget _statusPageBody({
   required VoidCallback onOpenLog,
 }) {
   if (error != null) {
-    return const _Message(text: 'Could not read state', color: kDanger);
+    return const Center(
+      child: Icon(
+        Icons.error_outline,
+        key: Key('state-error'),
+        size: 48,
+        color: kDanger,
+        semanticLabel: 'Could not read state',
+      ),
+    );
   }
   if (status != null) {
     return _StatusBody(
@@ -47,19 +55,17 @@ Widget _statusPageBody({
 Widget _lockVpnDialog(BuildContext context) {
   return AlertDialog(
     backgroundColor: kSurface,
-    title: const Text('Lock VPN configuration?'),
-    content: const Text(
-      'The always-on VPN can no longer be turned off from Settings. '
-      'Releasing device owner lifts this.',
-    ),
+    title: const Icon(Icons.vpn_lock, size: 48),
     actions: [
-      TextButton(
+      IconButton(
+        key: const Key('vpn-cancel'),
+        icon: const Icon(Icons.close, semanticLabel: 'Cancel'),
         onPressed: () => Navigator.pop(context, false),
-        child: const Text('Cancel'),
       ),
-      TextButton(
+      IconButton(
+        key: const Key('vpn-confirm'),
+        icon: const Icon(Icons.check, semanticLabel: 'Lock'),
         onPressed: () => Navigator.pop(context, true),
-        child: const Text('Lock'),
       ),
     ],
   );
@@ -67,38 +73,42 @@ Widget _lockVpnDialog(BuildContext context) {
 
 Widget _releaseDialog(BuildContext context, {required bool hasAccounts}) {
   return AlertDialog(
+    key: const Key('release-dialog'),
     backgroundColor: kSurface,
-    title: const Text('Release device owner?'),
-    // Deliberately concrete, and honest in both directions. "Restored only
-    // by a factory reset" is true but abstract, and this dialog is read in
-    // the moment the block is most inconvenient -- the price has to be
-    // legible right then, not inferred. While no account exists the price
-    // really is low, and overstating it there would teach the user to
-    // ignore the warning that matters later.
-    content: Text(
-      hasAccounts
-          ? 'Enforcement stops. YouTube comes back.\n\n'
-                'Accounts exist on this device, so device owner can NEVER '
-                'be set again without a factory reset. That means '
-                're-pairing mBank, Revolut and inFakt over SMS, '
-                're-activating mObywatel, signing in to every account '
-                'again, and losing Signal history.\n\n'
-                'This is the way out if something is broken. It is a bad '
-                'trade for wanting to watch a video.'
-          : 'Enforcement stops and YouTube comes back.\n\n'
+    title: const Icon(Icons.lock_open, size: 48),
+    // The price of releasing, as a picture. With accounts on the device,
+    // device owner only comes back after a factory reset (danger-coloured
+    // phone-erase glyph); without, it can be set again straight away (replay
+    // glyph). The full sentence is the spoken label.
+    content: hasAccounts
+        ? const Icon(
+            Icons.phonelink_erase,
+            key: Key('release-price-wipe'),
+            size: 40,
+            color: kDanger,
+            semanticLabel:
+                'Accounts exist, so device owner can never be set again '
+                'without a factory reset',
+          )
+        : const Icon(
+            Icons.replay,
+            key: Key('release-price-free'),
+            size: 40,
+            color: kAccent,
+            semanticLabel:
                 'No account exists yet, so device owner can be set again '
-                'straight afterwards without a wipe. This is the moment to '
-                'test the release path, before signing in.',
-    ),
+                'without a wipe',
+          ),
     actions: [
-      TextButton(
+      IconButton(
+        key: const Key('release-cancel'),
+        icon: const Icon(Icons.close, semanticLabel: 'Cancel'),
         onPressed: () => Navigator.pop(context, false),
-        child: const Text('Cancel'),
       ),
-      TextButton(
+      IconButton(
+        key: const Key('release-confirm'),
+        icon: const Icon(Icons.check, color: kDanger, semanticLabel: 'Release'),
         onPressed: () => Navigator.pop(context, true),
-        style: TextButton.styleFrom(foregroundColor: kDanger),
-        child: const Text('Release'),
       ),
     ],
   );

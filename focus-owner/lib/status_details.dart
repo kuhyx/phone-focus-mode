@@ -5,22 +5,21 @@
 
 part of 'main.dart';
 
-/// "Enforcing" row value: what the last recorded pass hid.
-///
-/// "none (inert build)" was a leftover from when this app really did apply
-/// nothing. It has been enforcing for weeks, so the honest value is whether
-/// the last recorded pass hid anything.
-String _enforcingLabel(List<EnforcementRecord> log) =>
+/// "Enforcing" row value: how many apps the last recorded pass hid, or an
+/// empty hourglass when no pass exists yet.
+Widget _enforcingValue(List<EnforcementRecord> log) =>
     switch (EnforcementRecord.latestPass(log)?.hideCount) {
-      null => 'no pass recorded yet',
-      0 => 'nothing hidden',
-      final int n => '$n apps hidden',
+      null => const Icon(
+        Icons.hourglass_empty,
+        color: kMuted,
+        semanticLabel: 'no pass recorded yet',
+      ),
+      final int n => IconNumber(
+        Icons.visibility_off,
+        '$n',
+        spoken: '$n apps hidden',
+      ),
     };
-
-/// The distinction that decides whether enforcement is geofenced or
-/// permanent, so it belongs on screen rather than only in logcat.
-String _geofenceLabel(bool hasHome) =>
-    hasHome ? 'active' : 'no home set - enforcing everywhere';
 
 /// Lays [children] out two per row, each pair a fixed-height row.
 class _ActionGrid extends StatelessWidget {
@@ -76,44 +75,93 @@ Future<void> _showDetailsSheet(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _Row(label: 'Package', value: status.packageName),
             _Row(
-              label: 'Device owner',
-              value: status.isDeviceOwner ? 'yes' : 'no',
+              key: const Key('detail-package'),
+              icon: Icons.inventory_2,
+              semanticLabel: 'Package',
+              // The package id is the app's identifier, not prose.
+              value: _value(status.packageName),
             ),
             _Row(
-              label: 'Admin active',
-              value: status.isAdminActive ? 'yes' : 'no',
+              icon: Icons.admin_panel_settings,
+              semanticLabel: 'Device owner',
+              value: _flag(status.isDeviceOwner, falseIsBad: true),
             ),
-            _Row(label: 'Android SDK', value: '${status.sdkInt}'),
-            _Row(label: 'Enforcing', value: _enforcingLabel(log)),
+            _Row(
+              icon: Icons.verified_user,
+              semanticLabel: 'Admin active',
+              value: _flag(status.isAdminActive),
+            ),
+            _Row(
+              icon: Icons.android,
+              semanticLabel: 'Android SDK',
+              value: _value('${status.sdkInt}'),
+            ),
+            _Row(
+              icon: Icons.shield,
+              semanticLabel: 'Enforcing',
+              value: _enforcingValue(log),
+            ),
             if (policyError != null)
-              _Message(text: 'Policy: $policyError', color: kDanger)
+              _policyFailed(policyError)
             else if (policy != null) ...[
               _Row(
-                label: 'Allowed apps',
-                value:
-                    '${policy.allowedPackages.length}'
-                    ' (${policy.nightAllowedPackages.length} at night)',
+                key: const Key('detail-allowed-apps'),
+                icon: Icons.apps,
+                semanticLabel: 'Allowed apps',
+                value: Wrap(
+                  children: [
+                    IconNumber(
+                      Icons.wb_sunny,
+                      '${policy.allowedPackages.length}',
+                      spoken: '${policy.allowedPackages.length} allowed',
+                    ),
+                    IconNumber(
+                      Icons.bedtime,
+                      '${policy.nightAllowedPackages.length}',
+                      spoken: '${policy.nightAllowedPackages.length} at night',
+                    ),
+                  ],
+                ),
               ),
               _Row(
-                label: 'Curfew',
+                icon: Icons.bedtime,
+                semanticLabel: 'Curfew',
                 value: policy.curfew == null
-                    ? 'disabled'
-                    : '${_hhmm(policy.curfew!.startMinutes)}'
-                          '-${_hhmm(policy.curfew!.endMinutes)}',
+                    ? GlyphIcon(curfewGlyph(false), spoken: 'disabled')
+                    : _value(
+                        '${_hhmm(policy.curfew!.startMinutes)}'
+                        '-${_hhmm(policy.curfew!.endMinutes)}',
+                      ),
               ),
               _Row(
-                label: 'Home radius',
-                value: policy.home.hasCoordinates
-                    ? '${policy.home.radiusM.round()} m'
-                    : '${policy.home.radiusM.round()} m (coords redacted)',
+                icon: Icons.radar,
+                semanticLabel: 'Home radius',
+                value: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (!policy.home.hasCoordinates)
+                      const Icon(
+                        Icons.location_off,
+                        size: 16,
+                        color: kMuted,
+                        semanticLabel: 'coords redacted',
+                      ),
+                    _value(' ${policy.home.radiusM.round()} m'),
+                  ],
+                ),
               ),
               _Row(
-                label: 'Workout domains',
-                value: '${policy.workoutUnblockDomains.length}',
+                key: const Key('detail-workout-domains'),
+                icon: Icons.fitness_center,
+                semanticLabel: 'Workout domains',
+                value: _value('${policy.workoutUnblockDomains.length}'),
               ),
-              _Row(label: 'Geofence', value: _geofenceLabel(hasHome)),
+              _Row(
+                icon: Icons.fence,
+                semanticLabel: 'Geofence',
+                value: _geofenceFlag(hasHome),
+              ),
             ],
           ],
         ),

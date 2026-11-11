@@ -91,7 +91,6 @@ public final class StatusService extends Service {
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "Focus Mode Status",
                 NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription("Persistent status of the focus-mode daemon");
         ch.setShowBadge(false);
         ch.setSound(null, null);
         ch.enableVibration(false);

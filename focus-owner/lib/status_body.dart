@@ -60,6 +60,7 @@ class _StatusBody extends StatelessWidget {
         // the rest of the provisioning detail is one tap away in a sheet, so
         // this page fits one phone screen without scrolling.
         InkWell(
+          key: const Key('details-toggle'),
           onTap: () => _showDetailsSheet(
             context,
             status: status,
@@ -75,11 +76,18 @@ class _StatusBody extends StatelessWidget {
                 child: Column(
                   children: [
                     _Row(
-                      label: 'Device owner',
-                      value: status.isDeviceOwner ? 'yes' : 'no',
+                      icon: Icons.admin_panel_settings,
+                      semanticLabel: 'Device owner',
+                      key: const Key('row-owner'),
+                      value: _flag(status.isDeviceOwner, falseIsBad: true),
                     ),
                     if (policyError == null && policy != null)
-                      _Row(label: 'Geofence', value: _geofenceLabel(hasHome)),
+                      _Row(
+                        icon: Icons.fence,
+                        semanticLabel: 'Geofence',
+                        key: const Key('row-geofence'),
+                        value: _geofenceFlag(hasHome),
+                      ),
                   ],
                 ),
               ),
@@ -88,48 +96,89 @@ class _StatusBody extends StatelessWidget {
           ),
         ),
         if (policyError != null)
-          _Message(text: 'Policy: $policyError', color: kDanger)
+          _policyFailed(policyError!)
         else if (policy == null)
-          const _Message(text: 'Policy: loading...', color: kMuted),
+          const LinearProgressIndicator(
+            key: Key('policy-loading'),
+            semanticsLabel: 'Policy loading',
+          ),
         const SizedBox(height: kGap),
         _ActionGrid(
           children: [
             OutlinedButton(
+              key: const Key('run-enforcement'),
               onPressed: busy ? null : onRunNow,
-              child: const Text('Run enforcement now'),
+              child: const Icon(
+                Icons.play_arrow,
+                semanticLabel: 'Run enforcement now',
+              ),
             ),
             if (status.isDeviceOwner) ...[
               OutlinedButton(
+                key: const Key('set-home'),
                 onPressed: busy ? null : onSetHome,
-                child: Text(
-                  hasHome
+                child: Icon(
+                  hasHome ? Icons.edit_location_alt : Icons.add_home,
+                  color: hasHome ? null : kDanger,
+                  semanticLabel: hasHome
                       ? 'Update home to here'
                       : 'Set home to current location',
                 ),
               ),
               OutlinedButton(
+                key: const Key('lock-vpn'),
                 onPressed: busy ? null : onLockVpn,
-                child: const Text('Lock VPN configuration'),
+                child: const Icon(
+                  Icons.vpn_lock,
+                  semanticLabel: 'Lock VPN configuration',
+                ),
               ),
               FilledButton(
+                key: const Key('release-owner'),
                 onPressed: busy ? null : onRelease,
                 style: FilledButton.styleFrom(backgroundColor: kDanger),
-                child: const Text('Release device owner'),
+                child: const Icon(
+                  Icons.lock_open,
+                  semanticLabel: 'Release device owner',
+                ),
               ),
             ],
           ],
         ),
-        if (!status.isDeviceOwner) ...[
-          const SizedBox(height: kGap),
-          const _Message(
-            text: 'Not provisioned as device owner. Nothing is enforced.',
-            color: kMuted,
-          ),
-        ],
+        // "Not provisioned, nothing is enforced" was a sentence here; the
+        // owner row's danger-coloured cross above now says it.
       ],
     );
   }
 }
+
+/// Yes/no as a check or cross, spoken as the old word.
+Widget _flag(bool value, {bool falseIsBad = false}) => GlyphIcon(
+  boolGlyph(value, falseIsBad: falseIsBad),
+  spoken: value ? 'yes' : 'no',
+  size: 22,
+);
+
+/// Whether the geofence applies. A cross in danger colour means no home is
+/// set, so enforcement is permanent: the distinction must stay on screen.
+Widget _geofenceFlag(bool hasHome) => GlyphIcon(
+  boolGlyph(hasHome, falseIsBad: true),
+  spoken: hasHome ? 'active' : 'no home set - enforcing everywhere',
+  size: 22,
+);
+
+/// The policy asset failed to parse: a danger glyph pair, error spoken.
+Widget _policyFailed(String error) => Semantics(
+  label: 'Policy: $error',
+  excludeSemantics: true,
+  child: const Row(
+    key: Key('policy-error'),
+    children: [
+      Icon(Icons.policy, color: kDanger),
+      Icon(Icons.error, color: kDanger),
+    ],
+  ),
+);
 
 /// Formats minutes-since-midnight as HH:MM.
 String _hhmm(int minutes) {
@@ -139,10 +188,18 @@ String _hhmm(int minutes) {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.value});
+  const _Row({
+    required this.icon,
+    required this.semanticLabel,
+    required this.value,
+    super.key,
+  });
 
-  final String label;
-  final String value;
+  final IconData icon;
+  final String semanticLabel;
+
+  /// The value: a glyph, or a Text holding a number or policy data.
+  final Widget value;
 
   @override
   Widget build(BuildContext context) {
@@ -151,21 +208,17 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: kMuted)),
-          Text(value, style: const TextStyle(color: kText)),
+          Icon(icon, color: kMuted, semanticLabel: semanticLabel),
+          Flexible(child: value),
         ],
       ),
     );
   }
 }
 
-class _Message extends StatelessWidget {
-  const _Message({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) =>
-      Text(text, style: TextStyle(color: color));
-}
+/// A number or policy value painted in the row's text style.
+Widget _value(String text) => Text(
+  text,
+  style: const TextStyle(color: kText),
+  textAlign: TextAlign.end,
+);

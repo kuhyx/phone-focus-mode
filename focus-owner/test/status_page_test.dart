@@ -1,12 +1,12 @@
 // StatusPage widget behaviour.
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/main.dart';
 import 'package:focus_owner/policy.dart';
+import 'package:focus_owner/theme.dart';
 
 /// Builds a channel whose handler answers from [responses], recording calls.
 ({MethodChannel channel, List<MethodCall> calls}) _fakeChannel(
@@ -20,47 +20,58 @@ import 'package:focus_owner/policy.dart';
   final stubs = {'hasHomeLocation': false, ...responses};
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, (call) async {
-    calls.add(call);
-    if (!stubs.containsKey(call.method)) {
-      throw PlatformException(code: 'unimplemented', message: 'no stub');
-    }
-    return stubs[call.method];
-  });
+        calls.add(call);
+        if (!stubs.containsKey(call.method)) {
+          throw PlatformException(code: 'unimplemented', message: 'no stub');
+        }
+        return stubs[call.method];
+      });
   return (channel: channel, calls: calls);
 }
 
 Map<String, Object?> _statusMap({bool isDeviceOwner = false}) => {
-      'packageName': 'com.kuhy.focus_owner',
-      'isDeviceOwner': isDeviceOwner,
-      'isAdminActive': isDeviceOwner,
-      'sdkInt': 36,
-      'restrictionsApplied': false,
-    };
+  'packageName': 'com.kuhy.focus_owner',
+  'isDeviceOwner': isDeviceOwner,
+  'isAdminActive': isDeviceOwner,
+  'sdkInt': 36,
+  'restrictionsApplied': false,
+};
 
 /// Minimal policy so widget tests never touch the (empty) test rootBundle.
 Future<FocusPolicy> _stubPolicy() async => FocusPolicy.fromJson({
-      'schema_version': kSupportedSchemaVersion,
-      'home': {
-        'latitude': null,
-        'longitude': null,
-        'radius_m': 150.0,
-        'hysteresis_m': 30.0,
-      },
-      'curfew': {'start': '23:00', 'end': '05:00'},
-      'launcher_package': 'com.launcher',
-      'allowed_packages': ['com.good'],
-      'night_allowed_packages': <String>[],
-      'never_disable_prefixes': <String>[],
-      'workout_unblock_domains': ['youtube.com'],
-      'browser_packages': <String>[],
-    });
+  'schema_version': kSupportedSchemaVersion,
+  'home': {
+    'latitude': null,
+    'longitude': null,
+    'radius_m': 150.0,
+    'hysteresis_m': 30.0,
+  },
+  'curfew': {'start': '23:00', 'end': '05:00'},
+  'launcher_package': 'com.launcher',
+  'allowed_packages': ['com.good'],
+  'night_allowed_packages': <String>[],
+  'never_disable_prefixes': <String>[],
+  'workout_unblock_domains': ['youtube.com'],
+  'browser_packages': <String>[],
+});
+
+/// An [Icon] whose spoken label contains [text].
+Finder _spoken(String text) => find.byWidgetPredicate(
+  (w) => w is Icon && (w.semanticLabel ?? '').contains(text),
+);
+
+/// The value glyph of the status row with [key] (its last icon).
+Icon _rowIcon(WidgetTester tester, String key) => tester.widget<Icon>(
+  find.descendant(of: find.byKey(Key(key)), matching: find.byType(Icon)).last,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('StatusPage', () {
-    testWidgets('hides the release button when not device owner',
-        (tester) async {
+    testWidgets('hides the release button when not device owner', (
+      tester,
+    ) async {
       final fake = _fakeChannel({'status': _statusMap()});
       await tester.pumpWidget(
         MaterialApp(
@@ -72,8 +83,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Release device owner'), findsNothing);
-      expect(find.textContaining('Nothing is enforced'), findsOneWidget);
+      expect(find.byKey(const Key('release-owner')), findsNothing);
+      // "Nothing is enforced" is the owner row's danger-coloured cross.
+      final owner = _rowIcon(tester, 'row-owner');
+      expect(owner.icon, Icons.cancel);
+      expect(owner.color, kDanger);
     });
 
     testWidgets('shows the release button when device owner', (tester) async {
@@ -88,23 +102,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Release device owner'), findsOneWidget);
+      expect(find.byKey(const Key('release-owner')), findsOneWidget);
       // The old "none (inert build)" label was a leftover from before this app
       // enforced anything, and it stayed on screen for weeks while YouTube was
       // in fact being hidden. With no pass recorded the honest answer is that
       // nothing is known yet, not that nothing is applied.
       // That row now lives in the details sheet, one tap away.
-      expect(find.text('no pass recorded yet'), findsNothing);
+      expect(_spoken('no pass recorded yet'), findsNothing);
       await tester.tap(find.byIcon(Icons.expand_less));
       await tester.pumpAndSettle();
-      expect(find.text('no pass recorded yet'), findsOneWidget);
-      expect(find.text('Package'), findsOneWidget);
-      expect(find.text('Allowed apps'), findsOneWidget);
-      expect(find.text('Workout domains'), findsOneWidget);
+      expect(_spoken('no pass recorded yet'), findsOneWidget);
+      expect(find.byKey(const Key('detail-package')), findsOneWidget);
+      expect(find.byKey(const Key('detail-allowed-apps')), findsOneWidget);
+      expect(find.byKey(const Key('detail-workout-domains')), findsOneWidget);
     });
 
-    testWidgets('reports when no home is set, since that means everywhere',
-        (tester) async {
+    testWidgets('reports when no home is set, since that means everywhere', (
+      tester,
+    ) async {
       // Without coordinates every pass decides LOCATION_UNKNOWN and fails
       // closed, so enforcement is permanent rather than geofenced. That is a
       // large behavioural difference and must be visible on screen.
@@ -122,8 +137,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('enforcing everywhere'), findsOneWidget);
-      expect(find.text('Set home to current location'), findsOneWidget);
+      final fence = _rowIcon(tester, 'row-geofence');
+      expect(fence.icon, Icons.cancel);
+      expect(fence.color, kDanger);
+      expect(fence.semanticLabel, contains('enforcing everywhere'));
+      expect(_spoken('Set home to current location'), findsOneWidget);
+      expect(find.byIcon(Icons.add_home), findsOneWidget);
     });
 
     testWidgets('offers to update home once one is set', (tester) async {
@@ -141,8 +160,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('active'), findsOneWidget);
-      expect(find.text('Update home to here'), findsOneWidget);
+      final fence = _rowIcon(tester, 'row-geofence');
+      expect(fence.icon, Icons.check_circle);
+      expect(fence.color, kAccent);
+      expect(_spoken('Update home to here'), findsOneWidget);
+      expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
     });
 
     testWidgets('release is confirmed before it runs', (tester) async {
@@ -160,13 +182,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Release device owner'), 100);
-      await tester.tap(find.text('Release device owner'));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('release-owner')),
+        100,
+      );
+      await tester.tap(find.byKey(const Key('release-owner')));
       await tester.pumpAndSettle();
-      expect(find.text('Release device owner?'), findsOneWidget);
+      expect(find.byKey(const Key('release-dialog')), findsOneWidget);
 
       // Cancelling must not call through to the platform.
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byKey(const Key('release-cancel')));
       await tester.pumpAndSettle();
       expect(
         fake.calls.where((c) => c.method == 'releaseDeviceOwner'),
@@ -175,7 +200,5 @@ void main() {
     });
   });
 }
-
-
 
 /// One JSON-lines record, as the platform channel returns them.

@@ -115,7 +115,7 @@ void main() {
       // Loading the page re-reads state; it must not run a pass by itself.
       expect(_runs(fake.calls), isEmpty);
 
-      await tester.tap(find.byTooltip('Refresh'));
+      await tester.tap(find.byIcon(Icons.refresh));
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.byIcon(Icons.refresh), findsNothing);
@@ -125,15 +125,15 @@ void main() {
       expect(runs, hasLength(1));
       expect(runs.single.arguments, {'freshFix': true});
       expect(find.byIcon(Icons.refresh), findsOneWidget);
-      expect(find.text('Location refresh finished'), findsOneWidget);
+      expect(_snack(ok: true, action: Icons.gps_fixed), findsOneWidget);
     });
 
-    for (final row in ['Location fix', 'Distance from home']) {
+    for (final row in [const Key('row-fix'), const Key('row-distance')]) {
       testWidgets('tapping "$row" runs a fresh-fix pass', (tester) async {
         final fake = _refreshChannel();
         await _pumpPage(tester, fake.channel);
 
-        await tester.tap(find.text(row));
+        await tester.tap(find.byKey(row));
         await _finishPass(tester);
 
         final runs = _runs(fake.calls).toList();
@@ -146,12 +146,15 @@ void main() {
       final fake = _refreshChannel();
       await _pumpPage(tester, fake.channel);
 
-      await tester.scrollUntilVisible(find.text('Run enforcement now'), 100);
-      await tester.tap(find.text('Run enforcement now'));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('run-enforcement')),
+        100,
+      );
+      await tester.tap(find.byKey(const Key('run-enforcement')));
       await _finishPass(tester);
 
       expect(_runs(fake.calls).single.arguments, {'freshFix': false});
-      expect(find.text('Enforcement run finished'), findsOneWidget);
+      expect(_snack(ok: true, action: Icons.play_arrow), findsOneWidget);
     });
 
     testWidgets('the rows and the icon are inert while a pass runs', (
@@ -160,10 +163,10 @@ void main() {
       final fake = _refreshChannel();
       await _pumpPage(tester, fake.channel);
 
-      await tester.tap(find.text('Location fix'));
+      await tester.tap(find.byKey(const Key('row-fix')));
       await tester.pump();
-      await tester.tap(find.text('Distance from home'));
-      expect(find.byTooltip('Refresh'), findsNothing);
+      await tester.tap(find.byKey(const Key('row-distance')));
+      expect(find.byIcon(Icons.refresh), findsNothing);
       await _finishPass(tester);
 
       expect(_runs(fake.calls), hasLength(1));
@@ -175,11 +178,17 @@ void main() {
       final fake = _refreshChannel(canRun: false);
       await _pumpPage(tester, fake.channel);
 
-      await tester.tap(find.byTooltip('Refresh'));
+      await tester.tap(find.byIcon(Icons.refresh));
       await tester.pumpAndSettle();
 
-      expect(find.text('Could not start enforcement'), findsOneWidget);
+      expect(_snack(ok: false, action: Icons.gps_fixed), findsOneWidget);
       expect(find.byIcon(Icons.refresh), findsOneWidget);
     });
   });
 }
+
+/// The result snackbar: [action]'s icon next to a check ([ok]) or cross.
+Finder _snack({required bool ok, required IconData action}) => find.descendant(
+  of: find.byKey(Key(ok ? 'snack-ok' : 'snack-fail')),
+  matching: find.byIcon(action),
+);

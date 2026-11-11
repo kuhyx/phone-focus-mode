@@ -105,7 +105,9 @@ class _StatusPageState extends State<StatusPage> {
     if (!mounted) return;
     _showSnack(
       context,
-      !started
+      action: freshFix ? Icons.gps_fixed : Icons.play_arrow,
+      ok: started,
+      spoken: !started
           ? 'Could not start enforcement'
           : freshFix
           ? 'Location refresh finished'
@@ -145,7 +147,10 @@ class _StatusPageState extends State<StatusPage> {
     setState(() => _busy = false);
     _showSnack(
       context,
-      failure ?? 'Home set. Enforcement now applies here, not everywhere.',
+      action: Icons.add_home,
+      ok: failure == null,
+      spoken:
+          failure ?? 'Home set. Enforcement now applies here, not everywhere.',
     );
     if (failure != null) {
       await _refresh();
@@ -176,7 +181,9 @@ class _StatusPageState extends State<StatusPage> {
     setState(() => _busy = false);
     _showSnack(
       context,
-      ok ? 'VPN configuration locked' : 'Could not lock - see logcat',
+      action: Icons.vpn_lock,
+      ok: ok,
+      spoken: ok ? 'VPN configuration locked' : 'Could not lock - see logcat',
     );
     await _refresh();
   }
@@ -195,17 +202,13 @@ class _StatusPageState extends State<StatusPage> {
     setState(() => _busy = false);
     _showSnack(
       context,
-      released ? 'Device owner released' : 'Release failed - see logcat',
+      action: Icons.lock_open,
+      ok: released,
+      spoken: released
+          ? 'Device owner released'
+          : 'Release failed - see logcat',
     );
     await _refresh();
-  }
-
-  void _openLog() {
-    unawaited(
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => DebugLogPage(records: _log)),
-      ),
-    );
   }
 
   @override
@@ -223,7 +226,7 @@ class _StatusPageState extends State<StatusPage> {
       onLockVpn: _lockVpn,
       hasHome: _hasHome,
       log: _log,
-      onOpenLog: _openLog,
+      onOpenLog: () => _openLogPage(context, _log),
     );
 
     return Scaffold(
@@ -231,11 +234,8 @@ class _StatusPageState extends State<StatusPage> {
         busy: _busy,
         onRefresh: () => _runNow(freshFix: true),
       ),
-      // Scrollable because the action list grew past a short screen: an
-      // unreachable "Release device owner" button is the one control that
-      // must never be clipped off the bottom.
-      // The body is laid out to fit one phone screen; the scroll view is
-      // only the safety net for a small display or a large system font.
+      // Laid out to fit one screen; scrolling is the safety net so the
+      // release button is never clipped on a small display or large font.
       // SafeArea keeps the last action clear of the gesture/nav bar.
       body: SafeArea(
         top: false,

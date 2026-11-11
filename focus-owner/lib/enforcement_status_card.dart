@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:focus_owner/enforcement_record.dart';
+import 'package:focus_owner/record_values.dart';
+import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
 
 part 'status_card_parts.dart';
@@ -14,6 +16,9 @@ part 'status_card_parts.dart';
 /// "at home" looked the same, and nothing on screen showed the distance the
 /// geofence had actually measured. Every field here answers a question that
 /// previously required reading logcat, which does not survive long enough.
+///
+/// Text-free (textgate): the state is a large coloured glyph, the rows are
+/// icons and numbers, and the old sentences are spoken labels only.
 class EnforcementStatusCard extends StatelessWidget {
   const EnforcementStatusCard({
     required this.record,
@@ -36,90 +41,66 @@ class EnforcementStatusCard extends StatelessWidget {
     final latest = record;
     if (latest == null) {
       return const _Card(
-        child: Text(
-          'No enforcement pass recorded yet.\n'
-          'Tap "Run enforcement now" to make one.',
-          style: TextStyle(color: kMuted),
+        child: Center(
+          child: Icon(
+            Icons.hourglass_empty,
+            key: Key('card-empty'),
+            size: 40,
+            color: kMuted,
+            semanticLabel: 'No enforcement pass recorded yet',
+          ),
         ),
       );
     }
+    final stale = isStale(latest.timestamp, DateTime.now());
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  _headline(latest),
-                  style: TextStyle(
-                    color: _reasonColour(latest),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              GlyphIcon(
+                reasonGlyph(latest),
+                spoken: latest.explanation,
+                size: 40,
+                key: const Key('card-state'),
               ),
-              Text(
-                _ago(latest.timestamp),
-                style: const TextStyle(color: kMuted, fontSize: 12),
-              ),
+              const Spacer(),
+              _Age(at: latest.timestamp, stale: stale),
             ],
-          ),
-          const SizedBox(height: kGap / 2),
-          Text(
-            latest.explanation,
-            style: const TextStyle(color: kText, height: 1.35),
           ),
           const SizedBox(height: kGap),
           _Field(
-            label: 'Distance from home',
-            value: latest.distanceLabel,
+            icon: Icons.home_work,
             onTap: onRefreshLocation,
+            key: const Key('row-distance'),
+            child: DistanceValue(latest),
           ),
           _Field(
-            label: 'Location fix',
-            value: latest.fixLabel,
-            danger: latest.fixLooksFuzzed,
+            icon: Icons.gps_fixed,
             onTap: onRefreshLocation,
-          ),
-          if (latest.fixLooksFuzzed)
-            const _Note(
-              text:
-                  'That accuracy is far wider than the fence, so the '
-                  'geofence cannot be trusted. Precise location is probably '
-                  'not in effect.',
-            ),
-          _Field(
-            label: 'Night curfew',
-            value: switch (latest.curfewActive) {
-              true => 'active${_window(latest)}',
-              false => 'inactive${_window(latest)}',
-              null => 'unknown',
-            },
+            key: const Key('row-fix'),
+            child: FixValue(latest),
           ),
           _Field(
-            label: 'Apps',
-            value:
-                '${latest.hideCount} hidden, ${latest.showCount} available'
-                '${_changes(latest)}',
+            icon: Icons.bedtime,
+            key: const Key('row-curfew'),
+            child: CurfewValue(latest),
           ),
-          if (_isStale(latest.timestamp))
-            const _Note(
-              text:
-                  'The last pass was over 30 minutes ago. Enforcement runs '
-                  'every 15 minutes, so the schedule may have stalled.',
-              danger: true,
-            ),
-          const SizedBox(height: kGap / 2),
+          _Field(
+            icon: Icons.apps,
+            key: const Key('row-apps'),
+            child: CountsValue(latest),
+          ),
           // One row: the hidden-apps sheet link and the debug log.
           Row(
             children: [
-              if (latest.hidden.isNotEmpty)
-                Flexible(child: _HiddenList(hidden: latest.hidden)),
+              if (latest.hidden.isNotEmpty) _HiddenList(hidden: latest.hidden),
               const Spacer(),
-              TextButton(
+              IconButton(
+                key: const Key('row-debug'),
                 onPressed: onOpenLog,
-                child: const Text('Debug log'),
+                icon: const Icon(Icons.bug_report, semanticLabel: 'Debug log'),
               ),
             ],
           ),
@@ -128,39 +109,9 @@ class EnforcementStatusCard extends StatelessWidget {
     );
   }
 
-  String _headline(EnforcementRecord r) {
-    if (r.failure != null) return 'NO DECISION';
-    if (r.homeMissing) return 'NO HOME SET';
-    return r.reason.replaceAll('_', ' ');
-  }
-
-  /// Colour-coded so the state that needs attention stands out.
-  Color _reasonColour(EnforcementRecord r) {
-    if (r.failure != null || r.homeMissing) return kDanger;
-    return switch (r.reason) {
-      'LOCATION_UNKNOWN' => kDanger,
-      'AWAY' => kMuted,
-      'CURFEW' => kWarn,
-      _ => kAccent,
-    };
-  }
-
-  /// Appended to the Apps value only when this pass changed something.
-  String _changes(EnforcementRecord r) => r.hidNow > 0 || r.restoredNow > 0
-      ? ' (hid ${r.hidNow}, restored ${r.restoredNow})'
-      : '';
-
-  String _window(EnforcementRecord r) =>
-      r.curfewWindow == null ? '' : ' (${r.curfewWindow})';
-
-  static bool _isStale(DateTime at) =>
-      DateTime.now().difference(at) > const Duration(minutes: 30);
-
-  static String _ago(DateTime at) {
-    final delta = DateTime.now().difference(at);
-    if (delta.inMinutes < 1) return 'just now';
-    if (delta.inMinutes < 60) return '${delta.inMinutes} min ago';
-    if (delta.inHours < 24) return '${delta.inHours} h ago';
-    return '${delta.inDays} d ago';
-  }
+  /// Over 30 minutes since the last pass: the 15-minute schedule may have
+  /// stalled.
+  @visibleForTesting
+  static bool isStale(DateTime at, DateTime now) =>
+      now.difference(at) > const Duration(minutes: 30);
 }

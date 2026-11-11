@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/debug_log_page.dart';
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/enforcement_status_card.dart';
+import 'package:focus_owner/theme.dart';
 
 EnforcementRecord _record({
   String reason = 'AT_HOME',
@@ -54,22 +55,47 @@ Future<void> _pump(WidgetTester tester, EnforcementRecord? record) =>
       ),
     );
 
+/// An [Icon] drawn with [icon], optionally in [color].
+Finder _icon(IconData icon, {Color? color}) => find.byWidgetPredicate(
+  (w) => w is Icon && w.icon == icon && (color == null || w.color == color),
+);
+
+/// An [Icon] whose spoken label contains [text].
+Finder _spoken(String text) => find.byWidgetPredicate(
+  (w) => w is Icon && (w.semanticLabel ?? '').contains(text),
+);
+
+/// The card's big state glyph.
+Icon _state(WidgetTester tester) => tester.widget<Icon>(
+  find.descendant(
+    of: find.byKey(const Key('card-state')),
+    matching: find.byType(Icon),
+  ),
+);
+
+/// Text inside the row with [key].
+Finder _inRow(String key, String text) =>
+    find.descendant(of: find.byKey(Key(key)), matching: find.text(text));
+
 void main() {
   group('EnforcementStatusCard', () {
-    testWidgets('says so when no pass has run yet', (tester) async {
+    testWidgets('shows an empty hourglass when no pass has run yet', (
+      tester,
+    ) async {
       await _pump(tester, null);
-      expect(
-        find.textContaining('No enforcement pass recorded'),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('card-empty')), findsOneWidget);
     });
 
     testWidgets('shows the reason, distance and curfew state', (tester) async {
       await _pump(tester, _record());
-      expect(find.text('AT HOME'), findsOneWidget);
-      expect(find.text('42 m (fence 180 m)'), findsOneWidget);
-      expect(find.text('inactive (23:00-05:00)'), findsOneWidget);
-      expect(find.text('3 hidden, 58 available'), findsOneWidget);
+      expect(_state(tester).icon, Icons.home);
+      expect(_state(tester).color, kAccent);
+      expect(_inRow('row-distance', '42 m'), findsOneWidget);
+      expect(_inRow('row-distance', '180 m'), findsOneWidget);
+      expect(_icon(Icons.toggle_off, color: kMuted), findsOneWidget);
+      expect(_inRow('row-curfew', '23:00-05:00'), findsOneWidget);
+      expect(_inRow('row-apps', '3'), findsOneWidget);
+      expect(_inRow('row-apps', '58'), findsOneWidget);
     });
 
     testWidgets('LOCATION_UNKNOWN is distinguishable from AT_HOME', (
@@ -78,58 +104,82 @@ void main() {
       // The core of the bug being fixed: these two apply the identical sweep,
       // so without this the phone gives no way to tell them apart.
       await _pump(tester, _record(reason: 'LOCATION_UNKNOWN', distanceM: null));
-      expect(find.text('LOCATION UNKNOWN'), findsOneWidget);
-      expect(find.textContaining('as if you were at home'), findsOneWidget);
-      expect(find.text('unknown - no location fix'), findsOneWidget);
+      expect(_state(tester).icon, Icons.location_disabled);
+      expect(_state(tester).color, kDanger);
+      expect(_state(tester).semanticLabel, contains('as if you were at home'));
+      expect(_spoken('unknown - no location fix'), findsOneWidget);
     });
 
     testWidgets('a missing home is called out rather than shown as AT_HOME', (
       tester,
     ) async {
       await _pump(tester, _record(homeConfigured: false));
-      expect(find.text('NO HOME SET'), findsOneWidget);
-      expect(find.text('no home set'), findsOneWidget);
+      expect(_state(tester).icon, Icons.add_home);
+      expect(_state(tester).color, kDanger);
+      expect(_spoken('no home set'), findsOneWidget);
     });
 
     testWidgets('a failed pass reports the failure', (tester) async {
       await _pump(tester, _record(failure: 'policy unreadable'));
-      expect(find.text('NO DECISION'), findsOneWidget);
-      expect(find.textContaining('policy unreadable'), findsOneWidget);
+      expect(_state(tester).icon, Icons.error);
+      expect(_state(tester).semanticLabel, contains('policy unreadable'));
+      expect(find.textContaining('policy unreadable'), findsNothing);
     });
 
     testWidgets('an implausibly vague fix is flagged', (tester) async {
       await _pump(tester, _record(fixAccuracyM: 1400.0));
-      expect(find.textContaining('far wider than the fence'), findsOneWidget);
+      expect(_icon(Icons.blur_on, color: kWarn), findsOneWidget);
+      final accuracy = tester.widget<Text>(find.text('±1400 m'));
+      expect(accuracy.style?.color, kDanger);
+    });
+
+    testWidgets('a precise fix is not flagged', (tester) async {
+      await _pump(tester, _record());
+      expect(_icon(Icons.blur_on), findsNothing);
+      expect(_icon(Icons.satellite_alt), findsOneWidget);
+      expect(find.text('45 s'), findsOneWidget);
     });
 
     testWidgets('curfew renders as active when it is', (tester) async {
       await _pump(tester, _record(reason: 'CURFEW', curfewActive: true));
-      expect(find.text('active (23:00-05:00)'), findsOneWidget);
+      expect(_state(tester).icon, Icons.bedtime);
+      expect(_icon(Icons.toggle_on, color: kWarn), findsOneWidget);
     });
 
     testWidgets('a stalled schedule is called out', (tester) async {
       await _pump(tester, _record(tsOffsetMinutes: 90));
-      expect(find.textContaining('schedule may have stalled'), findsOneWidget);
+      expect(find.byKey(const Key('age-stale')), findsOneWidget);
+      expect(_icon(Icons.timer_off, color: kDanger), findsOneWidget);
+    });
+
+    testWidgets('a fresh pass shows its age, not a stall', (tester) async {
+      await _pump(tester, _record(tsOffsetMinutes: 5));
+      expect(find.byKey(const Key('age')), findsOneWidget);
+      expect(find.text('5 min'), findsOneWidget);
     });
 
     testWidgets('changes made this pass are shown when non-zero', (
       tester,
     ) async {
+      await _pump(tester, _record());
+      expect(_icon(Icons.remove_circle_outline), findsNothing);
       await _pump(tester, _record(hidDelta: 2));
-      expect(find.textContaining('(hid 2, restored 0)'), findsOneWidget);
+      expect(_icon(Icons.remove_circle_outline), findsOneWidget);
+      expect(_inRow('row-apps', '2'), findsOneWidget);
     });
 
-    testWidgets('each hidden app can be expanded to show why', (tester) async {
+    testWidgets('each hidden app can be opened to show why', (tester) async {
       await _pump(tester, _record());
-      await tester.tap(find.textContaining('Why these 1 apps are hidden'));
+      await tester.tap(find.byKey(const Key('hidden-list')));
       await tester.pumpAndSettle();
       expect(find.text('com.google.android.youtube'), findsOneWidget);
-      expect(find.text('always blocked, everywhere'), findsOneWidget);
+      expect(_icon(Icons.block, color: kDanger), findsOneWidget);
+      expect(_spoken('always blocked, everywhere'), findsOneWidget);
     });
 
     testWidgets('no hidden apps means no expander', (tester) async {
       await _pump(tester, _record(hidden: const []));
-      expect(find.textContaining('Why these'), findsNothing);
+      expect(find.byKey(const Key('hidden-list')), findsNothing);
     });
 
     testWidgets('never renders anything that looks like a coordinate', (
@@ -159,7 +209,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Debug log'));
+      await tester.tap(find.byKey(const Key('row-debug')));
       expect(opened, isTrue);
     });
 
@@ -178,15 +228,15 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Location fix'));
-      await tester.tap(find.text('Distance from home'));
+      await tester.tap(find.byKey(const Key('row-fix')));
+      await tester.tap(find.byKey(const Key('row-distance')));
       expect(tapped, 2);
 
-      // Without the callback the rows are plain text. Buttons elsewhere on
-      // the card own InkWells, so only the row's own ancestors count.
+      // Without the callback the rows are plain. Buttons elsewhere on the
+      // card own InkWells, so only the row's own ancestors count.
       await _pump(tester, _record());
-      final rowInk = find.ancestor(
-        of: find.text('Location fix'),
+      final rowInk = find.descendant(
+        of: find.byKey(const Key('row-fix')),
         matching: find.byType(InkWell),
       );
       expect(rowInk, findsNothing);
@@ -194,11 +244,11 @@ void main() {
   });
 
   group('DebugLogPage', () {
-    testWidgets('explains itself when empty', (tester) async {
+    testWidgets('shows an empty hourglass when empty', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: DebugLogPage(records: [])),
       );
-      expect(find.textContaining('No passes recorded yet'), findsOneWidget);
+      expect(find.byKey(const Key('log-empty')), findsOneWidget);
     });
 
     testWidgets('lists passes newest first and expands one', (tester) async {
@@ -212,13 +262,20 @@ void main() {
           ),
         ),
       );
-      expect(find.text('AWAY'), findsOneWidget);
-      expect(find.text('10.4 km (fence 180 m)'), findsOneWidget);
+      final tiles = find.byType(ExpansionTile);
+      expect(
+        find.descendant(
+          of: tiles.first,
+          matching: _icon(Icons.directions_walk),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('10.4 km'), findsOneWidget);
 
-      await tester.tap(find.text('AWAY'));
+      await tester.tap(_icon(Icons.directions_walk));
       await tester.pumpAndSettle();
-      expect(find.text('Fix'), findsOneWidget);
-      expect(find.text('Copy'), findsOneWidget);
+      expect(_icon(Icons.gps_fixed), findsOneWidget);
+      expect(find.byKey(const Key('log-copy')), findsOneWidget);
     });
 
     testWidgets('a failed pass is marked in the list', (tester) async {
@@ -227,19 +284,19 @@ void main() {
           home: DebugLogPage(records: [_record(failure: 'policy unreadable')]),
         ),
       );
-      expect(find.text('NO DECISION'), findsOneWidget);
-      await tester.tap(find.text('NO DECISION'));
+      expect(_icon(Icons.error, color: kDanger), findsOneWidget);
+      await tester.tap(_icon(Icons.error, color: kDanger));
       await tester.pumpAndSettle();
-      expect(find.text('Failure'), findsOneWidget);
+      expect(_spoken('Failure: policy unreadable'), findsOneWidget);
     });
 
     testWidgets('copying a record does not throw', (tester) async {
       await tester.pumpWidget(
         MaterialApp(home: DebugLogPage(records: [_record()])),
       );
-      await tester.tap(find.text('AT HOME'));
+      await tester.tap(_icon(Icons.home, color: kAccent));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Copy'));
+      await tester.tap(find.byKey(const Key('log-copy')));
       await tester.pumpAndSettle();
     });
   });

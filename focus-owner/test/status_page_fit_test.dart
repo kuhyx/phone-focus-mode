@@ -121,14 +121,15 @@ void main() {
       expect(_maxVerticalExtent(tester), 0);
       // Above the nav bar: 63 physical px of bottom inset.
       final usableBottom = (2400 - 63) / 2.625;
-      for (final label in [
-        'Run enforcement now',
-        'Update home to here',
-        'Lock VPN configuration',
-        'Release device owner',
+      for (final key in const [
+        Key('run-enforcement'),
+        Key('set-home'),
+        Key('lock-vpn'),
+        Key('release-owner'),
       ]) {
-        expect(find.text(label).hitTestable(), findsOneWidget, reason: label);
-        expect(tester.getRect(find.text(label)).bottom, lessThan(usableBottom));
+        final finder = find.byKey(key);
+        expect(finder.hitTestable(), findsOneWidget, reason: '$key');
+        expect(tester.getRect(finder).bottom, lessThan(usableBottom));
       }
     });
   }
@@ -136,6 +137,9 @@ void main() {
   testWidgets('non-owner state fits too', (tester) async {
     await _pumpPhone(tester, owner: false, busy: true);
     expect(_maxVerticalExtent(tester), 0);
-    expect(find.text('Run enforcement now').hitTestable(), findsOneWidget);
+    expect(
+      find.byKey(const Key('run-enforcement')).hitTestable(),
+      findsOneWidget,
+    );
   });
 }
