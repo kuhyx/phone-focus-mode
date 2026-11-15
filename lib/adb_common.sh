@@ -126,6 +126,26 @@ adb_verify_root() {
 	_info "Root verified on ${ADB_SERIAL}"
 }
 
+# Non-fatal root probe for the read-only subcommands (monitor, backup, auto,
+# enroll). Sets ADB_HAS_ROOT=1 when `su` answers, else 0. The Pixel 6a is
+# stock and locked for good, so "no root" is a supported mode, not an error;
+# the subcommands that WRITE to the phone (fresh-phone, doctor) still call
+# adb_verify_root and die without it. adb_root_shell is never given a
+# plain-shell fallback: that would silently route repair writes unprivileged.
+adb_detect_root() {
+	local result=""
+
+	result="$(adb_cmd shell su --mount-master -c "echo ok" 2>/dev/null | tr -d '\r' || true)"
+	if [[ "${result}" == "ok" ]]; then
+		ADB_HAS_ROOT=1
+		_info "Root verified on ${ADB_SERIAL}"
+	else
+		ADB_HAS_ROOT=0
+		_info "No root on ${ADB_SERIAL}: unrooted mode (read-only adb shell + adb pull)"
+	fi
+	export ADB_HAS_ROOT
+}
+
 adb_root_shell() {
 	local command_text="$*"
 

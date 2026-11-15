@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Unit + end-to-end tests for lib/adb_auto_target.sh (no real device needed).
 #
-# The case that motivated it: phone-auto-sync.timer runs `run_phone.sh auto`
-# every 30 min. With only the unrooted Pixel 6a connected -- or nothing at all
-# -- that must be a logged no-op exiting 0, not a FATAL every half hour; with
-# the enrolled rooted phone connected it must still select that phone.
+# phone-auto-sync.timer runs `run_phone.sh auto` every 30 min. With nothing
+# enrolled connected -- or nothing at all -- that must be a logged no-op
+# exiting 0, not a FATAL every half hour. An enrolled phone qualifies with or
+# without root (the Pixel 6a is unrooted for good); a rooted one wins a tie.
 set -euo pipefail
 
 _HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,9 +48,15 @@ test_nothing_connected_finds_no_target() {
 	! adb_find_auto_target >/dev/null
 }
 
-test_unrooted_enrolled_phone_is_not_a_target() {
+test_unrooted_enrolled_phone_is_a_target() {
 	_reset
 	_enroll "${PLAIN}"
+	ADB_MOCK_DEVICES="${PLAIN}\tdevice\n"
+	[[ "$(adb_find_auto_target)" == "${PLAIN}" ]]
+}
+
+test_unrooted_unenrolled_phone_is_not_a_target() {
+	_reset
 	ADB_MOCK_DEVICES="${PLAIN}\tdevice\n"
 	! adb_find_auto_target >/dev/null
 }
@@ -88,11 +94,12 @@ test_legacy_single_record_counts_as_enrolled() {
 	[[ "$(adb_find_auto_target)" == "${ROOTED}" ]]
 }
 
-# End to end: the real run_phone.sh, a fake adb on PATH, only the Pixel.
-test_run_phone_auto_is_a_clean_noop_with_only_the_pixel() {
+# End to end: the real run_phone.sh, a fake adb on PATH, only an UNENROLLED
+# phone. Enrolled phones get the full run; see test_run_phone_unrooted.sh.
+test_run_phone_auto_is_a_clean_noop_with_only_an_unenrolled_phone() {
 	local bin="${TEST_TMPDIR}/bin" state="${TEST_TMPDIR}/e2e-state" out="" rc=0
 	mkdir -p "${bin}" "${state}/phone_focus_mode/trusted_devices"
-	printf 'TRUSTED_SERIAL=%q\n' "${PLAIN}" >"${state}/phone_focus_mode/trusted_devices/${PLAIN}.sh"
+	printf 'TRUSTED_SERIAL=%q\n' "${ROOTED}" >"${state}/phone_focus_mode/trusted_devices/${ROOTED}.sh"
 	cat >"${bin}/adb" <<EOF
 #!/usr/bin/env bash
 [[ "\$1" == "devices" ]] && { printf 'List of devices attached\n${PLAIN}\tdevice\n'; exit 0; }
@@ -103,7 +110,7 @@ EOF
 	out="$(env -u ADB_SERIAL PATH="${bin}:${PATH}" XDG_STATE_HOME="${state}" \
 		bash "${_HARNESS_DIR}/../../run_phone.sh" auto 2>&1)" || rc=$?
 	[[ "${rc}" -eq 0 ]] || { printf '    rc=%s\n%s\n' "${rc}" "${out}"; return 1; }
-	[[ "${out}" == *"no enrolled rooted phone connected (${PLAIN} ); nothing to do."* ]] || {
+	[[ "${out}" == *"no enrolled phone connected (${PLAIN} ); nothing to do."* ]] || {
 		printf '%s\n' "${out}"
 		return 1
 	}
@@ -111,12 +118,13 @@ EOF
 }
 
 run_test "nothing connected -> no target" test_nothing_connected_finds_no_target
-run_test "enrolled but unrooted (Pixel) -> no target" test_unrooted_enrolled_phone_is_not_a_target
+run_test "enrolled unrooted phone (Pixel) -> target" test_unrooted_enrolled_phone_is_a_target
+run_test "unenrolled unrooted phone -> no target" test_unrooted_unenrolled_phone_is_not_a_target
 run_test "rooted but unenrolled -> no target" test_rooted_but_unenrolled_phone_is_not_a_target
 run_test "rooted enrolled phone chosen beside the Pixel" test_picks_the_rooted_enrolled_phone_beside_the_pixel
 run_test "unauthorized phone skipped" test_unauthorized_phone_is_skipped
 run_test "legacy single record counts as enrolled" test_legacy_single_record_counts_as_enrolled
-run_test "run_phone.sh auto is a clean no-op with only the Pixel" test_run_phone_auto_is_a_clean_noop_with_only_the_pixel
+run_test "run_phone.sh auto is a clean no-op with only an unenrolled phone" test_run_phone_auto_is_a_clean_noop_with_only_an_unenrolled_phone
 
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"
 [[ "${FAIL}" -eq 0 ]]

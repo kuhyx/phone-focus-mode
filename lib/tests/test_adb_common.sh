@@ -98,6 +98,26 @@ test_verify_root_uses_root_shell() {
 	adb_verify_root >/dev/null 2>&1
 }
 
+test_detect_root_sets_flag_on_rooted_phone() {
+	export ADB_SERIAL='SERIAL123'
+	unset ADB_HAS_ROOT
+	adb_detect_root >/dev/null 2>&1
+	[[ "${ADB_HAS_ROOT:-}" == "1" ]]
+}
+
+# The unrooted Pixel: `su` is absent. Detection must not be fatal -- an
+# exit inside the subshell fails this test -- and must say which mode it chose.
+test_detect_root_falls_back_to_unrooted_mode() {
+	local log="${TEST_TMPDIR}/detect.log"
+	(
+		export ADB_SERIAL='SERIAL123'
+		adb() { return 1; }
+		! adb -s SERIAL123 shell su || exit 1
+		adb_detect_root 2>"${log}"
+		[[ "${ADB_HAS_ROOT:-}" == "0" ]]
+	) && grep -q 'unrooted mode' "${log}"
+}
+
 test_select_device_rejects_multiple_devices_even_with_trusted_record() {
 	unset ADB_SERIAL
 
@@ -128,6 +148,8 @@ run_test "adb_acquire_lock replaces stale lock directory" test_acquire_lock_remo
 run_test "_sanitize_device_string strips dangerous characters" test_sanitize_device_string_removes_dangerous_chars
 run_test "adb_save_trusted_device sanitizes and safely quotes values" test_save_trusted_device_sanitizes_and_quotes
 run_test "adb_verify_root succeeds when root shell returns ok" test_verify_root_uses_root_shell
+run_test "adb_detect_root sets ADB_HAS_ROOT=1 when su answers" test_detect_root_sets_flag_on_rooted_phone
+run_test "adb_detect_root falls back to unrooted mode without dying" test_detect_root_falls_back_to_unrooted_mode
 run_test "adb_select_device rejects multiple devices even with trusted record" test_select_device_rejects_multiple_devices_even_with_trusted_record
 
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"

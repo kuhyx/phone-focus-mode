@@ -28,6 +28,32 @@ android-guardian/ an independent Magisk module for hosts/app blocking
 mtk-root/         the MT6765 rooting toolkit that puts Magisk on the device
 ```
 
+## Unrooted phone
+
+The Pixel 6a (`23181JEGR08034`) is stock, bootloader-locked, Device Owner =
+`com.kuhy.focus_owner`, and stays unrooted. `run_phone.sh` detects that (`su`
+absent) and switches to a read-only mode: `adb shell` reads and `adb pull`
+only, never a write to the phone.
+
+```bash
+./run_phone.sh enroll     # once, and again after each OTA (it changes the build fingerprint)
+./run_phone.sh monitor    # battery, storage, Device Owner, focus_owner, RethinkDNS, private DNS
+./run_phone.sh backup     # ~/phone_backups/<serial>/history/<ts>/, `latest` -> newest
+./run_phone.sh auto       # what phone-auto-sync.timer runs every 30 min
+```
+
+- `monitor` marks the root-only checks (daemons, hosts, iptables, launcher,
+  boot script) `skipped`, not `error`, so a healthy phone exits 0.
+- `backup` uses the same capture as `phone_backup.sh`: package lists, every
+  third-party APK, shared storage, settings, the Device Owner record and
+  `RESTORE-BY-HAND.md`. `verify_backup` must pass before `latest` moves.
+  Identical files across `history/` are hardlinked, so daily snapshots cost
+  only what changed. App private data is out of reach without root.
+- `auto` backs up at most once per `BACKUP_AUTO_INTERVAL_SECS` (24 h) and
+  monitors every run. Losing two of `FORMAT_INDICATORS_UNROOTED` (Device
+  Owner, focus_owner, RethinkDNS) means a wipe: it warns and exits 2.
+- `fresh-phone` and `doctor` write to the phone and still need root.
+
 ## Secrets
 
 `config_secrets.sh` holds `HOME_LAT` / `HOME_LON` and is **never committed**.

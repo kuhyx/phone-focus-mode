@@ -24,6 +24,8 @@ readonly _MONITOR_HOSTS_CANDIDATES="/system/etc/hosts /etc/hosts /vendor/etc/hos
 . "${_MONITOR_LIB_DIR}/monitor_checks_health.sh"
 # shellcheck source=monitor_checks_policy.sh
 . "${_MONITOR_LIB_DIR}/monitor_checks_policy.sh"
+# shellcheck source=monitor_checks_unrooted.sh
+. "${_MONITOR_LIB_DIR}/monitor_checks_unrooted.sh"
 
 _mon_escape_json() {
     local escaped="$1"
@@ -106,6 +108,11 @@ monitor_check_format_indicators() {
     local description=""
     local command_text=""
 
+    if ! _mon_has_root; then
+        _monitor_check_format_indicators_unrooted
+        return 0
+    fi
+
     for indicator in "${FORMAT_INDICATORS[@]}"; do
         description="${indicator%%|*}"
         command_text="${indicator#*|}"
@@ -149,8 +156,16 @@ monitor_print_format_warning() {
     box_lines+=("")
     box_lines+=("This strongly suggests the phone was factory-reset or formatted.")
     box_lines+=("")
-    box_lines+=("Next step: run the full recovery workflow:")
-    box_lines+=("  ./scripts/run_all/run_phone.sh fresh-phone")
+    # fresh-phone needs root (Magisk); an unrooted phone is re-provisioned by
+    # hand, so pointing it at fresh-phone would only produce a second FATAL.
+    if _mon_has_root; then
+        box_lines+=("Next step: run the full recovery workflow:")
+        box_lines+=("  ./run_phone.sh fresh-phone")
+    else
+        box_lines+=("Next steps (unrooted, so no fresh-phone):")
+        box_lines+=("  ▶ Re-provision focus_owner as Device Owner: focus-owner/README.md")
+        box_lines+=("  ▶ Restore files from ~/phone_backups/<serial>/latest (RESTORE-BY-HAND.md)")
+    fi
     box_lines+=("")
     box_lines+=("Do NOT run 'auto' mode — it will not restore anything.")
 
@@ -158,16 +173,9 @@ monitor_print_format_warning() {
 }
 
 
-
-
-
-monitor_collect_snapshot() {
-    local snapshot_dir="$1"
-    local tmp_checks=""
-    local report_path="${snapshot_dir}/report.json"
-
-    mkdir -p "${snapshot_dir}"
-    tmp_checks="$(mktemp)"
+# The full check set; every probe reads through the root shell.
+_monitor_collect_rooted() {
+    local tmp_checks="$1"
 
     _check_format_indicators "${tmp_checks}"
     _check_battery "${tmp_checks}"
@@ -181,6 +189,21 @@ monitor_collect_snapshot() {
     _check_launcher "${tmp_checks}"
     _check_companion_app "${tmp_checks}"
     _check_boot_persistence "${tmp_checks}"
+}
+
+monitor_collect_snapshot() {
+    local snapshot_dir="$1"
+    local tmp_checks=""
+    local report_path="${snapshot_dir}/report.json"
+
+    mkdir -p "${snapshot_dir}"
+    tmp_checks="$(mktemp)"
+
+    if ! _mon_has_root; then
+        _monitor_collect_unrooted "${tmp_checks}"
+    else
+        _monitor_collect_rooted "${tmp_checks}"
+    fi
 
     # Redirected per statement rather than as a `{ ... } >file` group: kcov
     # counts the group's closing brace as an instrumented line that bash never

@@ -42,9 +42,21 @@ FORMAT_INDICATORS=(
     "Focus companion app installed|pm list packages -e com.kuhy.focusstatus | grep -q com.kuhy.focusstatus"
 )
 
+# Unrooted phones (the Pixel 6a): run through the plain `adb shell`, so they
+# may only READ. Losing two of these three means the phone was wiped: a factory
+# reset drops the Device Owner and both apps together.
+FORMAT_INDICATORS_UNROOTED=(
+    "Device Owner is com.kuhy.focus_owner|dpm list-owners | grep -q 'com.kuhy.focus_owner/.*DeviceOwner'"
+    "Focus Owner app installed|pm list packages com.kuhy.focus_owner | grep -qx 'package:com.kuhy.focus_owner'"
+    "RethinkDNS installed|pm list packages com.celzero.bravedns | grep -qx 'package:com.celzero.bravedns'"
+)
+
 BATTERY_WARN_BELOW=20
 STORAGE_WARN_BELOW_MB=500
 COOLDOWN_AUTO_SECS=300
+# An unrooted backup copies all of shared storage (~1.3 GB), so the 30-minute
+# timer runs it at most once a day; monitoring still runs every time.
+BACKUP_AUTO_INTERVAL_SECS=86400
 HISTORY_KEEP_DAYS=30
 
 backup_manifest_validate() {
@@ -60,6 +72,7 @@ backup_manifest_validate() {
     : "${STORAGE_WARN_BELOW_MB}"
     : "${COOLDOWN_AUTO_SECS}"
     : "${HISTORY_KEEP_DAYS}"
+    : "${BACKUP_AUTO_INTERVAL_SECS}"
 
     for apk_entry in "${APK_ITEMS[@]}"; do
         [[ -n "${apk_entry}" ]] || return 1
@@ -77,7 +90,7 @@ backup_manifest_validate() {
         [[ -n "${security_file}" ]] || return 1
     done
 
-    for indicator_entry in "${FORMAT_INDICATORS[@]}"; do
+    for indicator_entry in "${FORMAT_INDICATORS[@]}" "${FORMAT_INDICATORS_UNROOTED[@]}"; do
         [[ -n "${indicator_entry}" ]] || return 1
     done
 }

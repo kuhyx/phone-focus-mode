@@ -6,7 +6,8 @@ After=network.target
 Type=oneshot
 # The orchestrator moved out of testsAndMisc when phone-focus-mode was
 # extracted; the old scripts/run_all path no longer exists. `auto` is a logged
-# no-op (exit 0) unless an enrolled, rooted phone is connected.
+# no-op (exit 0) unless an enrolled phone is connected; an unrooted one gets
+# the read-only check set and a backup at most once a day.
 ExecStart=%h/src/phone-focus-mode/run_phone.sh auto
 StandardOutput=journal
 StandardError=journal

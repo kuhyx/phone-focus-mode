@@ -5,11 +5,21 @@
 #   run_phone.sh [auto]           Everyday: backup, monitor, repair minor drift.
 #                                 If the phone looks formatted, shows a warning
 #                                 and exits — does nothing else.
+#   run_phone.sh enroll           Trust the connected phone, so `auto` (and the
+#                                 phone-auto-sync timer) acts on it. Writes
+#                                 nothing to the phone.
 #   run_phone.sh fresh-phone      Full recovery after a factory reset.
 #   run_phone.sh backup           Incremental backup only.
 #   run_phone.sh monitor          Health and security snapshot only.
 #   run_phone.sh doctor           Diagnose and repair drift without data restore.
 #   run_phone.sh --help | -h      Show this help.
+#
+# Unrooted phones: `backup`, `monitor`, `auto` and `enroll` work without root,
+# read-only (adb shell reads + adb pull, never a write to the phone). backup
+# pulls package lists, all third-party APKs, shared storage and settings;
+# monitor checks battery, storage, Device Owner and the focus apps and marks
+# root-only checks "skipped"; auto backs up at most once a day. `fresh-phone`
+# and `doctor` write to the phone and still need root (Magisk).
 #
 # Environment variables:
 #   ADB_SERIAL          Target a specific device by serial.
@@ -29,16 +39,20 @@ source "${_SCRIPT_DIR}/lib/monitor.sh"
 source "${_SCRIPT_DIR}/lib/backup.sh"
 # shellcheck source=lib/restore.sh
 source "${_SCRIPT_DIR}/lib/restore.sh"
+# shellcheck source=lib/doctor.sh
+source "${_SCRIPT_DIR}/lib/doctor.sh"
 
 SUBCOMMAND="${1:-auto}"
 shift 2>/dev/null || true
 
 case "${SUBCOMMAND}" in
     --help|-h|help)
-        grep '^#' "${BASH_SOURCE[0]}" | grep -v '^#!/' | grep -v '^# shellcheck ' | sed 's/^# \?//'
+        # The header comment block only: later top-level comments are notes
+        # for maintainers, not usage.
+        awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
         exit 0
         ;;
-    auto|fresh-phone|backup|monitor|doctor) ;;
+    auto|enroll|fresh-phone|backup|monitor|doctor) ;;
     *)
         _fatal "Unknown subcommand: '${SUBCOMMAND}'. Run with --help for usage."
         ;;
@@ -46,7 +60,7 @@ esac
 
 _setup_common() {
     adb_select_device "${ADB_SERIAL:-}"
-    adb_verify_root
+    adb_detect_root
     adb_verify_trusted_identity
     adb_collect_identity
 }
@@ -57,6 +71,8 @@ _auto_repair_minor_drift() {
     local repaired=0
 
     [[ -f "${report}" ]] || return 0
+    # Every repair below is a root-shell write; an unrooted phone gets none.
+    [[ "${ADB_HAS_ROOT:-1}" == "1" ]] || return 0
 
     if grep -q '"check":"focus_daemon","status":"error"' "${report}" 2>/dev/null; then
         if adb_root_shell "test -x /data/adb/service.d/99-focus-mode.sh" >/dev/null 2>&1; then
@@ -76,6 +92,23 @@ _auto_repair_minor_drift() {
     fi
 }
 
+# A rooted backup is small and runs every time. An unrooted one copies all of
+# shared storage, so it runs at most once per BACKUP_AUTO_INTERVAL_SECS. The
+# attempt is marked BEFORE it runs: a backup that keeps failing verification
+# must not re-pull 1.3 GB every 30 minutes; its FATAL is in the journal.
+_auto_backup() {
+    local device_id="$1"
+
+    if [[ "${ADB_HAS_ROOT:-1}" == "1" ]]; then
+        backup_run_incremental "${device_id}"
+    elif adb_check_cooldown "${BACKUP_AUTO_INTERVAL_SECS}" "backup_${device_id}"; then
+        adb_mark_last_run "backup_${device_id}"
+        backup_run_incremental "${device_id}"
+    else
+        _info "auto: backup throttled (unrooted backup runs at most once per ${BACKUP_AUTO_INTERVAL_SECS}s; run 'backup' to force one)"
+    fi
+}
+
 cmd_auto() {
     adb_acquire_lock
 
@@ -84,10 +117,10 @@ cmd_auto() {
         exit 0
     fi
 
-    # Unattended (phone-auto-sync.timer): act only on an enrolled, rooted phone.
-    # An explicit ADB_SERIAL keeps the interactive fail-loudly behaviour.
+    # Unattended (phone-auto-sync.timer): act only on an enrolled phone, rooted
+    # or not. An explicit ADB_SERIAL keeps the interactive fail-loudly behaviour.
     if [[ -z "${ADB_SERIAL:-}" ]] && ! ADB_SERIAL="$(adb_find_auto_target)"; then
-        _info "auto: no enrolled rooted phone connected ($(adb_list_ready_serials | tr '\n' ' ')); nothing to do."
+        _info "auto: no enrolled phone connected ($(adb_list_ready_serials | tr '\n' ' ')); nothing to do."
         exit 0
     fi
     export ADB_SERIAL
@@ -108,7 +141,7 @@ cmd_auto() {
     snapshot_dir="${PHONE_BACKUP_ROOT}/${device_id}/monitoring/$(date -u +%Y%m%dT%H%M%SZ)"
 
     monitor_collect_snapshot "${snapshot_dir}"
-    backup_run_incremental "${device_id}"
+    _auto_backup "${device_id}"
     _auto_repair_minor_drift "${snapshot_dir}"
 
     monitor_print_summary "${snapshot_dir}"
@@ -169,7 +202,16 @@ cmd_fresh_phone() {
 cmd_backup() {
     _setup_common
     local device_id="${ADB_SERIAL//[^a-zA-Z0-9_-]/_}"
+    adb_mark_last_run "backup_${device_id}"
     backup_run_incremental "${device_id}"
+}
+
+# Enrolment without root: records serial, model and build fingerprint on the
+# PC. Before this, fresh-phone (root-only) was the only enroller, so an
+# unrooted phone could never become an `auto` target.
+cmd_enroll() {
+    adb_select_device "${ADB_SERIAL:-}"
+    adb_save_trusted_device
 }
 
 cmd_monitor() {
@@ -182,59 +224,9 @@ cmd_monitor() {
     monitor_severity_exit "${snapshot_dir}" || exit 1
 }
 
-cmd_doctor() {
-    _setup_common
-    local device_id="${ADB_SERIAL//[^a-zA-Z0-9_-]/_}"
-    local snapshot_dir=""
-    snapshot_dir="${PHONE_BACKUP_ROOT}/${device_id}/monitoring/doctor_$(date -u +%Y%m%dT%H%M%SZ)"
-    local report=""
-    local repaired=0
-
-    monitor_collect_snapshot "${snapshot_dir}"
-    report="${snapshot_dir}/report.json"
-
-    local daemon=""
-    for daemon in focus_daemon hosts_enforcer dns_enforcer launcher_enforcer; do
-        if grep -q "\"check\":\"${daemon}\",\"status\":\"error\"" "${report}" 2>/dev/null; then
-            _info "Doctor: restarting ${daemon}"
-            adb_root_shell "pgrep -f ${daemon}.sh | xargs kill -9 2>/dev/null || true" >/dev/null 2>&1 || true
-            adb_root_shell "nohup sh /data/adb/focus_mode/${daemon}.sh </dev/null >/dev/null 2>&1 &" >/dev/null 2>&1 || \
-                _warn "Could not restart ${daemon}"
-            repaired=$(( repaired + 1 ))
-        fi
-    done
-
-    # Re-deploy is allowed only for managed security-stack drift.
-    if grep -q '"check":"boot_persistence","status":"fatal"' "${report}" 2>/dev/null; then
-        _info "Doctor: boot script missing — re-running deploy.sh"
-        restore_security_stack
-        repaired=$(( repaired + 1 ))
-    fi
-
-    if grep -q '"check":"hosts_integrity","status":"error"' "${report}" 2>/dev/null; then
-        if [[ -f "${PHONE_BACKUP_ROOT}/${device_id}/latest/security_state/data/local/tmp/focus_mode/hosts.canonical" ]]; then
-            _info "Doctor: restoring canonical hosts from backup"
-            adb_cmd push \
-                "${PHONE_BACKUP_ROOT}/${device_id}/latest/security_state/data/local/tmp/focus_mode/hosts.canonical" \
-                "/data/local/tmp/focus_mode/hosts.canonical"
-            repaired=$(( repaired + 1 ))
-        else
-            _warn "Doctor: hosts integrity failed but no backup copy available. Run fresh-phone."
-        fi
-    fi
-
-    monitor_collect_snapshot "${snapshot_dir}_after"
-    monitor_print_summary "${snapshot_dir}_after"
-
-    _info "Doctor complete. Repairs applied: ${repaired}"
-    monitor_severity_exit "${snapshot_dir}_after" || {
-        _warn "Unresolved issues remain after doctor run."
-        exit 1
-    }
-}
-
 case "${SUBCOMMAND}" in
     auto)        cmd_auto ;;
+    enroll)      cmd_enroll ;;
     fresh-phone) cmd_fresh_phone ;;
     backup)      cmd_backup ;;
     monitor)     cmd_monitor ;;

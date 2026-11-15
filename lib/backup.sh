@@ -5,6 +5,9 @@ set -euo pipefail
 
 readonly _BACKUP_REMOTE_DIR="/data/local/tmp/focus_mode"
 
+# shellcheck source=backup_unrooted.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/backup_unrooted.sh"
+
 _backup_validate_package_name() {
     local package_name="$1"
 
@@ -203,6 +206,12 @@ backup_run_incremental() {
     local device_id="$1"
     local device_root="${PHONE_BACKUP_ROOT}/${device_id}"
     local snapshot_dir=""
+
+    # Set by adb_detect_root; unset means a rooted caller from before it existed.
+    if [[ "${ADB_HAS_ROOT:-1}" != "1" ]]; then
+        backup_run_unrooted "${device_id}"
+        return
+    fi
 
     snapshot_dir="$(backup_make_snapshot_dir "${device_id}")"
     _info "Starting incremental backup to ${snapshot_dir}"

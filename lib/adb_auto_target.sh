@@ -4,12 +4,15 @@
 # and _load_trusted_device_values from adb_trusted.sh / adb_common.sh.
 #
 # Why this exists: `run_phone.sh auto` runs from phone-auto-sync.timer every
-# 30 minutes, whether or not the rooted phone is plugged in. Interactive
-# selection (adb_select_device) is right for a person at a terminal -- it
-# auto-picks the only connected device and dies if that device lacks root.
-# For a timer that turned "the Pixel 6a is charging on the desk" into a FATAL
-# every half hour, and "nothing connected" into another. Unattended, the only
-# correct outcome when no enrolled rooted phone is present is "nothing to do".
+# 30 minutes, whether or not a phone is plugged in. Interactive selection
+# (adb_select_device) is right for a person at a terminal -- it auto-picks the
+# only connected device and dies when there is none. For a timer that turned
+# "nothing connected" into a FATAL every half hour. Unattended, the only
+# correct outcome when no enrolled phone is present is "nothing to do".
+#
+# Root is NOT required: the Pixel 6a is stock and stays unrooted, and auto
+# runs the read-only unrooted mode on it. A rooted enrolled phone still wins
+# when both are connected, since it gets the fuller check set.
 #
 # Every probe here is read-only: `adb devices` and an `echo ok` through su.
 
@@ -34,13 +37,14 @@ _auto_has_root() {
 	[[ "${result}" == "ok" ]]
 }
 
-# Prints the first connected serial that is both enrolled and rooted, and
-# returns 0; returns 1 (printing nothing) when there is none. The full identity
+# Prints the first connected enrolled serial -- a rooted one if any, else the
+# first unrooted one -- and returns 0; returns 1 (printing nothing) when no
+# enrolled phone is connected. The full identity
 # check (model + build fingerprint) still runs afterwards in
 # adb_verify_trusted_identity -- matching the serial here only narrows the
 # candidates, it does not vouch for the device.
 adb_find_auto_target() {
-	local serial=""
+	local serial="" unrooted=""
 	local -a ready=() trusted=()
 
 	mapfile -t ready < <(adb_list_ready_serials)
@@ -48,9 +52,12 @@ adb_find_auto_target() {
 
 	for serial in "${ready[@]}"; do
 		printf '%s\n' "${trusted[@]}" | grep -qxF -- "${serial}" || continue
-		_auto_has_root "${serial}" || continue
-		printf '%s\n' "${serial}"
-		return 0
+		if _auto_has_root "${serial}"; then
+			printf '%s\n' "${serial}"
+			return 0
+		fi
+		[[ -n "${unrooted}" ]] || unrooted="${serial}"
 	done
-	return 1
+	[[ -n "${unrooted}" ]] || return 1
+	printf '%s\n' "${unrooted}"
 }

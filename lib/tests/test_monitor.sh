@@ -7,7 +7,7 @@
 # says "ok" is the failure this file exists to catch.
 #
 # This is the only entry point — the cases live in two sourced files purely to
-# stay under the 250-line cap, so one run still measures all three subjects:
+# stay under the 250-line cap, so one run still measures every subject:
 #
 #   bash meta/scripts/shell_coverage.sh \
 #       phone_focus_mode/lib/tests/test_monitor.sh monitor.sh
@@ -21,6 +21,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/monitor_cases_health.sh"
 # shellcheck source=monitor_cases_policy.sh
 . "${SCRIPT_DIR}/monitor_cases_policy.sh"
+# shellcheck source=monitor_cases_unrooted.sh
+. "${SCRIPT_DIR}/monitor_cases_unrooted.sh"
 
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"
 [[ "${FAIL}" -eq 0 ]]

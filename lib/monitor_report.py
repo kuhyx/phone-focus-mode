@@ -18,7 +18,7 @@ from pathlib import Path
 import sys
 
 # Status buckets shown in the summary header, in display order.
-_COUNT_KEYS = ("ok", "warn", "error", "fatal")
+_COUNT_KEYS = ("ok", "warn", "error", "fatal", "skipped")
 # Statuses considered problems worth listing / failing on.
 _ISSUE_STATUSES = frozenset({"warn", "error", "fatal"})
 _SEVERE_STATUSES = frozenset({"error", "fatal"})
@@ -46,9 +46,14 @@ def _render_summary(checks: list[object]) -> str:
     """Build the multi-line monitoring summary string for the given checks."""
     counts = dict.fromkeys(_COUNT_KEYS, 0)
     issues: list[tuple[str, str, str]] = []
+    # Names per status, so an unrooted run shows what passed and what it could
+    # not check at all instead of only a count.
+    names: dict[str, list[str]] = {"ok": [], "skipped": []}
     for check in checks:
         status = _field(check, "status", "warn")
         counts[status] = counts.get(status, 0) + 1
+        if status in names:
+            names[status].append(_field(check, "check", "unknown"))
         if status in _ISSUE_STATUSES:
             issues.append(
                 (
@@ -62,8 +67,13 @@ def _render_summary(checks: list[object]) -> str:
         "",
         "=== Monitoring Summary ===",
         f"  ok={counts.get('ok', 0):<3}  warn={counts.get('warn', 0):<3}  "
-        f"error={counts.get('error', 0):<3}  fatal={counts.get('fatal', 0):<3}",
+        f"error={counts.get('error', 0):<3}  fatal={counts.get('fatal', 0):<3}  "
+        f"skipped={counts.get('skipped', 0):<3}",
     ]
+    if names["ok"]:
+        lines.append(f"  OK: {', '.join(names['ok'])}")
+    if names["skipped"]:
+        lines.append(f"  Skipped (needs root): {', '.join(names['skipped'])}")
     if issues:
         lines.append("")
         lines.append("Issues found:")

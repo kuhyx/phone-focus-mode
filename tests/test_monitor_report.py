@@ -82,6 +82,23 @@ class TestRenderSummary:
         # Footer line plus a trailing blank line, matching the original output.
         assert out.endswith("==========================\n\n")
 
+    def test_skipped_checks_are_counted_and_named(self) -> None:
+        """Root-only checks skipped on an unrooted phone are visible, not issues."""
+        checks: list[object] = [
+            {"status": "ok", "check": "battery", "message": "41%"},
+            {"status": "skipped", "check": "focus_daemon", "message": "needs root"},
+            {"status": "skipped", "check": "hosts_integrity", "message": "needs root"},
+        ]
+        out = _render_summary(checks)
+        assert "skipped=2" in out
+        assert "Skipped (needs root): focus_daemon, hosts_integrity" in out
+        assert "OK: battery" in out
+        assert "Issues found:" not in out
+
+    def test_skipped_is_not_severe(self) -> None:
+        """A skipped check never fails the run."""
+        assert _has_severe([{"status": "skipped"}]) is False
+
 
 class TestHasSevere:
     """``_has_severe`` flags fatal/error checks."""

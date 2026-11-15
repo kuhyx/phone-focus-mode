@@ -5,6 +5,8 @@
 #
 # Sourced by monitor.sh, which defines every _MONITOR_* constant these read
 # and the _mon_check/_trim_output/_monitor_read_pidfile helpers they call.
+# Battery and storage read through _safe_adb_read_output
+# (monitor_checks_unrooted.sh), so they also run on an unrooted phone.
 # Nothing is assigned here, so there is no constant to keep in step.
 
 _check_format_indicators() {
@@ -33,9 +35,9 @@ _check_battery() {
     local status="ok"
     local message=""
 
-    level="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/level:/{print \$2; exit}'")")"
-    health="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/health:/{print \$2; exit}'")")"
-    temp="$(_trim_output "$(_safe_adb_root_output "dumpsys battery | awk -F': ' '/temperature:/{print \$2; exit}'")")"
+    level="$(_trim_output "$(_safe_adb_read_output "dumpsys battery | awk -F': ' '/level:/{print \$2; exit}'")")"
+    health="$(_trim_output "$(_safe_adb_read_output "dumpsys battery | awk -F': ' '/health:/{print \$2; exit}'")")"
+    temp="$(_trim_output "$(_safe_adb_read_output "dumpsys battery | awk -F': ' '/temperature:/{print \$2; exit}'")")"
 
     if [[ ! "${level}" =~ ^[0-9]+$ ]]; then
         status="warn"
@@ -57,9 +59,9 @@ _check_storage() {
     local status="ok"
     local message=""
 
-    free_kb="$(_trim_output "$(_safe_adb_root_output "df /sdcard 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
+    free_kb="$(_trim_output "$(_safe_adb_read_output "df /sdcard 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
     if [[ ! "${free_kb}" =~ ^[0-9]+$ ]]; then
-        free_kb="$(_trim_output "$(_safe_adb_root_output "df /storage/emulated/0 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
+        free_kb="$(_trim_output "$(_safe_adb_read_output "df /storage/emulated/0 2>/dev/null | awk 'NR==2{print \$4; exit}'")")"
     fi
 
     if [[ "${free_kb}" =~ ^[0-9]+$ ]]; then
