@@ -7,7 +7,6 @@
 
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/debug_log_page.dart';
@@ -15,6 +14,7 @@ import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/main.dart';
 import 'package:focus_owner/policy.dart';
+import 'package:material_ui/material_ui.dart';
 
 part 'text_free_fixtures.dart';
 

@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/debug_log_page.dart';
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/enforcement_status_card.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 part 'card_fixtures.dart';
 

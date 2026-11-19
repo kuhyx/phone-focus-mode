@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/enforcement_status_card.dart';
 import 'package:focus_owner/record_values.dart';
 import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The enforcement history, newest first.
 ///

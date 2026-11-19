@@ -4,11 +4,10 @@
 /// the same way. Each widget carries the old sentence as its spoken label.
 library;
 
-import 'package:flutter/material.dart';
-
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A [Glyph] painted at [size], spoken as [spoken].
 class GlyphIcon extends StatelessWidget {

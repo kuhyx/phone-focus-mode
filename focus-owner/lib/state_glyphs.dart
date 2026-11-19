@@ -6,10 +6,9 @@
 /// as the spoken label (see the `explanation` getters), never painted.
 library;
 
-import 'package:flutter/material.dart';
-
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A state's picture: what is drawn and in which colour.
 @immutable

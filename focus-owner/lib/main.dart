@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import 'package:focus_owner/debug_log_page.dart';
 import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/enforcement_record.dart';
@@ -11,16 +9,13 @@ import 'package:focus_owner/policy.dart';
 import 'package:focus_owner/record_values.dart';
 import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
-
-part 'status_page_state.dart';
-
-part 'status_page_dialogs.dart';
-
-part 'status_body.dart';
-
-part 'status_details.dart';
+import 'package:material_ui/material_ui.dart';
 
 part 'status_app_bar.dart';
+part 'status_body.dart';
+part 'status_details.dart';
+part 'status_page_dialogs.dart';
+part 'status_page_state.dart';
 
 void main() => runApp(const FocusOwnerApp());
 

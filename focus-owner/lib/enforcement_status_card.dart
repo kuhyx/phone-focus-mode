@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-
 import 'package:focus_owner/enforcement_record.dart';
 import 'package:focus_owner/record_values.dart';
 import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 part 'status_card_parts.dart';
 
