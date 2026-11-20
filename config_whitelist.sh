@@ -67,6 +67,7 @@ com.kuhy.home_guard
 com.kuhy.leetcode_guard
 com.kuhy.home_inventory
 com.kuhy.kartka
+com.kuhy.logo_review
 com.kuhy.lyricanki
 com.kuhy.punchme
 # com.kuhy.punchme.sandbox: the punchme app's sandbox flavor -- its own
