@@ -25,10 +25,8 @@ abstract class WorkoutSignal {
 /// because an untimed "workout mode" left on by accident is indistinguishable
 /// from having no exception at all.
 class ManualWorkoutSignal implements WorkoutSignal {
-  ManualWorkoutSignal({
-    required this.maxDuration,
-    DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  ManualWorkoutSignal({required this.maxDuration, DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   /// How long a declared workout stays valid before it lapses.
   final Duration maxDuration;

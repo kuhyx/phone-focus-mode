@@ -1,4 +1,3 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:focus_owner/policy.dart';
 
@@ -7,23 +6,22 @@ Map<String, Object?> _doc({
   Object? curfew = const {'start': '23:00', 'end': '05:00'},
   double? latitude,
   double? longitude,
-}) =>
-    {
-      'schema_version': schemaVersion,
-      'home': {
-        'latitude': latitude,
-        'longitude': longitude,
-        'radius_m': 150.0,
-        'hysteresis_m': 30.0,
-      },
-      'curfew': curfew,
-      'launcher_package': 'com.qqlabs.minimalistlauncher',
-      'allowed_packages': ['com.good', 'pl.mbank'],
-      'night_allowed_packages': ['pl.mbank'],
-      'never_disable_prefixes': ['com.android.providers'],
-      'workout_unblock_domains': ['youtube.com'],
-      'browser_packages': <String>[],
-    };
+}) => {
+  'schema_version': schemaVersion,
+  'home': {
+    'latitude': latitude,
+    'longitude': longitude,
+    'radius_m': 150.0,
+    'hysteresis_m': 30.0,
+  },
+  'curfew': curfew,
+  'launcher_package': 'com.qqlabs.minimalistlauncher',
+  'allowed_packages': ['com.good', 'pl.mbank'],
+  'night_allowed_packages': ['pl.mbank'],
+  'never_disable_prefixes': ['com.android.providers'],
+  'workout_unblock_domains': ['youtube.com'],
+  'browser_packages': <String>[],
+};
 
 void main() {
   group('FocusPolicy.fromJson', () {
@@ -53,7 +51,8 @@ void main() {
 
     test('rejects a malformed curfew time', () {
       expect(
-        () => FocusPolicy.fromJson(_doc(curfew: {'start': '25:00', 'end': 'x'})),
+        () =>
+            FocusPolicy.fromJson(_doc(curfew: {'start': '25:00', 'end': 'x'})),
         throwsA(isA<PolicyFormatException>()),
       );
     });
@@ -73,8 +72,9 @@ void main() {
     });
 
     test('real coordinates are reported as present', () {
-      final policy =
-          FocusPolicy.fromJson(_doc(latitude: 52.2297, longitude: 21.0122));
+      final policy = FocusPolicy.fromJson(
+        _doc(latitude: 52.2297, longitude: 21.0122),
+      );
       expect(policy.home.hasCoordinates, isTrue);
     });
   });

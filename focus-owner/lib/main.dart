@@ -9,6 +9,7 @@ import 'package:focus_owner/policy.dart';
 import 'package:focus_owner/record_values.dart';
 import 'package:focus_owner/state_glyphs.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:kuhy_credit/kuhy_credit.dart';
 import 'package:material_ui/material_ui.dart';
 
 part 'status_app_bar.dart';

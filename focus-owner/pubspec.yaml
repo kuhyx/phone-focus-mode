@@ -43,6 +43,12 @@ dependencies:
       url: https://github.com/kuhyx/utils
       ref: design_system-v0.4.1
       path: design_system
+  # Shared kuhy credit logo: tap opens a "Created by kuhy" panel.
+  kuhy_credit:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: kuhy-credit-v0.3.0
+      path: kuhy_credit/flutter
   material_ui: 1.11.1
 
 dev_dependencies:

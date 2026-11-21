@@ -6,6 +6,7 @@ import 'package:focus_owner/device_policy.dart';
 import 'package:focus_owner/main.dart';
 import 'package:focus_owner/policy.dart';
 import 'package:focus_owner/theme.dart';
+import 'package:kuhy_credit/kuhy_credit.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Builds a channel whose handler answers from [responses], recording calls.
@@ -83,6 +84,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byType(KuhyCredit), findsOneWidget);
       expect(find.byKey(const Key('release-owner')), findsNothing);
       // "Nothing is enforced" is the owner row's danger-coloured cross.
       final owner = _rowIcon(tester, 'row-owner');
