@@ -69,6 +69,8 @@ com.kuhy.home_inventory
 com.kuhy.kartka
 com.kuhy.logo_review
 com.kuhy.lyricanki
+# com.kuhy.mahjong: Android shell for the Mahjong Teacher site (kuhyx/mahjong-teacher app/).
+com.kuhy.mahjong
 com.kuhy.punchme
 # com.kuhy.punchme.sandbox: the punchme app's sandbox flavor -- its own
 # package and data, so test punches never reach the real synced timesheet.
