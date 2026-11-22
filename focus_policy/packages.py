@@ -123,7 +123,31 @@ ALWAYS_ON_VPN_PACKAGE = "com.celzero.bravedns"
 # Decided 2026-11-08: kuhy's running workout app must survive any Claude
 # session. phone_deploy.sh refuses it with exit 46, but raw adb never goes
 # through a script; this is the backstop that does not depend on discipline.
-UNINSTALL_BLOCKED_PACKAGES = ("com.kuhy.workout_app",)
+#
+# Widened 2026-11-22 to every enforcement app, see ENFORCEMENT_PACKAGES.
+ENFORCEMENT_PACKAGES = (
+    "com.kuhy.book_guard_app",
+    "com.kuhy.daily_limits",
+    "com.kuhy.diet_guard_app",
+    "com.kuhy.habit_stack",
+    "com.kuhy.home_guard",
+    "com.kuhy.leetcode_guard",
+    "com.kuhy.wake_alarm_sync",
+    "com.kuhy.workout_app",
+)
+UNINSTALL_BLOCKED_PACKAGES = ENFORCEMENT_PACKAGES
+
+# The enforcement apps, pinned three ways on every pass (2026-11-22, after a
+# long-press "Pause app" on WakeAlarm silenced the alarm twice):
+#   - setUserControlDisabledPackages: Settings can no longer force stop or
+#     clear the storage of these apps (they become owner-protected packages;
+#     what that does to a launcher "Pause app" is measured, see the docs);
+#   - setPermissionGrantState(GRANTED) on POST_NOTIFICATIONS, so the alarm's
+#     notification cannot be switched off;
+#   - any suspension found anyway is lifted by the Device Owner.
+# Games and tools stay out: this list is only for apps that enforce something.
+USER_CONTROL_DISABLED_PACKAGES = ENFORCEMENT_PACKAGES
+PERMISSION_PINNED_PACKAGES = ENFORCEMENT_PACKAGES
 
 # Whether the pinned VPN runs in lockdown mode: no traffic at all leaves the
 # device unless it goes through the tunnel.

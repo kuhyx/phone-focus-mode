@@ -196,4 +196,33 @@ def test_uninstall_blocked_packages_are_exported_for_pinning() -> None:
     """
     payload = policy_to_dict(_policy())
 
-    assert payload["uninstall_blocked_packages"] == ["com.kuhy.workout_app"]
+    assert payload["uninstall_blocked_packages"] == _ENFORCEMENT_APPS
+
+
+# The enforcement apps (2026-11-22): a long-press "Pause app" on WakeAlarm
+# silenced the ring twice. All eight are pinned the same three ways.
+_ENFORCEMENT_APPS = [
+    "com.kuhy.book_guard_app",
+    "com.kuhy.daily_limits",
+    "com.kuhy.diet_guard_app",
+    "com.kuhy.habit_stack",
+    "com.kuhy.home_guard",
+    "com.kuhy.leetcode_guard",
+    "com.kuhy.wake_alarm_sync",
+    "com.kuhy.workout_app",
+]
+
+
+def test_enforcement_apps_are_user_control_disabled() -> None:
+    """setUserControlDisabledPackages refuses Pause, Force stop and Clear storage."""
+    payload = policy_to_dict(_policy())
+
+    assert payload["user_control_disabled_packages"] == _ENFORCEMENT_APPS
+
+
+def test_enforcement_apps_get_their_alarm_permissions_pinned() -> None:
+    """Notifications cannot be switched off for an enforcement app."""
+    payload = policy_to_dict(_policy())
+
+    assert payload["permission_pinned_packages"] == _ENFORCEMENT_APPS
+

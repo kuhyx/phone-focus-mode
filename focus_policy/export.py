@@ -20,8 +20,10 @@ from focus_policy.packages import (
     ALWAYS_ON_VPN_PACKAGE,
     BLOCKABLE_SYSTEM_PACKAGES,
     ENFORCER_PACKAGE,
+    PERMISSION_PINNED_PACKAGES,
     PRIVATE_DNS_HOST,
     UNINSTALL_BLOCKED_PACKAGES,
+    USER_CONTROL_DISABLED_PACKAGES,
     VPN_LOCKDOWN,
 )
 
@@ -36,9 +38,11 @@ __all__ = [
     "ALWAYS_ON_VPN_PACKAGE",
     "BLOCKABLE_SYSTEM_PACKAGES",
     "ENFORCER_PACKAGE",
+    "PERMISSION_PINNED_PACKAGES",
     "PRIVATE_DNS_HOST",
     "SCHEMA_VERSION",
     "UNINSTALL_BLOCKED_PACKAGES",
+    "USER_CONTROL_DISABLED_PACKAGES",
     "VPN_LOCKDOWN",
     "policy_to_dict",
     "policy_to_json",
@@ -121,6 +125,14 @@ def policy_to_dict(policy: FocusPolicy) -> dict[str, Any]:
         # setSelfUninstallBlocked's job, tied to the decision.
         "uninstall_blocked_packages": sorted(
             set(UNINSTALL_BLOCKED_PACKAGES) - {ENFORCER_PACKAGE},
+        ),
+        # Absent from an older asset, read as empty. The enforcer is never
+        # listed: its own protection is device ownership itself.
+        "user_control_disabled_packages": sorted(
+            set(USER_CONTROL_DISABLED_PACKAGES) - {ENFORCER_PACKAGE},
+        ),
+        "permission_pinned_packages": sorted(
+            set(PERMISSION_PINNED_PACKAGES) - {ENFORCER_PACKAGE},
         ),
         "vpn_lockdown": VPN_LOCKDOWN,
         "private_dns_host": PRIVATE_DNS_HOST,

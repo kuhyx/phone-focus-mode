@@ -195,9 +195,36 @@
   "night_blocked_packages": [
     "com.kuhy.dufs_client"
   ],
+  "permission_pinned_packages": [
+    "com.kuhy.book_guard_app",
+    "com.kuhy.daily_limits",
+    "com.kuhy.diet_guard_app",
+    "com.kuhy.habit_stack",
+    "com.kuhy.home_guard",
+    "com.kuhy.leetcode_guard",
+    "com.kuhy.wake_alarm_sync",
+    "com.kuhy.workout_app"
+  ],
   "private_dns_host": "",
   "schema_version": 1,
   "uninstall_blocked_packages": [
+    "com.kuhy.book_guard_app",
+    "com.kuhy.daily_limits",
+    "com.kuhy.diet_guard_app",
+    "com.kuhy.habit_stack",
+    "com.kuhy.home_guard",
+    "com.kuhy.leetcode_guard",
+    "com.kuhy.wake_alarm_sync",
+    "com.kuhy.workout_app"
+  ],
+  "user_control_disabled_packages": [
+    "com.kuhy.book_guard_app",
+    "com.kuhy.daily_limits",
+    "com.kuhy.diet_guard_app",
+    "com.kuhy.habit_stack",
+    "com.kuhy.home_guard",
+    "com.kuhy.leetcode_guard",
+    "com.kuhy.wake_alarm_sync",
     "com.kuhy.workout_app"
   ],
   "vpn_lockdown": true,
