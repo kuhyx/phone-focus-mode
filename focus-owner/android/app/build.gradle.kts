@@ -20,7 +20,11 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.kuhy.focus_owner"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned above flutter.compileSdkVersion (36): the SDK's android-36
+    // android.jar breaks AGP's MockableJarTransform ("handlerRangeBlock is
+    // null"), so no Kotlin unit test could run. 37 is the Pixel's own API
+    // and what wake-alarm's phone_app compiles against; targetSdk is unchanged.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

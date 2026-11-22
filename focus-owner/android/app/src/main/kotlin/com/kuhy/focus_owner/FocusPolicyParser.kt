@@ -46,6 +46,8 @@ internal object FocusPolicyParser {
                 .takeIf { it.isNotEmpty() },
             vpnLockdown = json.optBoolean("vpn_lockdown", false),
             uninstallBlockedPackages = json.optionalStringSet("uninstall_blocked_packages"),
+            userControlDisabledPackages = json.optionalStringSet("user_control_disabled_packages"),
+            permissionPinnedPackages = json.optionalStringSet("permission_pinned_packages"),
             privateDnsHost = json.optString("private_dns_host")
                 .takeIf { it.isNotEmpty() },
             // Absent (an older asset) stays null, which keeps the night list

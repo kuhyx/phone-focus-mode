@@ -92,6 +92,13 @@ data class FocusPolicy(
      */
     val uninstallBlockedPackages: Set<String> = emptySet(),
     /**
+     * Enforcement apps the user may not pause, force stop or clear
+     * (setUserControlDisabledPackages); see [pinEnforcementApps].
+     */
+    val userControlDisabledPackages: Set<String> = emptySet(),
+    /** Enforcement apps whose notification permission is pinned to granted. */
+    val permissionPinnedPackages: Set<String> = emptySet(),
+    /**
      * Private DNS host to pin, or null to leave the setting alone.
      *
      * The domain rules live on this resolver rather than in the VPN app,

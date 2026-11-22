@@ -39,6 +39,10 @@ class DevicePolicyBridge(private val context: Context) {
     private val uninstallGuard: DevicePolicyUninstallGuard =
         DevicePolicyUninstallGuard(context, dpm, admin, isDeviceOwner = ::isDeviceOwner)
 
+    /** Enforcement-app protection; see [pinEnforcementApps]. */
+    internal val appGuard: AppGuard =
+        DevicePolicyAppGuard(dpm, admin, isDeviceOwner = ::isDeviceOwner)
+
     /** Whether this package currently holds device owner. */
     fun isDeviceOwner(): Boolean = dpm.isDeviceOwnerApp(context.packageName)
 

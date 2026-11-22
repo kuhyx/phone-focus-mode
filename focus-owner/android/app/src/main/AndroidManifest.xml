@@ -108,6 +108,7 @@
             <intent-filter>
                 <action android:name="com.kuhy.focus_owner.action.LOCKDOWN_UNTIL_EOD" />
                 <action android:name="com.kuhy.focus_owner.action.LIFT_LOCKDOWN" />
+                <action android:name="com.kuhy.focus_owner.action.UNSUSPEND" />
             </intent-filter>
         </receiver>
 

@@ -24,6 +24,12 @@ class LockdownSignalReceiver : BroadcastReceiver() {
             // The pass started below is what makes hidden apps reappear: it
             // reads the cleared state and re-shows the full allowed set.
             ACTION_LIFT -> LockdownEventRecord.lift(now, WorkdayLockdown.lift(context))
+            // An enforcement app was paused (wake_alarm's MY_PACKAGE_SUSPENDED
+            // receiver sends this): the pass below lifts the suspension.
+            ACTION_UNSUSPEND -> {
+                EnforcementService.start(context)
+                return
+            }
             else -> return
         }
         EnforcementLog(context).append(record)
@@ -36,6 +42,9 @@ class LockdownSignalReceiver : BroadcastReceiver() {
 
         /** Clear any lockdown now. */
         const val ACTION_LIFT = "com.kuhy.focus_owner.action.LIFT_LOCKDOWN"
+
+        /** An enforcement app was suspended: run a pass now, which lifts it. */
+        const val ACTION_UNSUSPEND = "com.kuhy.focus_owner.action.UNSUSPEND"
 
         /** `yyyy-MM-dd`, inclusive. Missing or invalid means today. */
         const val EXTRA_UNTIL = "until"
