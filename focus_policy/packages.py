@@ -39,6 +39,8 @@ BLOCKABLE_SYSTEM_PACKAGES = frozenset(
         "com.android.chrome",
         "com.android.vending",
         "com.google.android.apps.youtube.music",
+        # Digital Wellbeing (2026-11-22): see ALWAYS_BLOCKED_PACKAGES.
+        "com.google.android.apps.wellbeing",
         "com.google.android.videos",
         "com.google.android.youtube",
     },
@@ -71,9 +73,16 @@ BLOCKABLE_SYSTEM_PACKAGES = frozenset(
 # Blocking Play at home is what matters: that is where the browser-install
 # bypass would be used. Away from home the phone is deliberately usable, and
 # that is also the window in which infakt can be opened.
+#
+# Digital Wellbeing is here since 2026-11-22: its launcher "Pause app" paused
+# WakeAlarm mid-ring twice and the alarm went silent. kuhy does not use it
+# (his own enforcement apps replace it), so it is hidden in every state. The
+# enforcement apps are pinned against a pause on their own (see
+# USER_CONTROL_DISABLED_PACKAGES); this removes the button too.
 ALWAYS_BLOCKED_PACKAGES = frozenset(
     {
         "com.android.chrome",
+        "com.google.android.apps.wellbeing",
         "com.google.android.apps.youtube.music",
         "com.google.android.youtube",
     },

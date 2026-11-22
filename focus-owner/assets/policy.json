@@ -64,6 +64,7 @@
     "com.android.chrome",
     "com.bolt.deliveryclient",
     "com.glovo",
+    "com.google.android.apps.wellbeing",
     "com.google.android.apps.youtube.music",
     "com.google.android.youtube",
     "com.ubercab",
@@ -75,6 +76,7 @@
   "blockable_system_packages": [
     "com.android.chrome",
     "com.android.vending",
+    "com.google.android.apps.wellbeing",
     "com.google.android.apps.youtube.music",
     "com.google.android.videos",
     "com.google.android.youtube"

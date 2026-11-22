@@ -17,6 +17,8 @@ from focus_policy.model import CurfewWindow, FocusPolicy, HomeLocation
 
 _DEFAULT_CURFEW = CurfewWindow(start=dt.time(23, 0), end=dt.time(5, 0))
 
+WELLBEING = "com.google.android.apps.wellbeing"
+
 
 def _policy(
     *,
@@ -226,3 +228,15 @@ def test_enforcement_apps_get_their_alarm_permissions_pinned() -> None:
 
     assert payload["permission_pinned_packages"] == _ENFORCEMENT_APPS
 
+
+
+def test_digital_wellbeing_is_hidden_everywhere() -> None:
+    """Wellbeing's launcher "Pause app" silenced the alarm twice (2026-11).
+
+    kuhy does not use it; hidden in every state, so its pause, timers and
+    focus mode are gone with it. Being a system app, it must also be sweepable.
+    """
+    exported = policy_to_dict(_policy())
+
+    assert WELLBEING in exported["blockable_system_packages"]
+    assert WELLBEING in exported["always_blocked_packages"]
