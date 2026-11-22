@@ -4,6 +4,10 @@
     <permission
         android:name="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN"
         android:protectionLevel="signature" />
+    <!-- Held by this app too: wake-alarm sends with this as the receiver
+         permission, and an app does not hold a permission it only defines.
+         Without it every lockdown signal was dropped (found 2026-11-22). -->
+    <uses-permission android:name="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Required to start the pass with foregroundServiceType="location".
