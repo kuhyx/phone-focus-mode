@@ -190,6 +190,28 @@ void main() {
     _expectNoWords(tester, 'main, home missing');
   });
 
+  testWidgets('owner page icons carry one-word tooltips', (tester) async {
+    await _pumpPage(tester, {
+      'status': _status(owner: true),
+      'hasHomeLocation': true,
+      'readEnforcementLog': [
+        _record(reason: 'AWAY', accuracy: 900, ageMinutes: 45),
+      ],
+    });
+    final messages = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .map((t) => t.message)
+        .whereType<String>()
+        .toSet();
+    expect(
+      messages,
+      containsAll(<String>['Enforce', 'Home', 'VPN-lock', 'Release', 'Log']),
+    );
+    for (final m in messages) {
+      expect(m, matches(RegExp(r'^[A-Za-z-]{1,20}$')));
+    }
+  });
+
   testWidgets('status read fails', (tester) async {
     await _pumpPage(tester, {});
     _expectNoWords(tester, 'main, error');

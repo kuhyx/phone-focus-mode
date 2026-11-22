@@ -64,6 +64,7 @@ Widget _lockVpnDialog(BuildContext context) {
       ),
       IconButton(
         key: const Key('vpn-confirm'),
+        tooltip: 'Lock',
         icon: const Icon(Icons.check, semanticLabel: 'Lock'),
         onPressed: () => Navigator.pop(context, true),
       ),
@@ -107,6 +108,7 @@ Widget _releaseDialog(BuildContext context, {required bool hasAccounts}) {
       ),
       IconButton(
         key: const Key('release-confirm'),
+        tooltip: 'Release',
         icon: const Icon(Icons.check, color: kDanger, semanticLabel: 'Release'),
         onPressed: () => Navigator.pop(context, true),
       ),

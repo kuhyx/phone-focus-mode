@@ -105,41 +105,53 @@ class _StatusBody extends StatelessWidget {
         const SizedBox(height: kGap),
         _ActionGrid(
           children: [
-            OutlinedButton(
-              key: const Key('run-enforcement'),
-              onPressed: busy ? null : onRunNow,
-              child: const Icon(
-                Icons.play_arrow,
-                semanticLabel: 'Run enforcement now',
+            Tooltip(
+              message: 'Enforce',
+              child: OutlinedButton(
+                key: const Key('run-enforcement'),
+                onPressed: busy ? null : onRunNow,
+                child: const Icon(
+                  Icons.play_arrow,
+                  semanticLabel: 'Run enforcement now',
+                ),
               ),
             ),
             if (status.isDeviceOwner) ...[
-              OutlinedButton(
-                key: const Key('set-home'),
-                onPressed: busy ? null : onSetHome,
-                child: Icon(
-                  hasHome ? Icons.edit_location_alt : Icons.add_home,
-                  color: hasHome ? null : kDanger,
-                  semanticLabel: hasHome
-                      ? 'Update home to here'
-                      : 'Set home to current location',
+              Tooltip(
+                message: 'Home',
+                child: OutlinedButton(
+                  key: const Key('set-home'),
+                  onPressed: busy ? null : onSetHome,
+                  child: Icon(
+                    hasHome ? Icons.edit_location_alt : Icons.add_home,
+                    color: hasHome ? null : kDanger,
+                    semanticLabel: hasHome
+                        ? 'Update home to here'
+                        : 'Set home to current location',
+                  ),
                 ),
               ),
-              OutlinedButton(
-                key: const Key('lock-vpn'),
-                onPressed: busy ? null : onLockVpn,
-                child: const Icon(
-                  Icons.vpn_lock,
-                  semanticLabel: 'Lock VPN configuration',
+              Tooltip(
+                message: 'VPN-lock',
+                child: OutlinedButton(
+                  key: const Key('lock-vpn'),
+                  onPressed: busy ? null : onLockVpn,
+                  child: const Icon(
+                    Icons.vpn_lock,
+                    semanticLabel: 'Lock VPN configuration',
+                  ),
                 ),
               ),
-              FilledButton(
-                key: const Key('release-owner'),
-                onPressed: busy ? null : onRelease,
-                style: FilledButton.styleFrom(backgroundColor: kDanger),
-                child: const Icon(
-                  Icons.lock_open,
-                  semanticLabel: 'Release device owner',
+              Tooltip(
+                message: 'Release',
+                child: FilledButton(
+                  key: const Key('release-owner'),
+                  onPressed: busy ? null : onRelease,
+                  style: FilledButton.styleFrom(backgroundColor: kDanger),
+                  child: const Icon(
+                    Icons.lock_open,
+                    semanticLabel: 'Release device owner',
+                  ),
                 ),
               ),
             ],

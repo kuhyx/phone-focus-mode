@@ -98,6 +98,7 @@ class EnforcementStatusCard extends StatelessWidget {
               const Spacer(),
               IconButton(
                 key: const Key('row-debug'),
+                tooltip: 'Log',
                 onPressed: onOpenLog,
                 icon: const Icon(Icons.bug_report, semanticLabel: 'Debug log'),
               ),
