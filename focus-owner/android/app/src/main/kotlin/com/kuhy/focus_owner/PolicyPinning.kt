@@ -41,7 +41,7 @@ internal fun pinPolicyToDevice(
     // The enforcement apps (2026-11-22): a launcher "Pause app" silenced
     // WakeAlarm mid-ring twice. Every pass re-pins them and lifts any
     // suspension that got through anyway.
-    val lifted = pinEnforcementApps(policy, bridge.appGuard)
+    val lifted = pinEnforcementApps(policy, bridge.appGuard, hiding = decision.packagesToHide)
     if (lifted.isNotEmpty()) Log.w(FocusDeviceAdminReceiver.TAG, "lifted suspension of $lifted")
 
     // Pinned every pass for the same reason as the VPN: this is where the

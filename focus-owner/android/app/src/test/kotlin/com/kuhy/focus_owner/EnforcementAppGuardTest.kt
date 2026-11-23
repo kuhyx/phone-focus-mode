@@ -81,6 +81,18 @@ class EnforcementAppGuardTest {
     }
 
     @Test
+    fun `an app the pass hides is left unpinned so Android lets it be hidden`() {
+        // Android refuses setApplicationHidden on a user-control-disabled
+        // package ("Not hiding protected package"): HabitStack stayed in the
+        // drawer through a workday lockdown. Hidden, it cannot be paused anyway.
+        val guard = FakeGuard(suspended = setOf("com.kuhy.diet_guard_app"))
+        val lifted = pinEnforcementApps(policy(both), guard, hiding = setOf("com.kuhy.diet_guard_app"))
+        assertEquals(listOf("com.kuhy.wake_alarm_sync"), guard.userControlDisabled)
+        assertTrue(guard.unsuspendAsked.isEmpty())
+        assertTrue(lifted.isEmpty())
+    }
+
+    @Test
     fun `nothing suspended means no unsuspend call`() {
         val guard = FakeGuard(suspended = emptySet())
         assertTrue(pinEnforcementApps(policy(both), guard).isEmpty())

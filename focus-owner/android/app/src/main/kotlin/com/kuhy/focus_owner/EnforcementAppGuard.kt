@@ -35,11 +35,20 @@ internal interface AppGuard {
  * The user-control set is replaced, not added to, so dropping an app from
  * the policy really releases it.
  */
-internal fun pinEnforcementApps(policy: FocusPolicy?, guard: AppGuard): List<String> {
+internal fun pinEnforcementApps(
+    policy: FocusPolicy?,
+    guard: AppGuard,
+    hiding: Set<String> = emptySet(),
+): List<String> {
     if (policy == null) return emptyList()
-    guard.setUserControlDisabled(policy.userControlDisabledPackages.sorted())
+    // Android refuses to hide a user-control-disabled package ("Not hiding
+    // protected package"), so an enforcement app this pass hides is left out:
+    // HabitStack stayed in the drawer through a workday lockdown. A hidden app
+    // offers no Pause or Force stop, and its uninstall block stays.
+    val pinned = (policy.userControlDisabledPackages - hiding).sorted()
+    guard.setUserControlDisabled(pinned)
     for (pkg in policy.permissionPinnedPackages.sorted()) guard.pinNotifications(pkg)
-    val suspended = policy.userControlDisabledPackages.sorted().filter(guard::isSuspended)
+    val suspended = pinned.filter(guard::isSuspended)
     if (suspended.isEmpty()) return emptyList()
     val failed = guard.unsuspend(suspended)
     return suspended - failed.toSet()

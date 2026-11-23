@@ -18,14 +18,21 @@ import android.util.Log
  * hides apps (the hidden-is-not-missing check); `pm hide` is refused for it.
  * `--es op unpin` drops only the user-control pin, so an uninstall attempt
  * meets the uninstall block alone (DELETE_FAILED_OWNER_BLOCKED).
+ * `--es op unblock` lifts only the uninstall block. `--es pkg <name>` aims
+ * any op at another package (which pin stops a lockdown hide).
  * A release build (the Pixel) never compiles this file.
  */
 class DebugLiftUninstallBlock : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(context, FocusDeviceAdminReceiver::class.java)
-        val pkg = WakeAlarmPresence.PACKAGE
+        val pkg = intent.getStringExtra("pkg") ?: WakeAlarmPresence.PACKAGE
         when (intent.getStringExtra("op")) {
+            "unblock" -> {
+                dpm.setUninstallBlocked(admin, pkg, false)
+                Log.w(FocusDeviceAdminReceiver.TAG, "DEBUG uninstall block of $pkg lifted; pin kept")
+                return
+            }
             "hide", "unhide" -> {
                 val hidden = intent.getStringExtra("op") == "hide"
                 val ok = dpm.setApplicationHidden(admin, pkg, hidden)
