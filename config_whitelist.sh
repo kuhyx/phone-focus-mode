@@ -32,6 +32,10 @@ org.fossify.contacts
 # away from home. Chat with friends moved to the PC, where messenger.com is
 # allowed and the facebook.com feed is not.
 # see docs/DOCS-policy-lists.md#why-comfacebookorca-left-the-day-list
+# com.whatsapp: added 2026-11-23, day only (not night, not lockdown). WhatsApp
+# Web on the PC needs a live primary device on this phone: a hidden app cannot
+# run, and a linked PC logs out after ~14 days with the phone app offline.
+com.whatsapp
 # org.thoughtcrime.securesms: added 2026-08-29, night exemption added the same
 # day. Corrected on 2026-08-29: this entry used to say the signal-bot runs as a
 # LINKED DEVICE of this account and would become unre-linkable if Signal were
