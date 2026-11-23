@@ -4,4 +4,11 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The emulator RTDB (10.0.2.2:9000) is plain HTTP. -->
+    <application android:usesCleartextTraffic="true">
+        <!-- AVD-only: lifts WakeAlarm's uninstall block once (root broadcast). -->
+        <receiver
+            android:name=".DebugLiftUninstallBlock"
+            android:exported="false" />
+    </application>
 </manifest>

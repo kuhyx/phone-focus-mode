@@ -32,6 +32,7 @@ PreferredSizeWidget _statusAppBar({
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh, semanticLabel: 'Refresh'),
         ),
+      const SyncActions(),
       const Padding(
         padding: EdgeInsets.only(right: kGap),
         child: KuhyCredit(size: 32, below: true),

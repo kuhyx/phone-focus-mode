@@ -43,6 +43,7 @@ Glyph reasonGlyph(EnforcementRecord r) {
     'LOCKDOWN_EXTENDED' => const Glyph(Icons.more_time, kWarn),
     'LOCKDOWN_UNCHANGED' => const Glyph(Icons.lock, kMuted),
     'LOCKDOWN_LIFTED' => const Glyph(Icons.lock_open, kAccent),
+    'LOCKDOWN_UNINSTALLED' => const Glyph(Icons.delete_forever, kDanger),
     'LOCATION_UNKNOWN' => const Glyph(Icons.location_disabled, kDanger),
     _ => const Glyph(Icons.help, kWarn),
   };

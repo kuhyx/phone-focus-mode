@@ -31,6 +31,27 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Publishes bypass:uninstalled under wake-alarm-sync/devices-e2e/focus-owner
+  # (lib/sync/), end-to-end encrypted, same stack and pins as wake-alarm's
+  # phone_app.
+  crdt_sync:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: crdt_sync_dart-v0.14.2
+      path: crdt_sync_dart
+  crdt_sync_flutter:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: crdt_sync_flutter-v0.9.2
+      path: crdt_sync_flutter
+  flutter_secure_storage: 11.2.0
+  google_account_token:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: google_account_token-v0.1.0
+      path: google_account_token
+  http: 1.6.0
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: 2.0.0

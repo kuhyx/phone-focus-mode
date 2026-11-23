@@ -8,6 +8,8 @@ import 'package:focus_owner/enforcement_status_card.dart';
 import 'package:focus_owner/policy.dart';
 import 'package:focus_owner/record_values.dart';
 import 'package:focus_owner/state_glyphs.dart';
+import 'package:focus_owner/sync/publish.dart';
+import 'package:focus_owner/sync/sync_actions.dart';
 import 'package:focus_owner/theme.dart';
 import 'package:kuhy_credit/kuhy_credit.dart';
 import 'package:material_ui/material_ui.dart';
@@ -19,6 +21,10 @@ part 'status_page_dialogs.dart';
 part 'status_page_state.dart';
 
 void main() => runApp(const FocusOwnerApp());
+
+/// Headless entrypoint `HeadlessPublish.kt` starts: see lib/sync/publish.dart.
+@pragma('vm:entry-point')
+Future<void> publishNowMain() => runHeadlessPublish();
 
 // The palette used to be duplicated here as `kField`…`kDanger`, byte for
 // byte identical to theme.dart's copy. Both are gone: theme.dart now aliases

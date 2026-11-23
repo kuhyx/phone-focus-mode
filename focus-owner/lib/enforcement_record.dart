@@ -194,6 +194,8 @@ class EnforcementRecord {
       'LOCKDOWN_UNCHANGED' =>
         'Lockdown signal received; already locked through $lockdownThrough.',
       'LOCKDOWN_LIFTED' => 'Workday lockdown lifted.',
+      'LOCKDOWN_UNINSTALLED' =>
+        'WakeAlarm was uninstalled; locked down through $lockdownThrough.',
       'LOCATION_UNKNOWN' =>
         'No usable location fix, so the phone is blocking as if you were at '
             'home. Losing GPS must not become a way to switch enforcement off.',

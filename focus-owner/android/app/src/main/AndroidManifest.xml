@@ -7,6 +7,8 @@
     <!-- Held by this app too: wake-alarm sends with this as the receiver
          permission, and an app does not hold a permission it only defines.
          Without it every lockdown signal was dropped (found 2026-11-22). -->
+    <!-- Publishes bypass:uninstalled to the sync (HeadlessPublish). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
