@@ -15,6 +15,7 @@ object LockdownEventRecord {
     const val EXTENDED = "LOCKDOWN_EXTENDED"
     const val UNCHANGED = "LOCKDOWN_UNCHANGED"
     const val LIFTED = "LOCKDOWN_LIFTED"
+    const val UNINSTALLED = "LOCKDOWN_UNINSTALLED"
 
     /** A record for one lockdown signal; [rawUntil] is the extra as sent. */
     fun change(timestampMs: Long, change: WorkdayLockdown.Change, rawUntil: String?): JSONObject =
@@ -33,6 +34,10 @@ object LockdownEventRecord {
     /** A record for a lift; [previous] is the through-date it cleared, if any. */
     fun lift(timestampMs: Long, previous: String?): JSONObject =
         base(timestampMs, LIFTED, through = null, previous = previous, requested = null)
+
+    /** WakeAlarm is missing: locked through [through] ([previous] before). */
+    fun uninstalled(timestampMs: Long, through: String, previous: String?): JSONObject =
+        base(timestampMs, UNINSTALLED, through = through, previous = previous, requested = null)
 
     private fun base(
         timestampMs: Long,

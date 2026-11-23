@@ -73,8 +73,13 @@ class EnforcementScheduler(private val context: Context) {
     private fun defaultNextRun(): Long {
         val now = System.currentTimeMillis()
         val fallback = now + FALLBACK_INTERVAL_MS
-        val boundary = nextCurfewBoundary(now) ?: return fallback
-        return minOf(fallback, boundary)
+        // While WakeAlarm is missing, a pass at the alarm instant stamps that
+        // day's `bypass` on time rather than up to 15 min late.
+        val boundaries = listOfNotNull(
+            nextCurfewBoundary(now),
+            runCatching { UninstallEvents.nextAlarmMillis(context, now) }.getOrNull(),
+        )
+        return (boundaries + fallback).min()
     }
 
     /** When the curfew next opens or closes, or null when it is disabled. */

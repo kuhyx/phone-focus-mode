@@ -93,7 +93,9 @@ class EnforcementRunner(private val context: Context) {
                 // hysteresis -- biasing every borderline call toward AT_HOME.
                 currentlyEnforcing = wasInsideFence(),
                 workoutActive = false,
-                lockdownActive = WorkdayLockdown.isActive(context),
+                // Uninstall check first: it must run every pass, even when
+                // the workday lockdown alone would already decide.
+                lockdownActive = UninstallLockdown.onPass(context) || WorkdayLockdown.isActive(context),
                 fix = fix,
             ),
         )
