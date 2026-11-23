@@ -16,6 +16,8 @@ import android.util.Log
  *   adb root && adb shell am broadcast -n com.kuhy.focus_owner/.DebugLiftUninstallBlock
  * `--es op hide` / `--es op unhide` instead hides WakeAlarm the way a pass
  * hides apps (the hidden-is-not-missing check); `pm hide` is refused for it.
+ * `--es op unpin` drops only the user-control pin, so an uninstall attempt
+ * meets the uninstall block alone (DELETE_FAILED_OWNER_BLOCKED).
  * A release build (the Pixel) never compiles this file.
  */
 class DebugLiftUninstallBlock : BroadcastReceiver() {
@@ -33,6 +35,10 @@ class DebugLiftUninstallBlock : BroadcastReceiver() {
         }
         val kept = dpm.getUserControlDisabledPackages(admin).filter { it != pkg }
         dpm.setUserControlDisabledPackages(admin, kept)
+        if (intent.getStringExtra("op") == "unpin") {
+            Log.w(FocusDeviceAdminReceiver.TAG, "DEBUG unpinned $pkg; uninstall block kept")
+            return
+        }
         dpm.setUninstallBlocked(admin, pkg, false)
         Log.w(FocusDeviceAdminReceiver.TAG, "DEBUG lifted uninstall block of $pkg")
     }
