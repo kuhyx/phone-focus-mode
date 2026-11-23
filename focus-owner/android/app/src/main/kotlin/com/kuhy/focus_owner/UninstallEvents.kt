@@ -62,6 +62,19 @@ object UninstallEvents {
             FALLBACK_ALARM_MINUTES
         }
 
+    /** What a publish run does to the cached alarm time. */
+    enum class AlarmCache { STORE, CLEAR, KEEP }
+
+    /**
+     * A read alarm is stored; a clean read that found none clears the cache
+     * (so 08:00 applies, as the spec and the PC say); a failed read keeps it.
+     */
+    fun alarmCache(hour: Int?, minute: Int?, error: String?): AlarmCache = when {
+        hour != null && minute != null -> AlarmCache.STORE
+        error == null -> AlarmCache.CLEAR
+        else -> AlarmCache.KEEP
+    }
+
     /** One `bypass` event, the shape the PC's `phone_event_from` reads. */
     fun event(at: String, date: String): JSONObject = JSONObject()
         .put("at", at)
@@ -148,8 +161,10 @@ object UninstallEvents {
         val prefs = prefs(context)
         val today = OffsetDateTime.now().toLocalDate().toString()
         val edit = prefs.edit()
-        if (hour != null && minute != null) {
-            edit.putInt(KEY_ALARM_HOUR, hour).putInt(KEY_ALARM_MINUTE, minute)
+        when (alarmCache(hour, minute, error)) {
+            AlarmCache.STORE -> edit.putInt(KEY_ALARM_HOUR, hour!!).putInt(KEY_ALARM_MINUTE, minute!!)
+            AlarmCache.CLEAR -> edit.remove(KEY_ALARM_HOUR).remove(KEY_ALARM_MINUTE)
+            AlarmCache.KEEP -> Unit
         }
         if (error == null) edit.putString(KEY_ALARM_READ_DATE, today)
         if (pushed == true && prefs.getLong(KEY_GENERATION, 0) == generation) edit.putBoolean(KEY_UNSENT, false)

@@ -67,4 +67,12 @@ class UninstallEventsTest {
         assertEquals(day2, (out[0] as JSONObject).getJSONObject("data").getString("date"))
         assertEquals("2026-11-20", (out[1] as JSONObject).getJSONObject("data").getString("date"))
     }
+
+    @Test
+    fun `a clean read with no alarm clears the cache, a failed one keeps it`() {
+        assertEquals(UninstallEvents.AlarmCache.CLEAR, UninstallEvents.alarmCache(null, null, error = null))
+        assertEquals(UninstallEvents.AlarmCache.KEEP, UninstallEvents.alarmCache(null, null, error = "offline"))
+        assertEquals(UninstallEvents.AlarmCache.STORE, UninstallEvents.alarmCache(7, 30, error = null))
+        assertEquals(UninstallEvents.AlarmCache.STORE, UninstallEvents.alarmCache(7, 30, error = "push failed"))
+    }
 }

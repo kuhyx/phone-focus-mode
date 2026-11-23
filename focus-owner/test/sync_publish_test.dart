@@ -41,7 +41,7 @@ void main() {
     'kind': 'bypass',
     'data': {'cause': 'uninstalled', 'date': '2026-11-23'},
   };
-  final phoneHlc = Hlc(wallTimeMs: DateTime.utc(2026, 11, 22).millisecondsSinceEpoch, counter: 0, nodeId: 'p');
+  final phoneHlc = Hlc(wallTimeMs: DateTime.now().toUtc().millisecondsSinceEpoch, counter: 0, nodeId: 'p');
 
   _MapStore withPhone() => _MapStore()
     ..files['${alarmLayout.prefix}/p/alarm.json'] = logToJson({

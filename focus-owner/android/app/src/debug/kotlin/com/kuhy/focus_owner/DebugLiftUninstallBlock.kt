@@ -14,6 +14,8 @@ import android.util.Log
  *
  * Not exported; reached as root on the AVD:
  *   adb root && adb shell am broadcast -n com.kuhy.focus_owner/.DebugLiftUninstallBlock
+ * `--es op hide` / `--es op unhide` instead hides WakeAlarm the way a pass
+ * hides apps (the hidden-is-not-missing check); `pm hide` is refused for it.
  * A release build (the Pixel) never compiles this file.
  */
 class DebugLiftUninstallBlock : BroadcastReceiver() {
@@ -21,6 +23,14 @@ class DebugLiftUninstallBlock : BroadcastReceiver() {
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(context, FocusDeviceAdminReceiver::class.java)
         val pkg = WakeAlarmPresence.PACKAGE
+        when (intent.getStringExtra("op")) {
+            "hide", "unhide" -> {
+                val hidden = intent.getStringExtra("op") == "hide"
+                val ok = dpm.setApplicationHidden(admin, pkg, hidden)
+                Log.w(FocusDeviceAdminReceiver.TAG, "DEBUG setApplicationHidden($pkg,$hidden)=$ok")
+                return
+            }
+        }
         val kept = dpm.getUserControlDisabledPackages(admin).filter { it != pkg }
         dpm.setUserControlDisabledPackages(admin, kept)
         dpm.setUninstallBlocked(admin, pkg, false)

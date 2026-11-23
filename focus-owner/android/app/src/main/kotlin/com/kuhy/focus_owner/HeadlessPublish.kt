@@ -27,6 +27,13 @@ object HeadlessPublish {
     private val handler = Handler(Looper.getMainLooper())
     private var engine: FlutterEngine? = null
 
+    /**
+     * A start asked for while an engine ran: run once more when it stops.
+     * That engine may have read the queue before the new event was added
+     * (seen on the AVD: the 08:00 event waited for the next pass).
+     */
+    private var again: Context? = null
+
     /** Starts the engine on the main thread unless one is already running. */
     fun start(context: Context) {
         val app = context.applicationContext
@@ -34,7 +41,10 @@ object HeadlessPublish {
     }
 
     private fun startOnMain(app: Context) {
-        if (engine != null) return
+        if (engine != null) {
+            again = app
+            return
+        }
         try {
             val created = FlutterEngine(app)
             engine = created
@@ -74,5 +84,9 @@ object HeadlessPublish {
         engine?.destroy()
         engine = null
         Log.i(FocusDeviceAdminReceiver.TAG, "publish engine stopped: $reason")
+        again?.let { app ->
+            again = null
+            handler.post { startOnMain(app) }
+        }
     }
 }

@@ -65,7 +65,16 @@ void main() {
       ownerDeviceId: _alarmLog(ownerDeviceId, 5, 0, DateTime.utc(2026, 11, 22)),
       'garbled': '{not json',
     };
-    expect(newestAlarm(logs), (hour: 7, minute: 15));
+    expect(
+      newestAlarm(logs, now: DateTime.utc(2026, 11, 23)),
+      (hour: 7, minute: 15),
+    );
+  });
+
+  test('an alarm stamped over 14 days ago counts as none, like the PC', () {
+    final logs = {'p': _alarmLog('p', 7, 15, DateTime.utc(2026, 11, 1))};
+    expect(newestAlarm(logs, now: DateTime.utc(2026, 11, 14, 23)), isNotNull);
+    expect(newestAlarm(logs, now: DateTime.utc(2026, 11, 15, 1)), isNull);
   });
 
   test('no alarm anywhere is null (Kotlin falls back to 08:00)', () {

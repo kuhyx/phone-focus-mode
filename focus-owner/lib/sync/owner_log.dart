@@ -57,9 +57,15 @@ Hlc _stamp(DateTime at) => Hlc(
   nodeId: ownerDeviceId,
 );
 
+/// A published alarm older than this is ignored, as on the PC
+/// (wake-alarm `PUBLISHED_ALARM_MAX_AGE_SECONDS`); 08:00 applies instead.
+const publishedAlarmMaxAge = Duration(days: 14);
+
 /// The newest `alarm_hour`/`alarm_minute` by HLC across [logs] (device id
-/// to raw JSON), skipping focus-owner's own and anything that does not parse.
-AlarmTime? newestAlarm(Map<String, String> logs) {
+/// to raw JSON), skipping focus-owner's own, anything that does not parse,
+/// and anything stamped over [publishedAlarmMaxAge] before [now].
+AlarmTime? newestAlarm(Map<String, String> logs, {DateTime? now}) {
+  final cutoff = (now ?? DateTime.now()).subtract(publishedAlarmMaxAge);
   (Hlc, AlarmTime)? best;
   for (final MapEntry(key: device, value: text) in logs.entries) {
     if (device == ownerDeviceId) continue;
@@ -76,6 +82,7 @@ AlarmTime? newestAlarm(Map<String, String> logs) {
     final (h, hlc) = hour;
     final m = minute.$1;
     if (h is! int || m is! int) continue;
+    if (hlc.wallTimeMs < cutoff.millisecondsSinceEpoch) continue;
     if (best == null || hlc.compareTo(best.$1) > 0) {
       best = (hlc, (hour: h, minute: m));
     }
