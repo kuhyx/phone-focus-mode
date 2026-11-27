@@ -32,6 +32,10 @@ org.fossify.contacts
 # away from home. Chat with friends moved to the PC, where messenger.com is
 # allowed and the facebook.com feed is not.
 # see docs/DOCS-policy-lists.md#why-comfacebookorca-left-the-day-list
+# com.leetcode.android: added 2026-11-27, day only (not night, not lockdown).
+# The leetcode-guard phone app opens a lock problem in it (kuhy: always
+# allowed, it is the app the lock wants you to use).
+com.leetcode.android
 # com.whatsapp: added 2026-11-23, day only (not night, not lockdown). WhatsApp
 # Web on the PC needs a live primary device on this phone: a hidden app cannot
 # run, and a linked PC logs out after ~14 days with the phone app offline.
