@@ -10,7 +10,7 @@ inside `focus-owner/`; not part of the commands below).
 - run: `./run_phone.sh auto` | n/a: needs a connected phone; `--help` lists modes
 - test: `scripts/test_changed.sh --all`
 - test-changed: `scripts/test_changed.sh`
-- lint: `git ls-files '*.sh' | xargs shellcheck`
-- coverage: `python3 -m pytest -q --cov --cov-branch --cov-report=xml`
-- coverage-gaps: `coverage-gaps coverage.xml`
+- lint: n/a: dropped (kuhy, 2026-11-27)
+- coverage: n/a: dropped (kuhy, 2026-11-27)
+- coverage-gaps: n/a: dropped (kuhy, 2026-11-27)
 - deploy: `scripts/deploy_owner.sh` | release build + `adb install -r` of focus-owner on the Pixel, health = versionCode rose and still device owner
